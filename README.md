@@ -1,5 +1,7 @@
 # Deptrast
 
+[![Java CI with Maven](https://github.com/planetlevel/deptrast/actions/workflows/build.yml/badge.svg)](https://github.com/planetlevel/deptrast/actions/workflows/build.yml)
+
 A Java application that constructs a useful *security* dependency tree from a list of components observed at runtime.
 
 ![Example Dependency Tree](example.png)
