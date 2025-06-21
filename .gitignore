@@ -52,3 +52,6 @@ dependency-reduced-pom.xml
 # OS specific files
 .DS_Store
 Thumbs.db
+
+# Claude-specific files
+.claude/
