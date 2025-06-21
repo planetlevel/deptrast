@@ -5,6 +5,12 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+  packages: write
+  issues: write
+  pull-requests: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -35,7 +41,6 @@ jobs:
         prerelease: false
         files: |
           target/deptrast-1.0.jar
-          LICENSE
           README.md
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
