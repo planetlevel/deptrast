@@ -24,13 +24,19 @@ Error at the top is expected, it's the <project>.jar which isn't public and can'
 
 ## A Note on Resolving Multiple Different Dependency Versions
 
- Imagine your application has four root dependencies, each of which implies a different version of the target library. Build systems have complex algorithms for choosing the actual version to include in the project. The actual version selected might be any one of the implied versions, or in some circumstances a different version all together.
+Imagine your build has these root dependencies which require these transitive dependencies...
+    lib1 -> depv1
+    lib2 -> depv2
+    lib3 -> depv3
 
- For security purposes, deptrast uses the version actually observed at runtime. This is the version that the build system selected. So the deptrast dependency tree will report any vulnerabilities against all four root dependencies.  So, for example, if you have foo-v1, foo-v2, foo-v3, and foo-v4 all in your project, and only foo-v4 observed at runtime, it's likely that the build system selected foo-v4.  Deptrast will report foo-v4 in all of the four root dependency trees.
+But build systems are crazy, so you actually get depv3 in the built software.
+    lib1 -> depv3
+    lib2 -> depv3
+    lib3 -> depv3
+    
+The actual dep chosen by the build system could be depv1, depv2, depv3, or sometimes a different version not in the build anywhere Deptrast builds the second tree above using the actual library observed in the running software, so that any vulnerabilities in depv3 will be reported against lib1, lib2, and lib3.
 
- For vulnerability purposes, this means that we only report vulnerabilities in the actual executable present at runtime, and not theoretical vulnerabilities in old versions of libraries not present. However, there is a risk that if a change is made to the project that upsets the dependency calculus, some other library would be chosen. For example, if the root dependency of foo-v4 gets updated to remove the need for foo-v4, then the build system might choose foo-v3.  The danger is that foo-v3 might have a vulnerability that is now exposed.
-
- If needed, we could add a feature to deptrast to keep the original library version.  Post an issue!
+ If you use deptrast to report vulnerabilities, you should realize that you won't see vulnerabilities in depv1 or depv2. This is probably what you want, since you're not actually running those versions.  Still, it's possible that if a change is made to the project that upsets the dependency calculus, some other library could be chosen. For example, imagine lib3 gets updated and removes the dependency on depv3, then the build system might choose choose depv2 for lib1 and lib2.  And if depv2 has a vulnerability it might now be in production, ironically because you updated lib3.
 
 ## Requirements
 
