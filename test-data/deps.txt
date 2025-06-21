@@ -1,0 +1,1 @@
+maven:org.springframework.samples:spring-petclinic:1.5.1

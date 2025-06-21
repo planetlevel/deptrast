@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir:*)",
+      "Bash(mvn clean:*)",
+      "Bash(java:*)",
+      "Bash(mvn:*)"
+    ],
+    "deny": []
+  }
+}
