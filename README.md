@@ -34,7 +34,7 @@ But build systems are crazy, and it resolves them all to depv3 in the built soft
 * lib2 -> depv3
 * lib3 -> depv3
     
-The actual dep chosen by the build system could be depv1, depv2, depv3, or sometimes a different version not in the build anywhere Deptrast builds the second tree above using the actual library observed in the running software, so that any vulnerabilities in depv3 will be reported against lib1, lib2, and lib3.
+The actual dep chosen by the build system could be depv1, depv2, depv3, or sometimes a different version not in the build anywhere.   Deptrast builds the second tree above using the actual library observed in the running software, so that any vulnerabilities in depv3 will be reported against lib1, lib2, and lib3.
 
  If you use deptrast to report vulnerabilities, you should realize that you won't see vulnerabilities in depv1 or depv2. This is probably what you want, since you're not actually running those versions.  Still, it's possible that if a change is made to the project that upsets the dependency calculus, some other library could be chosen. For example, imagine lib3 gets updated and removes the dependency on depv3, then the build system might choose choose depv2 for lib1 and lib2.  And if depv2 has a vulnerability it might now be in production, ironically because you updated lib3.
 
