@@ -5,6 +5,7 @@
 A Java application that constructs a useful *security* dependency tree from a list of components observed at runtime.
 
 ![Example Dependency Tree](example.png)
+Error at the top is expected, it's the <project>.jar which isn't public and can't be looked up.
 
 ## Features
 
