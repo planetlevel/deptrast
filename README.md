@@ -22,17 +22,17 @@ Error at the top is expected, it's the <project>.jar which isn't public and can'
 
 > java -jar target/deptrast-1.0.jar test-data/libraries.txt
 
-## A Note on Resolving Multiple Different Dependency Versions
+## Security
 
 Imagine your build has these root dependencies which require these transitive dependencies...
-    lib1 -> depv1
-    lib2 -> depv2
-    lib3 -> depv3
+* lib1 -> depv1
+* lib2 -> depv2
+* lib3 -> depv3
 
-But build systems are crazy, so you actually get depv3 in the built software.
-    lib1 -> depv3
-    lib2 -> depv3
-    lib3 -> depv3
+But build systems are crazy, and it resolves them all to depv3 in the built software.
+* lib1 -> depv3
+* lib2 -> depv3
+* lib3 -> depv3
     
 The actual dep chosen by the build system could be depv1, depv2, depv3, or sometimes a different version not in the build anywhere Deptrast builds the second tree above using the actual library observed in the running software, so that any vulnerabilities in depv3 will be reported against lib1, lib2, and lib3.
 
