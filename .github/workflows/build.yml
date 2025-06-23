@@ -27,7 +27,7 @@ jobs:
       run: mvn -B test
       
     - name: Upload build artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: deptrast-jar
         path: target/deptrast-1.0.jar
