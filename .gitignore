@@ -25,6 +25,9 @@ pom.xml.next
 release.properties
 dependency-reduced-pom.xml
 
+# scripts
+*.sh
+
 # Log files
 *.log
 /logs/

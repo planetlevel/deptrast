@@ -4,6 +4,7 @@ import com.contrastsecurity.deptrast.model.Package;
 import com.contrastsecurity.deptrast.model.PackageDependencyInfo;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -118,6 +119,15 @@ public class PackageCache {
      */
     public Set<String> getAllPackageKeys() {
         return packageCache.keySet();
+    }
+    
+    /**
+     * Get all packages in the cache
+     * 
+     * @return collection of all packages in the cache
+     */
+    public Collection<Package> getAllPackages() {
+        return packageCache.values();
     }
     
     /**

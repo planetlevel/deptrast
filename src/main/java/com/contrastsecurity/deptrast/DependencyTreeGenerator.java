@@ -18,14 +18,24 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.LoggerContext;
+
+import org.cyclonedx.generators.json.BomJsonGenerator;
+import org.cyclonedx.model.Bom;
+import org.cyclonedx.model.Component;
+import org.cyclonedx.model.Dependency;
+import org.cyclonedx.model.Metadata;
+import org.cyclonedx.model.Tool;
+import org.cyclonedx.Version;
 
 /**
  * Main application class for generating dependency trees
@@ -49,6 +59,7 @@ public class DependencyTreeGenerator {
             System.out.println("  [--maven-format=<root-project>]: Optional flag to output in Maven dependency:tree format");
             System.out.println("                                    with the specified root project name");
             System.out.println("  [--detailed-report=<output-file>]: Generate a detailed report of dependency paths and version conflicts");
+            System.out.println("  [--sbom=<output-file>]: Generate CycloneDX 1.6 SBOM JSON file");
             System.out.println("  [--verbose|-v]: Enable verbose logging output");
             System.out.println("\nInput file format:");
             System.out.println("  Each line should contain a package in the format: system:name:version");
@@ -65,6 +76,7 @@ public class DependencyTreeGenerator {
         String rootProject = null; // For Maven dependency:tree format
         boolean useMavenFormat = false;
         String detailedReportPath = null; // Path for detailed report output
+        String sbomOutputPath = null; // Path for SBOM output
         boolean verbose = false; // Verbose output flag
         
         // Parse additional arguments
@@ -80,6 +92,9 @@ public class DependencyTreeGenerator {
             } else if (arg.startsWith("--detailed-report=")) {
                 detailedReportPath = arg.substring(18); // Extract file path after '='
                 logger.info("Will generate detailed dependency report at: {}", detailedReportPath);
+            } else if (arg.startsWith("--sbom=")) {
+                sbomOutputPath = arg.substring(7); // Extract file path after '='
+                logger.info("Will generate CycloneDX SBOM at: {}", sbomOutputPath);
             } else if (arg.equals("--verbose") || arg.equals("-v")) {
                 verbose = true;
             } else {
@@ -136,6 +151,11 @@ public class DependencyTreeGenerator {
             // Generate detailed dependency report if requested
             if (detailedReportPath != null) {
                 generateDetailedReport(detailedReportPath, cache);
+            }
+            
+            // Generate SBOM if requested
+            if (sbomOutputPath != null) {
+                generateSbom(sbomOutputPath, cache.getAllPackages());
             }
             
             if (!useMavenFormat) {
@@ -254,6 +274,107 @@ public class DependencyTreeGenerator {
             }
             
             updateTreeVersions(node.getChildren(), observedVersions);
+        }
+    }
+    
+    /**
+     * Generate a CycloneDX SBOM from the analyzed dependencies
+     *
+     * @param outputFilePath Path to output the SBOM file
+     * @param packages List of packages to include in the SBOM
+     */
+    private static void generateSbom(String outputFilePath, Collection<Package> packages) {
+        try {
+            // Create a new BOM
+            Bom bom = new Bom();
+            bom.setSerialNumber("urn:uuid:" + UUID.randomUUID());
+            
+            Metadata metadata = new Metadata();
+            metadata.setTimestamp(new Date());
+            Tool tool = new Tool();
+            tool.setName("deptrast");
+            tool.setVendor("Contrast Security");
+            List<Tool> tools = new ArrayList<>();
+            tools.add(tool);
+            metadata.setTools(tools);
+            bom.setMetadata(metadata);
+            
+            // Add all packages as components and track purlByPackage for dependency graph
+            List<Component> components = new ArrayList<>();
+            Map<Package, String> purlByPackage = new HashMap<>();
+            
+            for (Package pkg : packages) {
+                Component component = new Component();
+                component.setType(Component.Type.LIBRARY);
+                String purl;
+                
+                if ("maven".equalsIgnoreCase(pkg.getSystem())) {
+                    // For Maven packages, separate group and artifact if available
+                    String name = pkg.getName();
+                    if (name.contains(":")) {
+                        String[] parts = name.split(":");
+                        component.setGroup(parts[0]);
+                        component.setName(parts[1]);
+                    } else {
+                        component.setName(name);
+                    }
+                    purl = "pkg:maven/" + (component.getGroup() != null ? component.getGroup() : "") + 
+                           "/" + component.getName() + "@" + pkg.getVersion();
+                } else {
+                    // For other package systems
+                    component.setName(pkg.getName());
+                    purl = "pkg:" + pkg.getSystem().toLowerCase() + "/" + pkg.getName() + "@" + pkg.getVersion();
+                }
+                
+                component.setVersion(pkg.getVersion());
+                component.setPurl(purl);
+                components.add(component);
+                purlByPackage.put(pkg, purl);
+            }
+            
+            bom.setComponents(components);
+            
+            // Build dependency graph
+            List<Dependency> dependencies = new ArrayList<>();
+            
+            // For each package, create a dependency entry with its direct dependencies
+            for (Package pkg : packages) {
+                String pkgPurl = purlByPackage.get(pkg);
+                Dependency dependency = new Dependency(pkgPurl);
+                
+                // Add direct dependencies
+                List<Package> directDeps = pkg.getDependencies();
+                if (directDeps != null && !directDeps.isEmpty()) {
+                    for (Package depPkg : directDeps) {
+                        if (purlByPackage.containsKey(depPkg)) {
+                            String depPurl = purlByPackage.get(depPkg);
+                            dependency.addDependency(new Dependency(depPurl));
+                        }
+                    }
+                }
+                
+                dependencies.add(dependency);
+            }
+            
+            // Set dependencies on BOM
+            for (Dependency dependency : dependencies) {
+                bom.addDependency(dependency);
+            }
+            
+            // Generate JSON output
+            BomJsonGenerator generator = new BomJsonGenerator(bom, Version.VERSION_16);
+            String jsonOutput = generator.toJsonString(true);
+            
+            // Write to file
+            try (BufferedWriter writer = new BufferedWriter(new FileWriter(outputFilePath))) {
+                writer.write(jsonOutput);
+                logger.info("SBOM successfully written to: {}", outputFilePath);
+                System.out.println("SBOM successfully written to: " + outputFilePath);
+            }
+            
+        } catch (Exception e) {
+            logger.error("Error generating SBOM: {}", e.getMessage(), e);
+            System.err.println("Error generating SBOM: " + e.getMessage());
         }
     }
     
