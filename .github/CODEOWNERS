@@ -1,0 +1,8 @@
+# Default owners for the repository
+* @planetlevel
+
+# Workflow files
+/.github/workflows/ @planetlevel
+
+# Security-related files
+/SECURITY.md @planetlevel

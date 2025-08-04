@@ -5,6 +5,7 @@ on:
     branches: [ main, develop ]
   pull_request:
     branches: [ main, develop ]
+  workflow_dispatch:
 
 jobs:
   build:
@@ -25,6 +26,9 @@ jobs:
     
     - name: Run tests
       run: mvn -B test
+      
+    - name: Check for vulnerabilities
+      run: mvn org.owasp:dependency-check-maven:8.4.3:check
       
     - name: Extract version from pom.xml
       id: get_version

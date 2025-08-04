@@ -19,14 +19,18 @@ jobs:
         distribution: 'temurin'
         cache: maven
     
-    - name: Run OWASP Dependency Check
-      uses: dependency-check/Dependency-Check_Action@main
-      id: dependency-check
+    - name: Cache dependency-check data
+      uses: actions/cache@v4
       with:
-        project: 'deptrast'
-        path: '.'
-        format: 'HTML'
-        out: 'dependency-check-report'
+        path: ~/.m2/repository/org/owasp/dependency-check-data
+        key: ${{ runner.os }}-dependency-check-data
+
+    - name: Run OWASP Dependency Check
+      run: |
+        mvn org.owasp:dependency-check-maven:8.4.3:check \
+          -Dformat=HTML \
+          -DoutputDirectory=dependency-check-report \
+          -DautoUpdate=true
     
     - name: Upload Report
       uses: actions/upload-artifact@v4

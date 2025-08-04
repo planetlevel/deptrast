@@ -43,6 +43,10 @@ The actual dep chosen by the build system could be depv1, depv2, depv3, or somet
 - Java 11 or higher
 - Maven for building the project
 
+## Security
+
+See [SECURITY.md](SECURITY.md) for information about the project's security policy, vulnerability reporting, and best practices.
+
 ## Building the Project
 
 ```bash
@@ -54,13 +58,14 @@ This will create an executable JAR file as `target/deptrast-1.0.jar`.
 ## Usage
 
 ```bash
-java -jar target/deptrast-1.0.jar <input-file> [max-depth] [--maven-format=<root-project>] [--detailed-report=<output-file>] [--verbose|-v]
+java -jar target/deptrast-1.0.jar <input-file> [max-depth] [--maven-format=<root-project>] [--detailed-report=<output-file>] [--sbom=<output-file>] [--verbose|-v]
 ```
 
 - `<input-file>`: Path to a file containing all your project's packages (required)
 - `[max-depth]`: Optional maximum depth for dependency resolution (default: 25)
 - `[--maven-format=<root-project>]`: Optional flag to output in Maven dependency:tree format with the specified root project name
 - `[--detailed-report=<output-file>]`: Generate a detailed report of dependency paths and version conflicts
+- `[--sbom=<output-file>]`: Generate CycloneDX 1.6 SBOM JSON file with dependency information
 - `[--verbose|-v]`: Enable verbose logging output (disabled by default)
 
 ### Input File Format
