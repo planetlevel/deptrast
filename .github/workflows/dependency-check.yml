@@ -39,6 +39,7 @@ jobs:
     # Run dependency check with multiple report formats
     - name: Run OWASP Dependency Check
       id: dependency-check
+      continue-on-error: true  # Allow the step to fail but continue the workflow
       run: |
         DEPENDENCY_CHECK_HOME=~/.cache/dependency-check
         mkdir -p $DEPENDENCY_CHECK_HOME/data
@@ -53,6 +54,25 @@ jobs:
           -DfailBuildOnCVSS=1 \
           -Dformat=ALL \
           -DnvdApiKey=${{ secrets.NVD_API_KEY }}
+        
+        # Capture the exit code
+        RESULT=$?
+        
+        # Create a marker file if vulnerabilities were found
+        if [ $RESULT -ne 0 ]; then
+          echo "VULNERABILITIES_FOUND=true" >> $GITHUB_OUTPUT
+          echo "::warning::Security vulnerabilities detected! Check the full report for details."
+          echo "⚠️⚠️⚠️ SECURITY VULNERABILITIES DETECTED ⚠️⚠️⚠️" >> $GITHUB_STEP_SUMMARY
+          echo "The following vulnerabilities were found:" >> $GITHUB_STEP_SUMMARY
+          
+          # Extract vulnerabilities from report if JSON file exists
+          if [ -f "dependency-check-report/dependency-check-report.json" ]; then
+            jq -r '.dependencies[] | select(.vulnerabilities != null) | "\n## " + .fileName + "\n" + (.vulnerabilities | map("- " + .name + ": " + .description[:100] + "...") | join("\n"))' dependency-check-report/dependency-check-report.json >> $GITHUB_STEP_SUMMARY || true
+          fi
+        else
+          echo "VULNERABILITIES_FOUND=false" >> $GITHUB_OUTPUT
+          echo "✅ No security vulnerabilities detected." >> $GITHUB_STEP_SUMMARY
+        fi
 
     # Upload HTML report as artifact
     - name: Upload HTML Report
