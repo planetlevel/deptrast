@@ -5,6 +5,11 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version number for the release (e.g. 1.0.2)'
+        required: true
+        default: '1.0.2'
 
 permissions:
   contents: write
@@ -29,9 +34,21 @@ jobs:
     - name: Build with Maven
       run: mvn -B package --file pom.xml
     
-    - name: Get version from tag
+    - name: Set version
       id: get_version
-      run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+      run: |
+        if [[ $GITHUB_REF == refs/tags/v* ]]; then
+          # Get version from tag
+          echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+        else
+          # Use input version when manually triggered
+          echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          # Create a tag for this release
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git tag -a "v${{ github.event.inputs.version }}" -m "Release v${{ github.event.inputs.version }}"
+          git push origin "v${{ github.event.inputs.version }}"
+        fi
       
     - name: Create Release
       id: create_release
@@ -40,6 +57,7 @@ jobs:
         name: Release ${{ steps.get_version.outputs.VERSION }}
         draft: false
         prerelease: false
+        tag_name: v${{ steps.get_version.outputs.VERSION }}
         files: |
           target/deptrast-${{ steps.get_version.outputs.VERSION }}.jar
           README.md
