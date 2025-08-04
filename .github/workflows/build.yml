@@ -27,47 +27,15 @@ jobs:
     - name: Run tests
       run: mvn -B test
       
-    # Use persistent cache directory for efficiency
-
-    # Cache the NVD database to avoid repeated downloads
-    - name: Cache NVD database
-      uses: actions/cache@v4
-      with:
-        path: ~/nvd-cache
-        # Cache for 30 days to avoid constant updates but still get security patches
-        key: nvd-cache-${{ hashFiles('**/pom.xml') }}-${{ github.run_id }}-${{ format('{0:yyyy-MM-dd}', github.event.repository.updated_at) }}
-        restore-keys: |
-          nvd-cache-${{ hashFiles('**/pom.xml') }}-
-          nvd-cache-
-          
-    # Create the directory if it doesn't exist
-    - name: Setup data directory
-      run: |
-        mkdir -p ~/nvd-cache
-        echo "Using cached NVD database to minimize downloads"
+    # Simple and direct approach - minimal configuration
         
     - name: Check for vulnerabilities
       id: dependency_check
       continue-on-error: true  # Allow the step to fail but continue the workflow
       run: |
         mvn org.owasp:dependency-check-maven:12.1.0:check \
-          -DdataDirectory=~/nvd-cache \
-          -DautoUpdate=false \
           -DnvdApiKey=${{ secrets.NVD_API_KEY }} \
           -DnvdApiWait=2000 \
-          -DnvdApiDelay=3000 \
-          -DnvdValidForHours=720 \
-          -DskipSystemScope=true \
-          -DskipTestScope=true \
-          -DskipDependencyManagement=true \
-          -DossIndexAnalyzerEnabled=false \
-          -DnodeAuditAnalyzerEnabled=false \
-          -DretireJsAnalyzerEnabled=false \
-          -DnodeAnalyzerEnabled=false \
-          -DassemblyAnalyzerEnabled=false \
-          -DpathToCore="" \
-          -DcveStartYear=2021 \
-          -DquickQueryTimestamp=true \
           -DfailBuildOnCVSS=1
         
         # Create a marker file if vulnerabilities were found
