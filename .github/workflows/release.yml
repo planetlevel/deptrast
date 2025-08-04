@@ -31,8 +31,8 @@ jobs:
         distribution: 'temurin'
         cache: maven
     
-    - name: Build with Maven
-      run: mvn -B package --file pom.xml
+    - name: Clean and build with Maven
+      run: mvn -B clean package --file pom.xml
     
     - name: Set version
       id: get_version
