@@ -41,7 +41,6 @@ jobs:
           ${{ runner.os }}-dependency-check-data-
 
     - name: Check for vulnerabilities
-      continue-on-error: true  # Continue workflow even if vulnerabilities are found
       run: |
         DEPENDENCY_CHECK_HOME=~/.cache/dependency-check
         mkdir -p $DEPENDENCY_CHECK_HOME/data
@@ -51,7 +50,8 @@ jobs:
           -DcveUrlModified=https://nvd.nist.gov/feeds/json/cve/1.1/nvdcve-1.1-modified.json.gz \
           -DcveUrlBase=https://nvd.nist.gov/feeds/json/cve/1.1/nvdcve-1.1-%d.json.gz \
           -DautoUpdate=true \
-          -DfailBuildOnCVSS=11
+          -DfailBuildOnCVSS=1 \
+          -Dformat=ALL
       
     - name: Extract version from pom.xml
       id: get_version

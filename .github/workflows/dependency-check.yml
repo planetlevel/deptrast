@@ -39,7 +39,6 @@ jobs:
     # Run dependency check with multiple report formats
     - name: Run OWASP Dependency Check
       id: dependency-check
-      continue-on-error: true  # Continue workflow even if vulnerabilities are found
       run: |
         DEPENDENCY_CHECK_HOME=~/.cache/dependency-check
         mkdir -p $DEPENDENCY_CHECK_HOME/data
@@ -51,7 +50,8 @@ jobs:
           -DcveUrlModified=https://nvd.nist.gov/feeds/json/cve/1.1/nvdcve-1.1-modified.json.gz \
           -DcveUrlBase=https://nvd.nist.gov/feeds/json/cve/1.1/nvdcve-1.1-%d.json.gz \
           -DautoUpdate=true \
-          -DfailBuildOnCVSS=11
+          -DfailBuildOnCVSS=1 \
+          -Dformat=ALL
 
     # Upload HTML report as artifact
     - name: Upload HTML Report
