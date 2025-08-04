@@ -40,7 +40,7 @@ jobs:
         draft: false
         prerelease: false
         files: |
-          target/deptrast-1.0.jar
+          target/deptrast-${{ steps.get_version.outputs.VERSION }}.jar
           README.md
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
