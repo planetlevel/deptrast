@@ -11,10 +11,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     
     - name: Set up JDK 11
-      uses: actions/setup-java@v3
+      uses: actions/setup-java@v4
       with:
         java-version: '11'
         distribution: 'temurin'
@@ -26,9 +26,13 @@ jobs:
     - name: Run tests
       run: mvn -B test
       
+    - name: Extract version from pom.xml
+      id: get_version
+      run: echo "VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)" >> $GITHUB_OUTPUT
+
     - name: Upload build artifact
       uses: actions/upload-artifact@v4
       with:
         name: deptrast-jar
-        path: target/deptrast-1.0.jar
+        path: target/deptrast-${{ steps.get_version.outputs.VERSION }}.jar
         retention-days: 7
