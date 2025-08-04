@@ -47,6 +47,8 @@ The actual dep chosen by the build system could be depv1, depv2, depv3, or somet
 
 See [SECURITY.md](SECURITY.md) for information about the project's security policy, vulnerability reporting, and best practices.
 
+For setup instructions for security scanning, including how to configure the NVD API key for dependency checks, see [SECURITY-SETUP.md](docs/SECURITY-SETUP.md).
+
 ## Building the Project
 
 ```bash

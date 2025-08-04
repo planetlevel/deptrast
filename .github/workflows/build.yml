@@ -51,7 +51,8 @@ jobs:
           -DcveUrlBase=https://nvd.nist.gov/feeds/json/cve/1.1/nvdcve-1.1-%d.json.gz \
           -DautoUpdate=true \
           -DfailBuildOnCVSS=1 \
-          -Dformat=ALL
+          -Dformat=ALL \
+          -DnvdApiKey=${{ secrets.NVD_API_KEY }}
       
     - name: Extract version from pom.xml
       id: get_version
