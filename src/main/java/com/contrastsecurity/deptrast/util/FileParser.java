@@ -22,7 +22,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Utility class for parsing input files containing package information
@@ -179,6 +181,10 @@ public class FileParser {
             Document doc = builder.parse(new File(filePath));
             doc.getDocumentElement().normalize();
 
+            // First, parse all properties into a map
+            Map<String, String> properties = parseProperties(doc);
+            logger.info("Loaded {} properties from pom.xml", properties.size());
+
             // Find all <dependency> elements
             NodeList dependencyNodes = doc.getElementsByTagName("dependency");
 
@@ -199,10 +205,16 @@ public class FileParser {
                     String version = getElementText(element, "version");
 
                     if (groupId != null && artifactId != null && version != null) {
-                        // Remove ${...} variable references - we can't resolve them without full Maven context
+                        // Try to resolve ${...} variable references from properties
                         if (version.contains("${")) {
-                            logger.warn("Skipping dependency with variable version: {}:{}:{}", groupId, artifactId, version);
-                            continue;
+                            String resolvedVersion = resolveProperty(version, properties);
+                            if (resolvedVersion != null && !resolvedVersion.contains("${")) {
+                                version = resolvedVersion;
+                                logger.info("Resolved property version for {}:{} to {}", groupId, artifactId, version);
+                            } else {
+                                logger.warn("Skipping dependency with unresolvable version: {}:{}:{}", groupId, artifactId, version);
+                                continue;
+                            }
                         }
 
                         String name = groupId + ":" + artifactId;
@@ -442,6 +454,79 @@ public class FileParser {
             logger.error("Error parsing purl {}: {}", purl, e.getMessage());
             return null;
         }
+    }
+
+    /**
+     * Parse all properties from the <properties> section of a pom.xml
+     *
+     * @param doc parsed XML document
+     * @return map of property name to value
+     */
+    private static Map<String, String> parseProperties(Document doc) {
+        Map<String, String> properties = new HashMap<>();
+
+        NodeList propertiesNodes = doc.getElementsByTagName("properties");
+        if (propertiesNodes.getLength() > 0) {
+            Element propertiesElement = (Element) propertiesNodes.item(0);
+            NodeList children = propertiesElement.getChildNodes();
+
+            for (int i = 0; i < children.getLength(); i++) {
+                Node child = children.item(i);
+                if (child.getNodeType() == Node.ELEMENT_NODE) {
+                    String propertyName = child.getNodeName();
+                    String propertyValue = child.getTextContent().trim();
+                    properties.put(propertyName, propertyValue);
+                }
+            }
+        }
+
+        return properties;
+    }
+
+    /**
+     * Resolve a property reference like ${spring.version} using the properties map
+     * Supports nested properties (properties that reference other properties)
+     *
+     * @param value the value potentially containing ${...} references
+     * @param properties map of property name to value
+     * @return resolved value or null if unresolvable
+     */
+    private static String resolveProperty(String value, Map<String, String> properties) {
+        if (value == null || !value.contains("${")) {
+            return value;
+        }
+
+        String resolved = value;
+        int maxIterations = 10; // Prevent infinite loops
+        int iterations = 0;
+
+        // Keep resolving until no more ${...} references or max iterations
+        while (resolved.contains("${") && iterations < maxIterations) {
+            int startIdx = resolved.indexOf("${");
+            int endIdx = resolved.indexOf("}", startIdx);
+
+            if (startIdx == -1 || endIdx == -1) {
+                break;
+            }
+
+            String propertyName = resolved.substring(startIdx + 2, endIdx);
+            String propertyValue = properties.get(propertyName);
+
+            if (propertyValue == null) {
+                // Can't resolve this property
+                return null;
+            }
+
+            resolved = resolved.substring(0, startIdx) + propertyValue + resolved.substring(endIdx + 1);
+            iterations++;
+        }
+
+        // If still contains ${...} after max iterations, it's unresolvable
+        if (resolved.contains("${")) {
+            return null;
+        }
+
+        return resolved;
     }
 
     /**

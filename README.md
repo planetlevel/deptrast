@@ -115,9 +115,11 @@ pypi:requests:2.28.1
 Lines starting with `#` are treated as comments and ignored.
 
 #### Maven pom.xml
-Standard Maven pom.xml files. Deptrast extracts dependencies from `<dependencies>` blocks, automatically skipping:
-- Test-scoped dependencies
-- Dependencies with Maven variable versions (e.g., `${spring.version}`)
+Standard Maven pom.xml files. Deptrast extracts dependencies from `<dependencies>` blocks with smart handling:
+- **Test-scoped dependencies** - Automatically skipped
+- **Property variables** - Resolved from `<properties>` section (e.g., `${spring.version}`)
+- **Nested properties** - Supports properties that reference other properties
+- **Unresolvable variables** - Skipped with warning (e.g., parent POM properties)
 
 #### Gradle build.gradle / build.gradle.kts
 Gradle build files in Groovy or Kotlin syntax. Supported formats:
