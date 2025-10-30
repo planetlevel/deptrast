@@ -51,14 +51,6 @@ Security folks will want to detect exactly what components are actually running 
 
 See [SECURITY.md](SECURITY.md) for information about the project's security policy, vulnerability reporting, and best practices. For setup instructions for security scanning, including how to configure the NVD API key for dependency checks, see [SECURITY-SETUP.md](docs/SECURITY-SETUP.md).
 
-## Building the Project
-
-```bash
-mvn clean package
-```
-
-This will create an executable JAR file as `target/deptrast-2.0.0.jar`.
-
 ## Usage
 
 ```bash
@@ -201,12 +193,11 @@ deptrast libraries.txt roots-only.sbom --oformat=sbom --otype=roots
 ```
 Outputs only the root packages in the SBOM, excluding all transitive dependencies.
 
-### How It Works
+## Building the Project
 
-Deptrast analyzes packages in the input file, fetches their complete dependency graphs from deps.dev, reconciles versions with actual runtime versions, identifies the minimal set of root dependencies, and builds an accurate dependency tree. Root dependencies are marked with a red dot (🔴) for easy identification.
+```bash
+mvn clean package
+```
 
-**Input Type Modes:**
-- `--itype=all` - When you provide a complete list of runtime dependencies (e.g., from a flat file or SBOM), deptrast identifies which are roots
-- `--itype=roots` - When you provide just root dependencies (e.g., from pom.xml or requirements.txt), deptrast fetches all transitive dependencies
-- `--itype=smart` - Auto-detects the appropriate mode based on input format
+This will create an executable JAR file as `target/deptrast-2.0.0.jar`.
 
