@@ -181,9 +181,18 @@ public class FileParser {
             Document doc = builder.parse(new File(filePath));
             doc.getDocumentElement().normalize();
 
-            // First, parse all properties into a map
-            Map<String, String> properties = parseProperties(doc);
-            logger.info("Loaded {} properties from pom.xml", properties.size());
+            // First, try to load parent POM properties if there's a parent reference
+            Map<String, String> properties = new HashMap<>();
+            Map<String, String> parentProperties = parseParentPomProperties(doc, filePath, factory, builder);
+            if (parentProperties != null && !parentProperties.isEmpty()) {
+                properties.putAll(parentProperties);
+                logger.info("Loaded {} properties from parent pom.xml", parentProperties.size());
+            }
+
+            // Then parse properties from current POM (these override parent properties)
+            Map<String, String> currentProperties = parseProperties(doc);
+            properties.putAll(currentProperties);
+            logger.info("Loaded {} properties total ({} from current pom.xml)", properties.size(), currentProperties.size());
 
             // Find all <dependency> elements
             NodeList dependencyNodes = doc.getElementsByTagName("dependency");
@@ -481,6 +490,73 @@ public class FileParser {
         }
 
         return properties;
+    }
+
+    /**
+     * Parse properties from parent POM if it exists
+     *
+     * @param doc current document
+     * @param currentFilePath path to current pom.xml
+     * @param factory DocumentBuilderFactory to reuse
+     * @param builder DocumentBuilder to reuse
+     * @return map of parent properties or empty map
+     */
+    private static Map<String, String> parseParentPomProperties(
+            Document doc,
+            String currentFilePath,
+            DocumentBuilderFactory factory,
+            DocumentBuilder builder) {
+
+        Map<String, String> parentProperties = new HashMap<>();
+
+        try {
+            // Look for <parent> element
+            NodeList parentNodes = doc.getElementsByTagName("parent");
+            if (parentNodes.getLength() == 0) {
+                return parentProperties;
+            }
+
+            Element parentElement = (Element) parentNodes.item(0);
+
+            // Get relativePath (defaults to ../pom.xml if not specified)
+            String relativePath = getElementText(parentElement, "relativePath");
+            if (relativePath == null || relativePath.isEmpty()) {
+                relativePath = "../pom.xml";
+            }
+
+            // Resolve parent POM path relative to current POM
+            Path currentPath = Paths.get(currentFilePath).toAbsolutePath().getParent();
+            Path parentPath = currentPath.resolve(relativePath).normalize();
+
+            // Check if parent POM exists
+            File parentPomFile = parentPath.toFile();
+            if (!parentPomFile.exists()) {
+                logger.warn("Parent POM not found at: {}", parentPath);
+                return parentProperties;
+            }
+
+            logger.info("Found parent POM at: {}", parentPath);
+
+            // Parse parent POM
+            Document parentDoc = builder.parse(parentPomFile);
+            parentDoc.getDocumentElement().normalize();
+
+            // Recursively get parent's parent properties first (grandparent)
+            Map<String, String> grandparentProperties = parseParentPomProperties(
+                parentDoc, parentPath.toString(), factory, builder);
+            if (!grandparentProperties.isEmpty()) {
+                parentProperties.putAll(grandparentProperties);
+            }
+
+            // Then get parent's own properties (these override grandparent)
+            Map<String, String> parentOwnProperties = parseProperties(parentDoc);
+            parentProperties.putAll(parentOwnProperties);
+
+        } catch (Exception e) {
+            logger.warn("Error parsing parent POM: {}", e.getMessage());
+        }
+
+        return parentProperties;
     }
 
     /**

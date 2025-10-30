@@ -118,8 +118,9 @@ Lines starting with `#` are treated as comments and ignored.
 Standard Maven pom.xml files. Deptrast extracts dependencies from `<dependencies>` blocks with smart handling:
 - **Test-scoped dependencies** - Automatically skipped
 - **Property variables** - Resolved from `<properties>` section (e.g., `${spring.version}`)
+- **Parent POM properties** - Recursively loads properties from parent POMs via `<relativePath>`
 - **Nested properties** - Supports properties that reference other properties
-- **Unresolvable variables** - Skipped with warning (e.g., parent POM properties)
+- **Unresolvable variables** - Skipped with warning (e.g., properties from remote artifacts)
 
 #### Gradle build.gradle / build.gradle.kts
 Gradle build files in Groovy or Kotlin syntax. Supported formats:
