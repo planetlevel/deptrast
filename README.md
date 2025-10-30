@@ -2,9 +2,9 @@
 
 [![Java CI with Maven](https://github.com/planetlevel/deptrast/actions/workflows/build.yml/badge.svg)](https://github.com/planetlevel/deptrast/actions/workflows/build.yml)
 
-No more flat dependency lists!
+**The buildless SBOM Swiss Army knife.**
 
-A Java application that constructs a useful *security* dependency tree from a list of components observed at runtime.
+Deptrast constructs accurate dependency trees and SBOMs from runtime observations—no builds required. Transform flat dependency lists into rich dependency graphs, convert between formats (pom.xml ↔ SBOM ↔ requirements.txt), and enhance existing SBOMs with accurate dependency relationships. Perfect for analyzing production systems, containerized apps, or any environment where you can observe what's actually running.
 
 ![Example Dependency Tree](example.png)
 NOTE: the error is expected as the project contains a private test-project.jar which can't be looked up.
