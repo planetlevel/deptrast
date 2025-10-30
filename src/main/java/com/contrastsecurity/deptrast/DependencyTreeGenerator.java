@@ -51,47 +51,34 @@ public class DependencyTreeGenerator {
             logger.info("Shutdown hook triggered, cleaning up resources");
             cleanupResources();
         }));
-        if (args.length < 1) {
-            System.out.println("Usage: java -jar deptrast.jar <input-file> [options]");
-            System.out.println("  <input-file>: Path to a file containing all package dependencies");
-            System.out.println("  [--maven-format=<root-project>]: Optional flag to output in Maven dependency:tree format");
-            System.out.println("                                    with the specified root project name");
-            System.out.println("  [--detailed-report=<output-file>]: Generate a detailed report of dependency paths and version conflicts");
-            System.out.println("  [--sbom=<output-file>]: Generate CycloneDX 1.6 SBOM JSON file");
-            System.out.println("  [--verbose|-v]: Enable verbose logging output");
-            System.out.println("\nInput file format:");
-            System.out.println("  Each line should contain a package in the format: system:name:version");
-            System.out.println("  For Maven packages: maven:groupId:artifactId:version");
-            System.out.println("  For npm packages: npm:packageName:version");
-            System.out.println("\nExample:");
-            System.out.println("  maven:org.springframework.boot:spring-boot-starter-web:2.7.0");
-            System.out.println("  npm:react:17.0.2");
+
+        if (args.length < 2) {
+            printUsage();
             return;
         }
 
         String inputFilePath = args[0];
-        String rootProject = null; // For Maven dependency:tree format
-        boolean useMavenFormat = false;
-        String detailedReportPath = null; // Path for detailed report output
-        String sbomOutputPath = null; // Path for SBOM output
-        boolean verbose = false; // Verbose output flag
+        String outputFilePath = args[1];
+
+        // Parse options
+        String inputFormat = "auto";
+        String inputType = "smart";
+        String outputFormat = "tree";
+        String projectName = "project";
+        boolean verbose = false;
 
         // Parse additional arguments
-        for (int i = 1; i < args.length; i++) {
+        for (int i = 2; i < args.length; i++) {
             String arg = args[i];
-            
-            if (arg.startsWith("--maven-format=")) {
-                useMavenFormat = true;
-                rootProject = arg.substring(15); // Extract project name after '='
-                if (rootProject.isEmpty()) {
-                    rootProject = "project"; // Default name if not provided
-                }
-            } else if (arg.startsWith("--detailed-report=")) {
-                detailedReportPath = arg.substring(18); // Extract file path after '='
-                logger.info("Will generate detailed dependency report at: {}", detailedReportPath);
-            } else if (arg.startsWith("--sbom=")) {
-                sbomOutputPath = arg.substring(7); // Extract file path after '='
-                logger.info("Will generate CycloneDX SBOM at: {}", sbomOutputPath);
+
+            if (arg.startsWith("--iformat=")) {
+                inputFormat = arg.substring(10).toLowerCase();
+            } else if (arg.startsWith("--itype=")) {
+                inputType = arg.substring(8).toLowerCase();
+            } else if (arg.startsWith("--oformat=")) {
+                outputFormat = arg.substring(10).toLowerCase();
+            } else if (arg.startsWith("--project-name=")) {
+                projectName = arg.substring(15);
             } else if (arg.equals("--verbose") || arg.equals("-v")) {
                 verbose = true;
             } else {
@@ -99,29 +86,68 @@ public class DependencyTreeGenerator {
             }
         }
 
+        // Auto-detect input format if set to "auto"
+        if ("auto".equals(inputFormat)) {
+            inputFormat = detectInputFormat(inputFilePath);
+        }
+
+        // Smart input type detection
+        if ("smart".equals(inputType)) {
+            inputType = getSmartInputType(inputFormat);
+        }
+
+        // Validate formats
+        if (!isValidInputFormat(inputFormat)) {
+            System.err.println("Invalid input format: " + inputFormat);
+            System.err.println("Valid formats: auto, flat, pom, gradle, pypi, sbom");
+            return;
+        }
+
+        if (!isValidInputType(inputType)) {
+            System.err.println("Invalid input type: " + inputType);
+            System.err.println("Valid types: all, roots, smart");
+            return;
+        }
+
+        if (!isValidOutputFormat(outputFormat)) {
+            System.err.println("Invalid output format: " + outputFormat);
+            System.err.println("Valid formats: tree, maven, sbom");
+            return;
+        }
+
         try {
             // Set logging level based on verbose flag
             if (verbose) {
                 setLoggingLevel(Level.INFO);
                 logger.info("Verbose mode enabled");
+                logger.info("Input: {} (format={}, type={})", inputFilePath, inputFormat, inputType);
+                logger.info("Output: {} (format={})", outputFilePath, outputFormat);
             }
-            
+
             // Initialize the package cache
             PackageCache.getInstance().clear();
 
-            // Parse packages from input file
-            List<Package> allPackages = FileParser.parsePackagesFromFile(inputFilePath);
-            
+            // Parse packages from input file based on input format
+            List<Package> allPackages;
+            if ("flat".equals(inputFormat)) {
+                allPackages = FileParser.parsePackagesFromFile(inputFilePath);
+            } else {
+                // For now, other formats are not implemented
+                System.err.println("Input format '" + inputFormat + "' is not yet implemented. Only 'flat' is currently supported.");
+                return;
+            }
+
             if (allPackages.isEmpty()) {
                 logger.error("No valid packages found in the input file");
                 System.out.println("No valid packages found in the input file. Check format and try again.");
                 return;
             }
-            
+
             logger.info("Loaded {} packages from the input file", allPackages.size());
             System.out.println("Analyzing dependencies for " + allPackages.size() + " packages...");
 
-            // Build dependency trees using optimized algorithm
+            // Build dependency trees - currently assumes inputType="all"
+            // TODO: Add support for inputType="roots" to fetch transitive dependencies
             graphBuilder = new DependencyGraphBuilder();
             List<DependencyNode> dependencyTree = graphBuilder.buildDependencyTrees(allPackages);
             Collection<Package> allTrackedPackages = graphBuilder.getAllPackages();
@@ -131,50 +157,22 @@ public class DependencyTreeGenerator {
 
             PackageCache cache = PackageCache.getInstance();
 
-            // Generate detailed dependency report if requested
-            if (detailedReportPath != null) {
-                generateDetailedReport(detailedReportPath, cache);
-            }
+            // Generate output based on output format
+            String output = generateOutput(dependencyTree, allTrackedPackages, outputFormat, projectName);
 
-            // Generate SBOM if requested
-            if (sbomOutputPath != null) {
-                generateSbom(sbomOutputPath, cache.getAllPackages());
-            }
-
-            if (!useMavenFormat) {
-                System.out.println("\nIdentified " + rootCount + " root dependencies:");
-                for (DependencyNode rootNode : dependencyTree) {
-                    System.out.println("  " + rootNode.getPackage().getFullName());
-                }
-            }
-            
-            // Only add project root node for standard format (not for Maven format)
-            if (!useMavenFormat) {
-                DependencyNode projectRootNode = new DependencyNode(new Package("project", rootProject != null ? rootProject : "root", "1.0.0"), 0, false);
-                
-                for (DependencyNode node : new ArrayList<>(dependencyTree)) {
-                    projectRootNode.addChild(node);
-                }
-                
-                dependencyTree = Collections.singletonList(projectRootNode);
-            }
-            
-            if (useMavenFormat && rootProject != null) {
-                String mavenTree = MavenDependencyTreeFormatter.formatMavenDependencyTree(rootProject, dependencyTree);
-                System.out.println(mavenTree);
+            // Write output to file or stdout
+            if ("-".equals(outputFilePath)) {
+                System.out.println(output);
             } else {
-                System.out.println("\nDependency Tree:\n");
-                for (DependencyNode tree : dependencyTree) {
-                    System.out.println(tree.getTreeRepresentation());
+                try (BufferedWriter writer = new BufferedWriter(new FileWriter(outputFilePath))) {
+                    writer.write(output);
+                    logger.info("Output written to: {}", outputFilePath);
+                    System.out.println("Output written to: " + outputFilePath);
                 }
             }
 
-            System.out.println("\nDependency Statistics:");
-            System.out.println("  Total Packages: " + allTrackedPackages.size());
-            System.out.println("  Root Packages: " + rootCount);
-            
             logger.info("Dependency tree generation completed successfully");
-            
+
             cleanupResources();
         } catch (Exception e) {
             logger.error("Error generating dependency tree: {}", e.getMessage(), e);
@@ -184,46 +182,139 @@ public class DependencyTreeGenerator {
             cleanupResources();
         }
     }
-    
+
     /**
-     * Generate a detailed report of dependency paths and version conflicts
-     * 
-     * @param outputFilePath Path to output the detailed report
-     * @param cache The package cache containing dependency information
+     * Print usage information
      */
-    
-    /**
-     * Set the logging level for the application
-     * 
-     * @param level The logging level to set
-     */
-    private static void setLoggingLevel(Level level) {
-        LoggerContext loggerContext = (LoggerContext) LoggerFactory.getILoggerFactory();
-        loggerContext.getLogger("com.contrastsecurity.deptrast").setLevel(level);
+    private static void printUsage() {
+        System.out.println("Usage: deptrast <input-file> <output-file> [options]");
+        System.out.println();
+        System.out.println("Required:");
+        System.out.println("  <input-file>              Input file path");
+        System.out.println("  <output-file>             Output file path (use \"-\" for stdout)");
+        System.out.println();
+        System.out.println("Input Options:");
+        System.out.println("  --iformat=<format>        Input format (default: auto)");
+        System.out.println("                            auto, flat, pom, gradle, pypi, sbom");
+        System.out.println("  --itype=<type>            Input type (default: smart)");
+        System.out.println("                            all     - All dependencies (find roots)");
+        System.out.println("                            roots   - Root dependencies (fetch transitive)");
+        System.out.println();
+        System.out.println("Output Options:");
+        System.out.println("  --oformat=<format>        Output format (default: tree)");
+        System.out.println("                            tree, maven, sbom");
+        System.out.println("  --project-name=<name>     Project name for root node (tree/maven)");
+        System.out.println();
+        System.out.println("Other:");
+        System.out.println("  --verbose, -v             Verbose logging");
+        System.out.println();
+        System.out.println("Examples:");
+        System.out.println("  deptrast libraries.txt -");
+        System.out.println("  deptrast libraries.txt output.sbom --oformat=sbom");
+        System.out.println("  deptrast pom.xml - --iformat=pom --itype=roots");
     }
-    
+
     /**
-     * Clean up resources and close any open connections
+     * Detect input format based on file extension
      */
-    private static void cleanupResources() {
-        if (graphBuilder != null) {
-            try {
-                graphBuilder.close();
-                logger.info("Successfully closed resources");
-            } catch (Exception e) {
-                logger.warn("Error cleaning up resources: {}", e.getMessage());
-            }
+    private static String detectInputFormat(String filePath) {
+        String lower = filePath.toLowerCase();
+        if (lower.endsWith(".xml") || lower.endsWith("pom.xml")) {
+            return "pom";
+        } else if (lower.endsWith(".gradle") || lower.endsWith(".gradle.kts")) {
+            return "gradle";
+        } else if (lower.endsWith("requirements.txt")) {
+            return "pypi";
+        } else if (lower.endsWith(".json") && (lower.contains("sbom") || lower.contains("bom"))) {
+            return "sbom";
+        } else {
+            return "flat";
         }
     }
-    
-    
+
     /**
-     * Generate a CycloneDX SBOM from the analyzed dependencies
-     *
-     * @param outputFilePath Path to output the SBOM file
-     * @param packages List of packages to include in the SBOM
+     * Get smart default for input type based on format
      */
-    private static void generateSbom(String outputFilePath, Collection<Package> packages) {
+    private static String getSmartInputType(String inputFormat) {
+        switch (inputFormat) {
+            case "pom":
+            case "gradle":
+            case "pypi":
+                return "roots";
+            case "flat":
+            case "sbom":
+            default:
+                return "all";
+        }
+    }
+
+    /**
+     * Validate input format
+     */
+    private static boolean isValidInputFormat(String format) {
+        return "auto".equals(format) || "flat".equals(format) || "pom".equals(format) ||
+               "gradle".equals(format) || "pypi".equals(format) || "sbom".equals(format);
+    }
+
+    /**
+     * Validate input type
+     */
+    private static boolean isValidInputType(String type) {
+        return "all".equals(type) || "roots".equals(type) || "smart".equals(type);
+    }
+
+    /**
+     * Validate output format
+     */
+    private static boolean isValidOutputFormat(String format) {
+        return "tree".equals(format) || "maven".equals(format) || "sbom".equals(format);
+    }
+
+    /**
+     * Generate output based on format
+     */
+    private static String generateOutput(List<DependencyNode> dependencyTree,
+                                         Collection<Package> allTrackedPackages,
+                                         String outputFormat,
+                                         String projectName) {
+        StringBuilder output = new StringBuilder();
+        int rootCount = dependencyTree.size();
+
+        if ("sbom".equals(outputFormat)) {
+            // Generate SBOM JSON
+            PackageCache cache = PackageCache.getInstance();
+            return generateSbomString(cache.getAllPackages());
+        } else if ("maven".equals(outputFormat)) {
+            // Generate Maven dependency:tree format
+            return MavenDependencyTreeFormatter.formatMavenDependencyTree(projectName, dependencyTree);
+        } else {
+            // Generate tree format (default)
+            output.append("Identified ").append(rootCount).append(" root dependencies:").append(NEW_LINE);
+            for (DependencyNode rootNode : dependencyTree) {
+                output.append("  ").append(rootNode.getPackage().getFullName()).append(NEW_LINE);
+            }
+            output.append(NEW_LINE).append("Dependency Tree:").append(NEW_LINE).append(NEW_LINE);
+
+            // Add project root node for tree format
+            DependencyNode projectRootNode = new DependencyNode(
+                new Package("project", projectName, "1.0.0"), 0, false);
+            for (DependencyNode node : new ArrayList<>(dependencyTree)) {
+                projectRootNode.addChild(node);
+            }
+
+            output.append(projectRootNode.getTreeRepresentation());
+            output.append(NEW_LINE).append("Dependency Statistics:").append(NEW_LINE);
+            output.append("  Total Packages: ").append(allTrackedPackages.size()).append(NEW_LINE);
+            output.append("  Root Packages: ").append(rootCount).append(NEW_LINE);
+
+            return output.toString();
+        }
+    }
+
+    /**
+     * Generate SBOM as a string
+     */
+    private static String generateSbomString(Collection<Package> packages) {
         try {
             PackageCache cache = PackageCache.getInstance();
 
@@ -302,110 +393,39 @@ public class DependencyTreeGenerator {
             for (Dependency dependency : dependencies) {
                 bom.addDependency(dependency);
             }
-            
+
             // Generate JSON output
             BomJsonGenerator generator = new BomJsonGenerator(bom, Version.VERSION_16);
-            String jsonOutput = generator.toJsonString(true);
-            
-            // Write to file
-            try (BufferedWriter writer = new BufferedWriter(new FileWriter(outputFilePath))) {
-                writer.write(jsonOutput);
-                logger.info("SBOM successfully written to: {}", outputFilePath);
-                System.out.println("SBOM successfully written to: " + outputFilePath);
-            }
-            
+            return generator.toJsonString(true);
+
         } catch (Exception e) {
             logger.error("Error generating SBOM: {}", e.getMessage(), e);
-            System.err.println("Error generating SBOM: " + e.getMessage());
+            return "Error generating SBOM: " + e.getMessage();
+        }
+    }
+
+    /**
+     * Set the logging level for the application
+     *
+     * @param level The logging level to set
+     */
+    private static void setLoggingLevel(Level level) {
+        LoggerContext loggerContext = (LoggerContext) LoggerFactory.getILoggerFactory();
+        loggerContext.getLogger("com.contrastsecurity.deptrast").setLevel(level);
+    }
+    
+    /**
+     * Clean up resources and close any open connections
+     */
+    private static void cleanupResources() {
+        if (graphBuilder != null) {
+            try {
+                graphBuilder.close();
+                logger.info("Successfully closed resources");
+            } catch (Exception e) {
+                logger.warn("Error cleaning up resources: {}", e.getMessage());
+            }
         }
     }
     
-    private static void generateDetailedReport(String outputFilePath, PackageCache cache) {
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(outputFilePath))) {
-            Map<String, PackageDependencyInfo> detailedInfo = cache.getDetailedDependencyInfo();
-            
-            writer.write("# DEPENDENCY ANALYSIS REPORT" + NEW_LINE + NEW_LINE);
-            writer.write(String.format("Total packages analyzed: %d%s", cache.size(), NEW_LINE));
-            writer.write(String.format("Unique libraries (ignoring versions): %d%s%s", detailedInfo.size(), NEW_LINE, NEW_LINE));
-            
-            List<PackageDependencyInfo> packagesWithConflicts = detailedInfo.values().stream()
-                    .filter(PackageDependencyInfo::hasVersionConflicts)
-                    .collect(Collectors.toList());
-            
-            writer.write("## VERSION CONFLICTS" + NEW_LINE + NEW_LINE);
-            writer.write(String.format("Found %d libraries with version conflicts:%s%s", packagesWithConflicts.size(), NEW_LINE, NEW_LINE));
-            
-            for (PackageDependencyInfo info : packagesWithConflicts) {
-                writer.write(String.format("### %s%s%s", info.getBaseName(), NEW_LINE, NEW_LINE));
-                writer.write("| Version | Used by |" + NEW_LINE);
-                writer.write("|---------|---------|" + NEW_LINE);
-                
-                for (Package version : info.getVersions()) {
-                    StringBuilder usedBy = new StringBuilder();
-                    Set<Package> reverseDeps = cache.getReverseDependencies(version);
-                    for (Package dep : reverseDeps) {
-                        usedBy.append(dep.getFullName()).append(", ");
-                    }
-                    String usedByStr = usedBy.length() > 2 ? 
-                            usedBy.substring(0, usedBy.length() - 2) : "(no direct usage)";
-                    
-                    writer.write(String.format("| %s | %s |%s", version.getVersion(), usedByStr, NEW_LINE));
-                }
-                writer.write(NEW_LINE);
-            }
-            
-            List<PackageDependencyInfo> rootPackages = detailedInfo.values().stream()
-                    .filter(info -> !info.hasReverseDependencies())
-                    .collect(Collectors.toList());
-            
-            writer.write("## ROOT DEPENDENCIES" + NEW_LINE + NEW_LINE);
-            writer.write(String.format("Found %d root dependencies (not depended upon by any other package):%s%s", rootPackages.size(), NEW_LINE, NEW_LINE));
-            
-            for (PackageDependencyInfo info : rootPackages) {
-                for (Package version : info.getVersions()) {
-                    writer.write(String.format("- %s%s", version.getFullName(), NEW_LINE));
-                }
-            }
-            writer.write(NEW_LINE);
-            
-            writer.write("## DETAILED DEPENDENCY PATHS" + NEW_LINE + NEW_LINE);
-            
-            List<String> sortedBaseNames = new ArrayList<>(detailedInfo.keySet());
-            Collections.sort(sortedBaseNames);
-            
-            for (String baseName : sortedBaseNames) {
-                PackageDependencyInfo info = detailedInfo.get(baseName);
-                writer.write(String.format("### %s%s%s", baseName, NEW_LINE, NEW_LINE));
-                
-                writer.write(String.format("**Root Dependency**: %s%s%s", !info.hasReverseDependencies() ? "Yes" : "No", NEW_LINE, NEW_LINE));
-                
-                if (info.hasReverseDependencies()) {
-                    writer.write("**Dependency Paths**:" + NEW_LINE + NEW_LINE);
-                    
-                    for (Package version : info.getVersions()) {
-                        writer.write(String.format("#### Version: %s%s%s", version.getVersion(), NEW_LINE, NEW_LINE));
-                        Set<Package> reverseDeps = cache.getReverseDependencies(version);
-                        
-                        if (reverseDeps.isEmpty()) {
-                            writer.write("No packages directly depend on this version." + NEW_LINE + NEW_LINE);
-                        } else {
-                            for (Package parent : reverseDeps) {
-                                writer.write(String.format("- %s%s", parent.getFullName(), NEW_LINE));
-                            }
-                            writer.write(NEW_LINE);
-                        }
-                    }
-                }
-                
-                writer.write("---" + NEW_LINE + NEW_LINE);
-            }
-            
-            logger.info("Detailed dependency report written to: {}", outputFilePath);
-            System.out.println("Detailed dependency report written to: " + outputFilePath);
-            
-        } catch (IOException e) {
-            logger.error("Error generating detailed report: {}", e.getMessage());
-            System.err.println("Error generating detailed report: " + e.getMessage());
-        }
-    }
 }
