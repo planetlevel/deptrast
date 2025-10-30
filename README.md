@@ -23,7 +23,7 @@ NOTE: the error is expected as the project contains a private test-project.jar w
 
 ## Example Use
 
-> java -jar target/deptrast-1.0.jar test-data/libraries.txt
+> java -jar target/deptrast-2.0.jar test-data/libraries.txt -
 
 ## Security Considerations
 
@@ -44,26 +44,53 @@ See [SECURITY.md](SECURITY.md) for information about the project's security poli
 mvn clean package
 ```
 
-This will create an executable JAR file as `target/deptrast-1.0.jar`.
+This will create an executable JAR file as `target/deptrast-2.0.0.jar`.
 
 ## Usage
 
 ```bash
-java -jar target/deptrast-1.0.jar <input-file> [--maven-format=<project-name>] [--sbom=<output-file>] [--verbose|-v]
+deptrast <input-file> <output-file> [options]
 ```
 
-- `<input-file>`: Path to a file containing all runtime packages (required)
-- `[--maven-format=<root-project>]`: Output in Maven dependency:tree format with the specified project name
-- `[--detailed-report=<output-file>]`: Generate a detailed report of dependency paths and version conflicts
-- `[--sbom=<output-file>]`: Generate CycloneDX 1.6 SBOM JSON file with dependency information
-- `[--verbose|-v]`: Enable verbose logging output (disabled by default)
+### Required Arguments
 
-### Input File Format
+- `<input-file>` - Input file path
+- `<output-file>` - Output file path (use `"-"` for stdout)
 
-Each line in the input file should contain a package in the format: `system:name:version`
+### Input Options
 
-For Maven packages: `maven:groupId:artifactId:version`
-For NPM packages: `npm:packageName:version`
+- `--iformat=<format>` - Input format (default: auto)
+  - `auto` - Auto-detect from file extension
+  - `flat` - Flat list (system:name:version per line)
+  - `pom` - Maven pom.xml _(coming soon)_
+  - `gradle` - Gradle build file _(coming soon)_
+  - `pypi` - Python requirements.txt _(coming soon)_
+  - `sbom` - CycloneDX SBOM _(coming soon)_
+
+- `--itype=<type>` - Input type (default: smart)
+  - `all` - All dependencies (find roots by analysis)
+  - `roots` - Root dependencies (fetch transitive deps from API)
+  - `smart` - Auto-detect based on format (pom/gradle/pypi→roots, flat/sbom→all)
+
+### Output Options
+
+- `--oformat=<format>` - Output format (default: tree)
+  - `tree` - ASCII tree with unicode characters
+  - `maven` - Maven dependency:tree format
+  - `sbom` - CycloneDX 1.6 SBOM JSON
+
+- `--project-name=<name>` - Project name for root node (tree/maven output)
+
+### Other Options
+
+- `--verbose`, `-v` - Enable verbose logging
+
+### Input File Format (Flat)
+
+Each line should contain a package in the format: `system:name:version`
+
+- Maven packages: `maven:groupId:artifactId:version`
+- NPM packages: `npm:packageName:version`
 
 Example:
 ```
@@ -75,21 +102,27 @@ npm:express:4.18.2
 
 Lines starting with `#` are treated as comments and ignored.
 
-### Example
+### Examples
 
+**Basic usage (tree output to stdout):**
 ```bash
-java -jar target/deptrast-1.0.jar libraries.txt
+deptrast libraries.txt -
 ```
 
-This will analyze all packages in `libraries.txt`, fetch their complete dependency graphs, reconcile versions with actual runtime versions, identify the minimal set of root dependencies, and build an accurate dependency tree. Root dependencies will be marked with a red dot (🔴) for easy identification.
-
-### Maven Dependency:tree Format
-
-To output the dependency tree in Maven's format:
-
+**Generate SBOM:**
 ```bash
-java -jar target/deptrast-1.0.jar libraries.txt --maven-format=my-project
+deptrast libraries.txt output.sbom --oformat=sbom
 ```
 
-This will generate output compatible with Maven's `dependency:tree` command, using 'my-project' as the root node. The Maven format doesn't include the red dot indicators and follows Maven's standard output format.
+**Maven format to file:**
+```bash
+deptrast libraries.txt deps.txt --oformat=maven --project-name=my-app
+```
+
+**Verbose output:**
+```bash
+deptrast libraries.txt - --verbose
+```
+
+This will analyze all packages in the input file, fetch their complete dependency graphs, reconcile versions with actual runtime versions, identify the minimal set of root dependencies, and build an accurate dependency tree. Root dependencies are marked with a red dot (🔴) for easy identification.
 
