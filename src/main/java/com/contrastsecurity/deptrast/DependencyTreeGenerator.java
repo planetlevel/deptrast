@@ -225,10 +225,12 @@ public class DependencyTreeGenerator {
      */
     private static void generateSbom(String outputFilePath, Collection<Package> packages) {
         try {
+            PackageCache cache = PackageCache.getInstance();
+
             // Create a new BOM
             Bom bom = new Bom();
             bom.setSerialNumber("urn:uuid:" + UUID.randomUUID());
-            
+
             Metadata metadata = new Metadata();
             metadata.setTimestamp(new Date());
             Tool tool = new Tool();
@@ -238,16 +240,16 @@ public class DependencyTreeGenerator {
             tools.add(tool);
             metadata.setTools(tools);
             bom.setMetadata(metadata);
-            
+
             // Add all packages as components and track purlByPackage for dependency graph
             List<Component> components = new ArrayList<>();
             Map<Package, String> purlByPackage = new HashMap<>();
-            
+
             for (Package pkg : packages) {
                 Component component = new Component();
                 component.setType(Component.Type.LIBRARY);
                 String purl;
-                
+
                 if ("maven".equalsIgnoreCase(pkg.getSystem())) {
                     // For Maven packages, separate group and artifact if available
                     String name = pkg.getName();
@@ -258,32 +260,32 @@ public class DependencyTreeGenerator {
                     } else {
                         component.setName(name);
                     }
-                    purl = "pkg:maven/" + (component.getGroup() != null ? component.getGroup() : "") + 
+                    purl = "pkg:maven/" + (component.getGroup() != null ? component.getGroup() : "") +
                            "/" + component.getName() + "@" + pkg.getVersion();
                 } else {
                     // For other package systems
                     component.setName(pkg.getName());
                     purl = "pkg:" + pkg.getSystem().toLowerCase() + "/" + pkg.getName() + "@" + pkg.getVersion();
                 }
-                
+
                 component.setVersion(pkg.getVersion());
                 component.setPurl(purl);
                 components.add(component);
                 purlByPackage.put(pkg, purl);
             }
-            
+
             bom.setComponents(components);
-            
-            // Build dependency graph
+
+            // Build dependency graph from the cache
             List<Dependency> dependencies = new ArrayList<>();
-            
-            // For each package, create a dependency entry with its direct dependencies
+
+            // For each package, create a dependency entry with its direct dependencies from cache
             for (Package pkg : packages) {
                 String pkgPurl = purlByPackage.get(pkg);
                 Dependency dependency = new Dependency(pkgPurl);
-                
-                // Add direct dependencies
-                List<Package> directDeps = pkg.getDependencies();
+
+                // Get direct dependencies from the cache
+                List<Package> directDeps = cache.getCachedDependencies(pkg);
                 if (directDeps != null && !directDeps.isEmpty()) {
                     for (Package depPkg : directDeps) {
                         if (purlByPackage.containsKey(depPkg)) {
@@ -292,10 +294,10 @@ public class DependencyTreeGenerator {
                         }
                     }
                 }
-                
+
                 dependencies.add(dependency);
             }
-            
+
             // Set dependencies on BOM
             for (Dependency dependency : dependencies) {
                 bom.addDependency(dependency);

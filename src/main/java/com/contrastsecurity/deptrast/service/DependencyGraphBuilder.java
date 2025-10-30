@@ -293,6 +293,25 @@ public class DependencyGraphBuilder implements AutoCloseable {
             adjacency.computeIfAbsent(fromNode, k -> new ArrayList<>()).add(toNode);
         }
 
+        // Cache direct dependencies for each package
+        for (Map.Entry<Integer, Package> entry : nodeMap.entrySet()) {
+            int nodeIndex = entry.getKey();
+            Package pkg = entry.getValue();
+
+            // Get direct dependencies (children in adjacency list)
+            List<Integer> childIndices = adjacency.getOrDefault(nodeIndex, Collections.emptyList());
+            List<Package> directDeps = new ArrayList<>();
+            for (int childIndex : childIndices) {
+                Package childPkg = nodeMap.get(childIndex);
+                if (childPkg != null) {
+                    directDeps.add(childPkg);
+                }
+            }
+
+            // Cache the direct dependencies
+            cache.cacheDependencies(pkg, directDeps);
+        }
+
         // Build tree structure using recursion from SELF node
         if (selfNodeIndex != -1) {
             buildTreeFromAdjacency(nodeTreeMap, adjacency, selfNodeIndex, 0, new HashSet<>());
