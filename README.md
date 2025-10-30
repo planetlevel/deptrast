@@ -11,15 +11,26 @@ NOTE: the error is expected as the project contains a private test-project.jar w
 
 ## Features
 
-- Reads a flat list of runtime dependencies from a text file
+### Input Formats
+- **Flat list** - Runtime dependency lists (system:name:version per line)
+- **Maven pom.xml** - Parse Maven project dependencies (skips test scope)
+- **Gradle** - Parse build.gradle and build.gradle.kts files
+- **Python requirements.txt** - Parse Python dependencies
+- **CycloneDX SBOM** - Parse existing SBOM files
+
+### Output Formats
+- **ASCII Tree** - Unicode tree visualization with root indicators (🔴)
+- **Maven dependency:tree** - Compatible with Maven's format
+- **CycloneDX SBOM** - Generate or enhance SBOM JSON (v1.6)
+
+### Core Capabilities
 - Fetches complete dependency graphs from the deps.dev REST API
 - Reconciles declared versions with actual runtime versions (handles Maven's dependency resolution)
 - Identifies minimal set of root dependencies using strict version matching
 - Builds accurate dependency trees reflecting actual runtime relationships
-- Supports output in standard tree format or Maven dependency:tree format
 - Efficient single-pass algorithm with intelligent caching
-- Supports multiple package ecosystems (Maven, NPM, etc.)
-- Builds a rich SBOM from a flat list
+- Supports multiple package ecosystems (Maven, NPM, PyPI)
+- **SBOM Enhancement** - When input and output are both SBOM, preserves original metadata and adds dependency graph
 
 ## Example Use
 
@@ -85,12 +96,14 @@ deptrast <input-file> <output-file> [options]
 
 - `--verbose`, `-v` - Enable verbose logging
 
-### Input File Format (Flat)
+### Input File Formats
 
+#### Flat List Format
 Each line should contain a package in the format: `system:name:version`
 
 - Maven packages: `maven:groupId:artifactId:version`
 - NPM packages: `npm:packageName:version`
+- PyPI packages: `pypi:packageName:version`
 
 Example:
 ```
@@ -98,9 +111,35 @@ maven:org.springframework.boot:spring-boot-starter-web:3.1.0
 maven:com.google.guava:guava:31.1-jre
 npm:react:18.2.0
 npm:express:4.18.2
+pypi:requests:2.28.1
 ```
 
 Lines starting with `#` are treated as comments and ignored.
+
+#### Maven pom.xml
+Standard Maven pom.xml files. Deptrast extracts dependencies from `<dependencies>` blocks, automatically skipping:
+- Test-scoped dependencies
+- Dependencies with Maven variable versions (e.g., `${spring.version}`)
+
+#### Gradle build.gradle / build.gradle.kts
+Gradle build files in Groovy or Kotlin syntax. Supported formats:
+```gradle
+implementation 'group:artifact:version'
+implementation "group:artifact:version"
+implementation group: 'group', name: 'artifact', version: 'version'
+```
+Test dependencies (testImplementation, testCompile) are automatically skipped.
+
+#### Python requirements.txt
+Standard Python requirements files. Supports version operators:
+```
+requests==2.28.1
+flask>=2.0.0
+numpy~=1.23.0
+```
+
+#### CycloneDX SBOM
+CycloneDX SBOM JSON files (v1.x). Deptrast extracts components via purl (Package URL) parsing.
 
 ### Examples
 
@@ -139,5 +178,23 @@ deptrast pom.xml - --iformat=pom --itype=roots
 deptrast requirements.txt output.sbom --iformat=pypi --oformat=sbom
 ```
 
-This will analyze all packages in the input file, fetch their complete dependency graphs, reconcile versions with actual runtime versions, identify the minimal set of root dependencies, and build an accurate dependency tree. Root dependencies are marked with a red dot (🔴) for easy identification.
+**Analyze Gradle build file:**
+```bash
+deptrast build.gradle - --iformat=gradle --itype=roots
+```
+
+**Enhance existing SBOM with dependencies:**
+```bash
+deptrast input.sbom enhanced.sbom --iformat=sbom --oformat=sbom
+```
+This preserves all original SBOM metadata (tools, timestamps, custom fields) and adds/updates the dependencies section with computed dependency relationships.
+
+### How It Works
+
+Deptrast analyzes packages in the input file, fetches their complete dependency graphs from deps.dev, reconciles versions with actual runtime versions, identifies the minimal set of root dependencies, and builds an accurate dependency tree. Root dependencies are marked with a red dot (🔴) for easy identification.
+
+**Input Type Modes:**
+- `--itype=all` - When you provide a complete list of runtime dependencies (e.g., from a flat file or SBOM), deptrast identifies which are roots
+- `--itype=roots` - When you provide just root dependencies (e.g., from pom.xml or requirements.txt), deptrast fetches all transitive dependencies
+- `--itype=smart` - Auto-detects the appropriate mode based on input format
 
