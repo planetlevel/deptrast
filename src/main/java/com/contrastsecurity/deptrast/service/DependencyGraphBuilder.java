@@ -222,7 +222,7 @@ public class DependencyGraphBuilder implements AutoCloseable {
 
             try (Response response = client.newCall(request).execute()) {
                 if (!response.isSuccessful()) {
-                    logger.error("Failed to get dependencies for {}: {}", pkg.getFullName(), response.code());
+                    logger.warn("WARNING: Unknown component {}. Treating as root dependency.", pkg.getFullName());
                     return new DependencyNode(pkg, 0);
                 }
 

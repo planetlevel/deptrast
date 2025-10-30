@@ -68,6 +68,7 @@ public class DependencyTreeGenerator {
         String inputFormat = "auto";
         String inputType = "smart";
         String outputFormat = "tree";
+        String outputType = "all";  // Default: output all dependencies
         String projectName = "project";
         boolean verbose = false;
 
@@ -81,6 +82,8 @@ public class DependencyTreeGenerator {
                 inputType = arg.substring(8).toLowerCase();
             } else if (arg.startsWith("--oformat=")) {
                 outputFormat = arg.substring(10).toLowerCase();
+            } else if (arg.startsWith("--otype=")) {
+                outputType = arg.substring(8).toLowerCase();
             } else if (arg.startsWith("--project-name=")) {
                 projectName = arg.substring(15);
             } else if (arg.equals("--verbose") || arg.equals("-v")) {
@@ -119,13 +122,19 @@ public class DependencyTreeGenerator {
             return;
         }
 
+        if (!isValidOutputType(outputType)) {
+            System.err.println("Invalid output type: " + outputType);
+            System.err.println("Valid types: all, roots");
+            return;
+        }
+
         try {
             // Set logging level based on verbose flag
             if (verbose) {
                 setLoggingLevel(Level.INFO);
                 logger.info("Verbose mode enabled");
                 logger.info("Input: {} (format={}, type={})", inputFilePath, inputFormat, inputType);
-                logger.info("Output: {} (format={})", outputFilePath, outputFormat);
+                logger.info("Output: {} (format={}, type={})", outputFilePath, outputFormat, outputType);
             }
 
             // Initialize the package cache
@@ -186,7 +195,7 @@ public class DependencyTreeGenerator {
             PackageCache cache = PackageCache.getInstance();
 
             // Generate output based on output format
-            String output = generateOutput(dependencyTree, allTrackedPackages, outputFormat, projectName, originalSbomContent);
+            String output = generateOutput(dependencyTree, allTrackedPackages, outputFormat, outputType, projectName, originalSbomContent);
 
             // Write output to file or stdout
             if ("-".equals(outputFilePath)) {
@@ -231,6 +240,9 @@ public class DependencyTreeGenerator {
         System.out.println("Output Options:");
         System.out.println("  --oformat=<format>        Output format (default: tree)");
         System.out.println("                            tree, maven, sbom");
+        System.out.println("  --otype=<type>            Output type (default: all)");
+        System.out.println("                            all     - All packages (roots + transitive)");
+        System.out.println("                            roots   - Root packages only");
         System.out.println("  --project-name=<name>     Project name for root node (tree/maven)");
         System.out.println();
         System.out.println("Other:");
@@ -299,24 +311,46 @@ public class DependencyTreeGenerator {
     }
 
     /**
+     * Validate output type
+     */
+    private static boolean isValidOutputType(String type) {
+        return "all".equals(type) || "roots".equals(type);
+    }
+
+    /**
      * Generate output based on format
      */
     private static String generateOutput(List<DependencyNode> dependencyTree,
                                          Collection<Package> allTrackedPackages,
                                          String outputFormat,
+                                         String outputType,
                                          String projectName,
                                          String originalSbomContent) {
         StringBuilder output = new StringBuilder();
         int rootCount = dependencyTree.size();
+
+        // Filter packages based on output type
+        Collection<Package> packagesToOutput;
+        if ("roots".equals(outputType)) {
+            // Only output root packages (no transitive dependencies)
+            packagesToOutput = new ArrayList<>();
+            for (DependencyNode rootNode : dependencyTree) {
+                packagesToOutput.add(rootNode.getPackage());
+            }
+            logger.info("Output type is 'roots': outputting {} root packages only", packagesToOutput.size());
+        } else {
+            // Output all packages
+            packagesToOutput = allTrackedPackages;
+        }
 
         if ("sbom".equals(outputFormat)) {
             // Generate SBOM JSON
             PackageCache cache = PackageCache.getInstance();
             // If we have original SBOM content, enhance it instead of creating new
             if (originalSbomContent != null) {
-                return enhanceSbomWithDependencies(originalSbomContent, cache.getAllPackages());
+                return enhanceSbomWithDependencies(originalSbomContent, packagesToOutput);
             } else {
-                return generateSbomString(cache.getAllPackages());
+                return generateSbomString(packagesToOutput);
             }
         } else if ("maven".equals(outputFormat)) {
             // Generate Maven dependency:tree format
