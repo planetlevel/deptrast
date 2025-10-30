@@ -7,10 +7,15 @@
 Deptrast will take whatever dependency information you have, from just about any source, and make it into what you need.  Make an SBOM anytime, you don't have to run a build!  Live your life.
 
  ✅ pom.xml -> Full ASCII Tree with all transitive dependencies
+ 
  ✅ SBOM with only root dependencies and no dependency graph -> Fully awesome SBOM
+ 
  ✅ Random list of jar files -> SBOM
+ 
  ✅ requirements.txt -> Maven-style text output
+ 
  ✅ List of components from runtime analysis with no dependency graph -> Fully awesome SBOM
+ 
  ✅ Etc...
 
 Security folks will want to detect exactly what components are actually running in production! And there are many tools that will scan deployed systems or monitor them at runtime -- but they often just give you a flat list with no dependency tree information. That makes it difficult to fix problems. Fortunately, deptrast can unscramble runtime dependencies and organize them into something very close to the original build configuration.  And probably more accurate!
