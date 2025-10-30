@@ -62,10 +62,10 @@ deptrast <input-file> <output-file> [options]
 - `--iformat=<format>` - Input format (default: auto)
   - `auto` - Auto-detect from file extension
   - `flat` - Flat list (system:name:version per line)
-  - `pom` - Maven pom.xml _(coming soon)_
+  - `pom` - Maven pom.xml
+  - `pypi` - Python requirements.txt
+  - `sbom` - CycloneDX SBOM JSON
   - `gradle` - Gradle build file _(coming soon)_
-  - `pypi` - Python requirements.txt _(coming soon)_
-  - `sbom` - CycloneDX SBOM _(coming soon)_
 
 - `--itype=<type>` - Input type (default: smart)
   - `all` - All dependencies (find roots by analysis)
@@ -122,6 +122,21 @@ deptrast libraries.txt deps.txt --oformat=maven --project-name=my-app
 **Verbose output:**
 ```bash
 deptrast libraries.txt - --verbose
+```
+
+**Convert SBOM to tree:**
+```bash
+deptrast input.sbom - --iformat=sbom
+```
+
+**Analyze pom.xml:**
+```bash
+deptrast pom.xml - --iformat=pom --itype=roots
+```
+
+**Python requirements.txt to SBOM:**
+```bash
+deptrast requirements.txt output.sbom --iformat=pypi --oformat=sbom
 ```
 
 This will analyze all packages in the input file, fetch their complete dependency graphs, reconcile versions with actual runtime versions, identify the minimal set of root dependencies, and build an accurate dependency tree. Root dependencies are marked with a red dot (🔴) for easy identification.

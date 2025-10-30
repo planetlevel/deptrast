@@ -1,10 +1,21 @@
 package com.contrastsecurity.deptrast.util;
 
 import com.contrastsecurity.deptrast.model.Package;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
 
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -106,7 +117,206 @@ public class FileParser {
         } catch (IOException e) {
             logger.error("Error reading file {}: {}", filePath, e.getMessage());
         }
-        
+
         return packages;
+    }
+
+    /**
+     * Parse a CycloneDX SBOM file
+     *
+     * @param filePath path to the SBOM file
+     * @return list of packages
+     */
+    public static List<Package> parseSbomFile(String filePath) {
+        List<Package> packages = new ArrayList<>();
+
+        try {
+            // Read and parse JSON file
+            String content = new String(Files.readAllBytes(Paths.get(filePath)));
+            JsonObject sbom = JsonParser.parseString(content).getAsJsonObject();
+
+            // Get components array
+            JsonArray components = sbom.getAsJsonArray("components");
+            if (components != null) {
+                for (JsonElement element : components) {
+                    JsonObject component = element.getAsJsonObject();
+                    JsonElement purlElement = component.get("purl");
+
+                    if (purlElement != null && !purlElement.isJsonNull()) {
+                        String purl = purlElement.getAsString();
+                        if (purl.startsWith("pkg:")) {
+                            // Parse purl format: pkg:maven/group/artifact@version
+                            Package pkg = parsePurl(purl);
+                            if (pkg != null) {
+                                packages.add(pkg);
+                                logger.info("Added package from SBOM: {}", pkg.getFullName());
+                            }
+                        }
+                    }
+                }
+            }
+
+            logger.info("Parsed {} packages from SBOM", packages.size());
+        } catch (Exception e) {
+            logger.error("Error parsing SBOM file {}: {}", filePath, e.getMessage());
+        }
+
+        return packages;
+    }
+
+    /**
+     * Parse a Maven pom.xml file
+     *
+     * @param filePath path to the pom.xml file
+     * @return list of packages
+     */
+    public static List<Package> parsePomFile(String filePath) {
+        List<Package> packages = new ArrayList<>();
+
+        try {
+            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+            DocumentBuilder builder = factory.newDocumentBuilder();
+            Document doc = builder.parse(new File(filePath));
+            doc.getDocumentElement().normalize();
+
+            // Find all <dependency> elements
+            NodeList dependencyNodes = doc.getElementsByTagName("dependency");
+
+            for (int i = 0; i < dependencyNodes.getLength(); i++) {
+                Node node = dependencyNodes.item(i);
+
+                if (node.getNodeType() == Node.ELEMENT_NODE) {
+                    Element element = (Element) node;
+
+                    // Skip test-scoped dependencies by default
+                    String scope = getElementText(element, "scope");
+                    if ("test".equals(scope)) {
+                        continue;
+                    }
+
+                    String groupId = getElementText(element, "groupId");
+                    String artifactId = getElementText(element, "artifactId");
+                    String version = getElementText(element, "version");
+
+                    if (groupId != null && artifactId != null && version != null) {
+                        // Remove ${...} variable references - we can't resolve them without full Maven context
+                        if (version.contains("${")) {
+                            logger.warn("Skipping dependency with variable version: {}:{}:{}", groupId, artifactId, version);
+                            continue;
+                        }
+
+                        String name = groupId + ":" + artifactId;
+                        Package pkg = new Package("maven", name, version);
+                        packages.add(pkg);
+                        logger.info("Added package from pom.xml: {}", pkg.getFullName());
+                    }
+                }
+            }
+
+            logger.info("Parsed {} packages from pom.xml", packages.size());
+        } catch (Exception e) {
+            logger.error("Error parsing pom.xml file {}: {}", filePath, e.getMessage());
+        }
+
+        return packages;
+    }
+
+    /**
+     * Parse a Python requirements.txt file
+     *
+     * @param filePath path to the requirements.txt file
+     * @return list of packages
+     */
+    public static List<Package> parseRequirementsFile(String filePath) {
+        List<Package> packages = new ArrayList<>();
+
+        try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
+            String line;
+            int lineNumber = 0;
+
+            while ((line = reader.readLine()) != null) {
+                lineNumber++;
+                line = line.trim();
+
+                // Skip empty lines and comments
+                if (line.isEmpty() || line.startsWith("#")) {
+                    continue;
+                }
+
+                // Parse requirement line (e.g., "requests==2.28.1" or "requests>=2.28.1")
+                String[] parts = line.split("==|>=|<=|~=|!=");
+                if (parts.length >= 2) {
+                    String name = parts[0].trim();
+                    String version = parts[1].trim().split(";")[0].trim(); // Remove environment markers
+
+                    Package pkg = new Package("pypi", name, version);
+                    packages.add(pkg);
+                    logger.info("Added package from requirements.txt: {}", pkg.getFullName());
+                } else {
+                    logger.warn("Invalid format at line {}: {}. Expected package==version", lineNumber, line);
+                }
+            }
+
+            logger.info("Parsed {} packages from requirements.txt", packages.size());
+        } catch (IOException e) {
+            logger.error("Error reading requirements.txt file {}: {}", filePath, e.getMessage());
+        }
+
+        return packages;
+    }
+
+    /**
+     * Parse a package URL (purl) into a Package object
+     *
+     * @param purl the package URL (e.g., "pkg:maven/org.springframework/spring-core@5.3.0")
+     * @return Package object or null if parsing fails
+     */
+    private static Package parsePurl(String purl) {
+        try {
+            // Remove "pkg:" prefix
+            String withoutPrefix = purl.substring(4);
+
+            // Split into type and rest
+            int typeEnd = withoutPrefix.indexOf('/');
+            if (typeEnd == -1) return null;
+
+            String type = withoutPrefix.substring(0, typeEnd);
+            String rest = withoutPrefix.substring(typeEnd + 1);
+
+            // Split into name and version at @
+            int versionStart = rest.lastIndexOf('@');
+            if (versionStart == -1) return null;
+
+            String namepart = rest.substring(0, versionStart);
+            String version = rest.substring(versionStart + 1);
+
+            // For Maven, combine group/artifact into name
+            if ("maven".equals(type)) {
+                String name = namepart.replace('/', ':');
+                return new Package("maven", name, version);
+            } else {
+                // For other types, use the name as-is
+                return new Package(type, namepart, version);
+            }
+        } catch (Exception e) {
+            logger.error("Error parsing purl {}: {}", purl, e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Get text content of a child element
+     *
+     * @param parent parent element
+     * @param tagName tag name to find
+     * @return text content or null
+     */
+    private static String getElementText(Element parent, String tagName) {
+        NodeList nodes = parent.getElementsByTagName(tagName);
+        if (nodes.getLength() > 0) {
+            Node node = nodes.item(0);
+            return node.getTextContent().trim();
+        }
+        return null;
     }
 }

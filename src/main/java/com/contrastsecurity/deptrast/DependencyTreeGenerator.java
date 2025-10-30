@@ -129,12 +129,25 @@ public class DependencyTreeGenerator {
 
             // Parse packages from input file based on input format
             List<Package> allPackages;
-            if ("flat".equals(inputFormat)) {
-                allPackages = FileParser.parsePackagesFromFile(inputFilePath);
-            } else {
-                // For now, other formats are not implemented
-                System.err.println("Input format '" + inputFormat + "' is not yet implemented. Only 'flat' is currently supported.");
-                return;
+            switch (inputFormat) {
+                case "flat":
+                    allPackages = FileParser.parsePackagesFromFile(inputFilePath);
+                    break;
+                case "sbom":
+                    allPackages = FileParser.parseSbomFile(inputFilePath);
+                    break;
+                case "pom":
+                    allPackages = FileParser.parsePomFile(inputFilePath);
+                    break;
+                case "pypi":
+                    allPackages = FileParser.parseRequirementsFile(inputFilePath);
+                    break;
+                case "gradle":
+                    System.err.println("Input format 'gradle' is not yet implemented.");
+                    return;
+                default:
+                    System.err.println("Unknown input format: " + inputFormat);
+                    return;
             }
 
             if (allPackages.isEmpty()) {
