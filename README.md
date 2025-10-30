@@ -63,9 +63,9 @@ deptrast <input-file> <output-file> [options]
   - `auto` - Auto-detect from file extension
   - `flat` - Flat list (system:name:version per line)
   - `pom` - Maven pom.xml
+  - `gradle` - Gradle build.gradle / build.gradle.kts
   - `pypi` - Python requirements.txt
   - `sbom` - CycloneDX SBOM JSON
-  - `gradle` - Gradle build file _(coming soon)_
 
 - `--itype=<type>` - Input type (default: smart)
   - `all` - All dependencies (find roots by analysis)

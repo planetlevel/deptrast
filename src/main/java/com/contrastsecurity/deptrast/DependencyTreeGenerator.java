@@ -158,8 +158,8 @@ public class DependencyTreeGenerator {
                     allPackages = FileParser.parseRequirementsFile(inputFilePath);
                     break;
                 case "gradle":
-                    System.err.println("Input format 'gradle' is not yet implemented.");
-                    return;
+                    allPackages = FileParser.parseGradleFile(inputFilePath);
+                    break;
                 default:
                     System.err.println("Unknown input format: " + inputFormat);
                     return;

@@ -266,6 +266,146 @@ public class FileParser {
     }
 
     /**
+     * Parse a Gradle build file
+     *
+     * @param filePath path to the build.gradle or build.gradle.kts file
+     * @return list of packages
+     */
+    public static List<Package> parseGradleFile(String filePath) {
+        List<Package> packages = new ArrayList<>();
+
+        try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
+            String line;
+            int lineNumber = 0;
+            boolean inDependenciesBlock = false;
+
+            while ((line = reader.readLine()) != null) {
+                lineNumber++;
+                String trimmed = line.trim();
+
+                // Track if we're inside dependencies block
+                if (trimmed.startsWith("dependencies")) {
+                    inDependenciesBlock = true;
+                    continue;
+                }
+
+                // Exit dependencies block on closing brace
+                if (inDependenciesBlock && trimmed.startsWith("}")) {
+                    inDependenciesBlock = false;
+                    continue;
+                }
+
+                // Parse dependencies inside the block
+                if (inDependenciesBlock) {
+                    Package pkg = parseGradleDependency(trimmed, lineNumber);
+                    if (pkg != null) {
+                        packages.add(pkg);
+                        logger.info("Added package from Gradle: {}", pkg.getFullName());
+                    }
+                }
+            }
+
+            logger.info("Parsed {} packages from Gradle file", packages.size());
+        } catch (IOException e) {
+            logger.error("Error reading Gradle file {}: {}", filePath, e.getMessage());
+        }
+
+        return packages;
+    }
+
+    /**
+     * Parse a single Gradle dependency line
+     *
+     * @param line the dependency line
+     * @param lineNumber line number for logging
+     * @return Package object or null
+     */
+    private static Package parseGradleDependency(String line, int lineNumber) {
+        // Skip test dependencies
+        if (line.contains("testImplementation") || line.contains("testCompile") ||
+            line.contains("androidTestImplementation")) {
+            return null;
+        }
+
+        // Extract the dependency string from various formats:
+        // implementation 'group:artifact:version'
+        // implementation "group:artifact:version"
+        // implementation group: 'group', name: 'artifact', version: 'version'
+        // api 'group:artifact:version'
+
+        try {
+            // Pattern 1: implementation 'group:artifact:version' or "group:artifact:version"
+            if (line.contains("'") || line.contains("\"")) {
+                int start = Math.max(line.indexOf("'"), line.indexOf("\""));
+                if (start == -1) start = line.indexOf("'");
+                if (start == -1) start = line.indexOf("\"");
+
+                int end = line.indexOf("'", start + 1);
+                if (end == -1) end = line.indexOf("\"", start + 1);
+
+                if (start != -1 && end != -1 && end > start) {
+                    String depString = line.substring(start + 1, end);
+
+                    // Parse group:artifact:version format
+                    String[] parts = depString.split(":");
+                    if (parts.length >= 3) {
+                        String group = parts[0];
+                        String artifact = parts[1];
+                        String version = parts[2];
+
+                        // Determine ecosystem (most Gradle is Maven, but could be others)
+                        String system = "maven";
+                        if (group.startsWith("npm.") || artifact.startsWith("npm-")) {
+                            system = "npm";
+                        }
+
+                        String name = group + ":" + artifact;
+                        return new Package(system, name, version);
+                    }
+                }
+            }
+
+            // Pattern 2: Map notation - group: 'group', name: 'artifact', version: 'version'
+            if (line.contains("group:") && line.contains("name:") && line.contains("version:")) {
+                String group = extractGradleMapValue(line, "group");
+                String artifact = extractGradleMapValue(line, "name");
+                String version = extractGradleMapValue(line, "version");
+
+                if (group != null && artifact != null && version != null) {
+                    String name = group + ":" + artifact;
+                    return new Package("maven", name, version);
+                }
+            }
+
+        } catch (Exception e) {
+            logger.warn("Error parsing Gradle dependency at line {}: {}", lineNumber, e.getMessage());
+        }
+
+        return null;
+    }
+
+    /**
+     * Extract a value from Gradle map notation
+     *
+     * @param line the line containing the map
+     * @param key the key to extract
+     * @return the value or null
+     */
+    private static String extractGradleMapValue(String line, String key) {
+        int keyPos = line.indexOf(key + ":");
+        if (keyPos == -1) return null;
+
+        String after = line.substring(keyPos + key.length() + 1).trim();
+        int start = Math.max(after.indexOf("'"), after.indexOf("\""));
+        if (start == -1) return null;
+
+        int end = after.indexOf(after.charAt(start), start + 1);
+        if (end == -1) return null;
+
+        return after.substring(start + 1, end);
+    }
+
+    /**
      * Parse a package URL (purl) into a Package object
      *
      * @param purl the package URL (e.g., "pkg:maven/org.springframework/spring-core@5.3.0")
