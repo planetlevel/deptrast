@@ -3,6 +3,10 @@ package com.contrastsecurity.deptrast;
 import com.contrastsecurity.deptrast.model.DependencyNode;
 import com.contrastsecurity.deptrast.model.Package;
 import com.contrastsecurity.deptrast.service.DependencyGraphBuilder;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.contrastsecurity.deptrast.util.FileParser;
 import com.contrastsecurity.deptrast.util.MavenDependencyTreeFormatter;
 import org.slf4j.Logger;
@@ -129,12 +133,23 @@ public class DependencyTreeGenerator {
 
             // Parse packages from input file based on input format
             List<Package> allPackages;
+            String originalSbomContent = null; // Store original SBOM if input is SBOM
+
             switch (inputFormat) {
                 case "flat":
                     allPackages = FileParser.parsePackagesFromFile(inputFilePath);
                     break;
                 case "sbom":
                     allPackages = FileParser.parseSbomFile(inputFilePath);
+                    // If output is also SBOM, preserve original content
+                    if ("sbom".equals(outputFormat)) {
+                        try {
+                            originalSbomContent = new String(java.nio.file.Files.readAllBytes(
+                                java.nio.file.Paths.get(inputFilePath)));
+                        } catch (IOException e) {
+                            logger.warn("Could not read original SBOM content: {}", e.getMessage());
+                        }
+                    }
                     break;
                 case "pom":
                     allPackages = FileParser.parsePomFile(inputFilePath);
@@ -171,7 +186,7 @@ public class DependencyTreeGenerator {
             PackageCache cache = PackageCache.getInstance();
 
             // Generate output based on output format
-            String output = generateOutput(dependencyTree, allTrackedPackages, outputFormat, projectName);
+            String output = generateOutput(dependencyTree, allTrackedPackages, outputFormat, projectName, originalSbomContent);
 
             // Write output to file or stdout
             if ("-".equals(outputFilePath)) {
@@ -289,14 +304,20 @@ public class DependencyTreeGenerator {
     private static String generateOutput(List<DependencyNode> dependencyTree,
                                          Collection<Package> allTrackedPackages,
                                          String outputFormat,
-                                         String projectName) {
+                                         String projectName,
+                                         String originalSbomContent) {
         StringBuilder output = new StringBuilder();
         int rootCount = dependencyTree.size();
 
         if ("sbom".equals(outputFormat)) {
             // Generate SBOM JSON
             PackageCache cache = PackageCache.getInstance();
-            return generateSbomString(cache.getAllPackages());
+            // If we have original SBOM content, enhance it instead of creating new
+            if (originalSbomContent != null) {
+                return enhanceSbomWithDependencies(originalSbomContent, cache.getAllPackages());
+            } else {
+                return generateSbomString(cache.getAllPackages());
+            }
         } else if ("maven".equals(outputFormat)) {
             // Generate Maven dependency:tree format
             return MavenDependencyTreeFormatter.formatMavenDependencyTree(projectName, dependencyTree);
@@ -321,6 +342,91 @@ public class DependencyTreeGenerator {
             output.append("  Root Packages: ").append(rootCount).append(NEW_LINE);
 
             return output.toString();
+        }
+    }
+
+    /**
+     * Enhance existing SBOM with dependencies section
+     */
+    private static String enhanceSbomWithDependencies(String originalSbom, Collection<Package> packages) {
+        try {
+            PackageCache cache = PackageCache.getInstance();
+
+            // Parse original SBOM
+            JsonObject sbom = JsonParser.parseString(originalSbom).getAsJsonObject();
+
+            // Build purl lookup map from original components
+            Map<Package, String> purlByPackage = new HashMap<>();
+            JsonArray components = sbom.getAsJsonArray("components");
+
+            if (components != null) {
+                for (JsonElement element : components) {
+                    JsonObject component = element.getAsJsonObject();
+                    JsonElement purlElement = component.get("purl");
+
+                    if (purlElement != null && !purlElement.isJsonNull()) {
+                        String purl = purlElement.getAsString();
+                        // Find matching package
+                        for (Package pkg : packages) {
+                            String expectedPurl = buildPurl(pkg);
+                            if (purl.equals(expectedPurl)) {
+                                purlByPackage.put(pkg, purl);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Build dependencies array
+            JsonArray dependenciesArray = new JsonArray();
+
+            for (Package pkg : packages) {
+                String pkgPurl = purlByPackage.get(pkg);
+                if (pkgPurl == null) continue;
+
+                JsonObject dependency = new JsonObject();
+                dependency.addProperty("ref", pkgPurl);
+
+                // Get direct dependencies from cache
+                List<Package> directDeps = cache.getCachedDependencies(pkg);
+                if (directDeps != null && !directDeps.isEmpty()) {
+                    JsonArray dependsOn = new JsonArray();
+                    for (Package depPkg : directDeps) {
+                        if (purlByPackage.containsKey(depPkg)) {
+                            dependsOn.add(purlByPackage.get(depPkg));
+                        }
+                    }
+                    if (dependsOn.size() > 0) {
+                        dependency.add("dependsOn", dependsOn);
+                    }
+                }
+
+                dependenciesArray.add(dependency);
+            }
+
+            // Add or replace dependencies in SBOM
+            sbom.add("dependencies", dependenciesArray);
+
+            // Convert back to pretty-printed JSON
+            com.google.gson.Gson gson = new com.google.gson.GsonBuilder().setPrettyPrinting().create();
+            return gson.toJson(sbom);
+
+        } catch (Exception e) {
+            logger.error("Error enhancing SBOM: {}", e.getMessage(), e);
+            return "Error enhancing SBOM: " + e.getMessage();
+        }
+    }
+
+    /**
+     * Build a purl string for a package
+     */
+    private static String buildPurl(Package pkg) {
+        if ("maven".equalsIgnoreCase(pkg.getSystem())) {
+            String name = pkg.getName().replace(':', '/');
+            return "pkg:maven/" + name + "@" + pkg.getVersion();
+        } else {
+            return "pkg:" + pkg.getSystem().toLowerCase() + "/" + pkg.getName() + "@" + pkg.getVersion();
         }
     }
 
