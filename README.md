@@ -9,13 +9,13 @@ NOTE: the error is expected as the project contains a private test-project.jar w
 
 ## Features
 
-- Reads a flat list of all dependencies from a text file
-- Fetches dependency information from the deps.dev REST API
-- Identifies root dependencies (packages that have no parents)
-- Builds a complete dependency graph with parent-child relationships
+- Reads a flat list of runtime dependencies from a text file
+- Fetches complete dependency graphs from the deps.dev REST API
+- Reconciles declared versions with actual runtime versions (handles Maven's dependency resolution)
+- Identifies minimal set of root dependencies using strict version matching
+- Builds accurate dependency trees reflecting actual runtime relationships
 - Supports output in standard tree format or Maven dependency:tree format
-- Uses concurrent API requests for better performance
-- Optimized to avoid redundant API calls through intelligent caching
+- Efficient single-pass algorithm with intelligent caching
 - Supports multiple package ecosystems (Maven, NPM, etc.)
 
 ## Example Use
@@ -60,12 +60,11 @@ This will create an executable JAR file as `target/deptrast-1.0.jar`.
 ## Usage
 
 ```bash
-java -jar target/deptrast-1.0.jar <input-file> [max-depth] [--maven-format=<root-project>] [--detailed-report=<output-file>] [--sbom=<output-file>] [--verbose|-v]
+java -jar target/deptrast-1.0.jar <input-file> [--maven-format=<root-project>] [--detailed-report=<output-file>] [--sbom=<output-file>] [--verbose|-v]
 ```
 
-- `<input-file>`: Path to a file containing all your project's packages (required)
-- `[max-depth]`: Optional maximum depth for dependency resolution (default: 25)
-- `[--maven-format=<root-project>]`: Optional flag to output in Maven dependency:tree format with the specified root project name
+- `<input-file>`: Path to a file containing all runtime packages (required)
+- `[--maven-format=<root-project>]`: Output in Maven dependency:tree format with the specified root project name
 - `[--detailed-report=<output-file>]`: Generate a detailed report of dependency paths and version conflicts
 - `[--sbom=<output-file>]`: Generate CycloneDX 1.6 SBOM JSON file with dependency information
 - `[--verbose|-v]`: Enable verbose logging output (disabled by default)
@@ -93,7 +92,7 @@ Lines starting with `#` are treated as comments and ignored.
 java -jar target/deptrast-1.0.jar libraries.txt
 ```
 
-This will analyze all packages in `libraries.txt`, determine the root dependencies, and build a dependency tree. Root dependencies will be marked with a red dot (🔴) for easy identification.
+This will analyze all packages in `libraries.txt`, fetch their complete dependency graphs, reconcile versions with actual runtime versions, identify the minimal set of root dependencies, and build an accurate dependency tree. Root dependencies will be marked with a red dot (🔴) for easy identification.
 
 ### Maven Dependency:tree Format
 
