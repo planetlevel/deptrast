@@ -3,7 +3,6 @@ package com.contrastsecurity.deptrast;
 import com.contrastsecurity.deptrast.model.DependencyNode;
 import com.contrastsecurity.deptrast.model.Package;
 import com.contrastsecurity.deptrast.service.DependencyGraphBuilder;
-import com.contrastsecurity.deptrast.service.DependencyTreeBuilder;
 import com.contrastsecurity.deptrast.util.FileParser;
 import com.contrastsecurity.deptrast.util.MavenDependencyTreeFormatter;
 import org.slf4j.Logger;
@@ -53,9 +52,8 @@ public class DependencyTreeGenerator {
             cleanupResources();
         }));
         if (args.length < 1) {
-            System.out.println("Usage: java -jar deptrast.jar <input-file> [max-depth] [options]");
+            System.out.println("Usage: java -jar deptrast.jar <input-file> [options]");
             System.out.println("  <input-file>: Path to a file containing all package dependencies");
-            System.out.println("  [max-depth]: Optional maximum depth for dependency resolution (default: 25)");
             System.out.println("  [--maven-format=<root-project>]: Optional flag to output in Maven dependency:tree format");
             System.out.println("                                    with the specified root project name");
             System.out.println("  [--detailed-report=<output-file>]: Generate a detailed report of dependency paths and version conflicts");
@@ -72,13 +70,12 @@ public class DependencyTreeGenerator {
         }
 
         String inputFilePath = args[0];
-        int maxDepth = 25; // Default max depth
         String rootProject = null; // For Maven dependency:tree format
         boolean useMavenFormat = false;
         String detailedReportPath = null; // Path for detailed report output
         String sbomOutputPath = null; // Path for SBOM output
         boolean verbose = false; // Verbose output flag
-        
+
         // Parse additional arguments
         for (int i = 1; i < args.length; i++) {
             String arg = args[i];
@@ -98,15 +95,7 @@ public class DependencyTreeGenerator {
             } else if (arg.equals("--verbose") || arg.equals("-v")) {
                 verbose = true;
             } else {
-                try {
-                    maxDepth = Integer.parseInt(arg);
-                    if (maxDepth <= 0) {
-                        System.err.println("Max depth must be greater than 0. Using default value of 10.");
-                        maxDepth = 25;
-                    }
-                } catch (NumberFormatException e) {
-                    System.err.println("Invalid argument: " + arg + ". Ignoring.");
-                }
+                System.err.println("Unknown argument: " + arg + ". Ignoring.");
             }
         }
 
@@ -119,9 +108,7 @@ public class DependencyTreeGenerator {
             
             // Initialize the package cache
             PackageCache.getInstance().clear();
-            
-            logger.info("Starting dependency analysis with max depth: {}", maxDepth);
-            
+
             // Parse packages from input file
             List<Package> allPackages = FileParser.parsePackagesFromFile(inputFilePath);
             
@@ -133,53 +120,32 @@ public class DependencyTreeGenerator {
             
             logger.info("Loaded {} packages from the input file", allPackages.size());
             System.out.println("Analyzing dependencies for " + allPackages.size() + " packages...");
-            
-            // Build dependency graph
+
+            // Build dependency trees using optimized algorithm
             graphBuilder = new DependencyGraphBuilder();
-            // Build the dependency graph
-            graphBuilder.buildDependencyGraph(allPackages);
-            
+            List<DependencyNode> dependencyTree = graphBuilder.buildDependencyTrees(allPackages);
+            Collection<Package> allTrackedPackages = graphBuilder.getAllPackages();
+            int rootCount = dependencyTree.size();
+
+            logger.info("Identified {} root packages", rootCount);
+
             PackageCache cache = PackageCache.getInstance();
-            Set<Package> packagesWithNoReverseDeps = cache.getPackagesWithNoReverseDependencies();
-            List<Package> rootPackages = new ArrayList<>(packagesWithNoReverseDeps);
-            
-            List<Package> inputPackages = new ArrayList<>(allPackages);
-            inputPackages.removeAll(rootPackages); // Remove those that are already root packages
-            
-            logger.info("Identified {} root packages (those with no reverse dependencies)", rootPackages.size());
-            
+
             // Generate detailed dependency report if requested
             if (detailedReportPath != null) {
                 generateDetailedReport(detailedReportPath, cache);
             }
-            
+
             // Generate SBOM if requested
             if (sbomOutputPath != null) {
                 generateSbom(sbomOutputPath, cache.getAllPackages());
             }
-            
+
             if (!useMavenFormat) {
-                System.out.println("\nIdentified " + rootPackages.size() + " root dependencies:");
-                for (Package rootPkg : rootPackages) {
-                    System.out.println("  " + rootPkg.getFullName());
+                System.out.println("\nIdentified " + rootCount + " root dependencies:");
+                for (DependencyNode rootNode : dependencyTree) {
+                    System.out.println("  " + rootNode.getPackage().getFullName());
                 }
-            }
-            
-            DependencyTreeBuilder treeBuilder = new DependencyTreeBuilder();
-            treeBuilder.setMaxDepth(maxDepth);
-            Map<String, List<Package>> dependencyMap = graphBuilder.getDependencyMap();
-            List<DependencyNode> dependencyTree = treeBuilder.buildDependencyTree(rootPackages, dependencyMap);
-            
-            Map<String, String> observedVersions = new HashMap<>();
-            for (Package pkg : allPackages) {
-                String baseKey = pkg.getSystem().toLowerCase() + ":" + pkg.getName();
-                observedVersions.put(baseKey, pkg.getVersion());
-            }
-            
-            updateTreeVersions(dependencyTree, observedVersions);
-            
-            for (DependencyNode rootNode : dependencyTree) {
-                rootNode.markAsRoot();
             }
             
             // Only add project root node for standard format (not for Maven format)
@@ -198,13 +164,14 @@ public class DependencyTreeGenerator {
                 System.out.println(mavenTree);
             } else {
                 System.out.println("\nDependency Tree:\n");
-                treeBuilder.printDependencyTree(dependencyTree);
+                for (DependencyNode tree : dependencyTree) {
+                    System.out.println(tree.getTreeRepresentation());
+                }
             }
-            
-            Collection<Package> allTrackedPackages = graphBuilder.getAllPackages();
+
             System.out.println("\nDependency Statistics:");
             System.out.println("  Total Packages: " + allTrackedPackages.size());
-            System.out.println("  Root Packages: " + rootPackages.size());
+            System.out.println("  Root Packages: " + rootCount);
             
             logger.info("Dependency tree generation completed successfully");
             
@@ -242,40 +209,13 @@ public class DependencyTreeGenerator {
         if (graphBuilder != null) {
             try {
                 graphBuilder.close();
-                logger.info("Successfully closed all resources");
+                logger.info("Successfully closed resources");
             } catch (Exception e) {
                 logger.warn("Error cleaning up resources: {}", e.getMessage());
             }
         }
     }
     
-    
-    /**
-     * Updates the versions in the dependency tree to match observed versions from input file
-     * 
-     * @param nodes The dependency tree nodes to update
-     * @param observedVersions Map of system:name to observed version
-     */
-    private static void updateTreeVersions(List<DependencyNode> nodes, Map<String, String> observedVersions) {
-        if (nodes == null) {
-            return;
-        }
-        
-        for (DependencyNode node : nodes) {
-            Package pkg = node.getPackage();
-            String baseKey = pkg.getSystem().toLowerCase() + ":" + pkg.getName();
-            
-            if (observedVersions.containsKey(baseKey)) {
-                String observedVersion = observedVersions.get(baseKey);
-                if (!observedVersion.equals(pkg.getVersion())) {
-                    Package newPkg = new Package(pkg.getSystem(), pkg.getName(), observedVersion);
-                    node.setPackage(newPkg);
-                }
-            }
-            
-            updateTreeVersions(node.getChildren(), observedVersions);
-        }
-    }
     
     /**
      * Generate a CycloneDX SBOM from the analyzed dependencies
