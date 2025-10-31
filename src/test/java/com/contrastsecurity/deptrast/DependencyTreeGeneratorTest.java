@@ -63,9 +63,9 @@ public class DependencyTreeGeneratorTest {
      */
     @Test
     @Order(1)
-    @DisplayName("Test flat file input (libraries.txt) with SBOM output")
+    @DisplayName("Test flat file input (petclinic-contrast-runtime-list.txt) with SBOM output")
     void testFlatFileInputWithSbomOutput() throws IOException {
-        String inputFile = TEST_DATA_DIR + "/libraries.txt";
+        String inputFile = TEST_DATA_DIR + "/petclinic-contrast-runtime-list.txt";
         String outputFile = TEMP_OUTPUT_DIR + "/libraries-sbom.json";
 
         // Run deptrast
@@ -121,7 +121,7 @@ public class DependencyTreeGeneratorTest {
     @Order(3)
     @DisplayName("Test Maven tree output format")
     void testMavenTreeOutputFormat() throws IOException {
-        String inputFile = TEST_DATA_DIR + "/libraries.txt";
+        String inputFile = TEST_DATA_DIR + "/petclinic-contrast-runtime-list.txt";
         String outputFile = TEMP_OUTPUT_DIR + "/libraries-maven-tree.txt";
 
         // Run deptrast
@@ -153,7 +153,7 @@ public class DependencyTreeGeneratorTest {
     @Order(4)
     @DisplayName("Test tree output format")
     void testTreeOutputFormat() throws IOException {
-        String inputFile = TEST_DATA_DIR + "/libraries.txt";
+        String inputFile = TEST_DATA_DIR + "/petclinic-contrast-runtime-list.txt";
         String outputFile = TEMP_OUTPUT_DIR + "/libraries-tree.txt";
 
         // Run deptrast
@@ -216,7 +216,7 @@ public class DependencyTreeGeneratorTest {
     @Order(6)
     @DisplayName("Test output type: roots only")
     void testOutputTypeRoots() throws IOException {
-        String inputFile = TEST_DATA_DIR + "/libraries.txt";
+        String inputFile = TEST_DATA_DIR + "/petclinic-contrast-runtime-list.txt";
         String outputFile = TEMP_OUTPUT_DIR + "/libraries-roots-only.json";
 
         // Run deptrast with roots output type
@@ -284,7 +284,7 @@ public class DependencyTreeGeneratorTest {
     @Order(8)
     @DisplayName("Test verbose mode")
     void testVerboseMode() throws IOException {
-        String inputFile = TEST_DATA_DIR + "/libraries.txt";
+        String inputFile = TEST_DATA_DIR + "/petclinic-contrast-runtime-list.txt";
         String outputFile = TEMP_OUTPUT_DIR + "/libraries-verbose.json";
 
         // Run deptrast with verbose flag
@@ -440,7 +440,7 @@ public class DependencyTreeGeneratorTest {
     @Order(10)
     @DisplayName("Verify SBOM output structure and format")
     void testSbomOutputStructure() throws IOException {
-        String inputFile = TEST_DATA_DIR + "/libraries.txt";
+        String inputFile = TEST_DATA_DIR + "/petclinic-contrast-runtime-list.txt";
         String outputFile = TEMP_OUTPUT_DIR + "/sbom-structure-test.json";
 
         // Run deptrast
@@ -480,7 +480,7 @@ public class DependencyTreeGeneratorTest {
     @Order(11)
     @DisplayName("Test invalid input format handling")
     void testInvalidInputFormat() {
-        String inputFile = TEST_DATA_DIR + "/libraries.txt";
+        String inputFile = TEST_DATA_DIR + "/petclinic-contrast-runtime-list.txt";
         String outputFile = TEMP_OUTPUT_DIR + "/invalid-format.json";
 
         // Run deptrast with invalid format
@@ -503,7 +503,7 @@ public class DependencyTreeGeneratorTest {
     @Order(12)
     @DisplayName("Test invalid output format handling")
     void testInvalidOutputFormat() {
-        String inputFile = TEST_DATA_DIR + "/libraries.txt";
+        String inputFile = TEST_DATA_DIR + "/petclinic-contrast-runtime-list.txt";
         String outputFile = TEMP_OUTPUT_DIR + "/invalid-output.json";
 
         // Run deptrast with invalid output format
@@ -547,7 +547,7 @@ public class DependencyTreeGeneratorTest {
     @Order(14)
     @DisplayName("Test stdout output")
     void testStdoutOutput() {
-        String inputFile = TEST_DATA_DIR + "/libraries.txt";
+        String inputFile = TEST_DATA_DIR + "/petclinic-contrast-runtime-list.txt";
 
         // Run deptrast with dash as output
         DependencyTreeGenerator.main(new String[]{
@@ -570,7 +570,7 @@ public class DependencyTreeGeneratorTest {
     @Order(15)
     @DisplayName("Test project name customization")
     void testProjectNameCustomization() throws IOException {
-        String inputFile = TEST_DATA_DIR + "/libraries.txt";
+        String inputFile = TEST_DATA_DIR + "/petclinic-contrast-runtime-list.txt";
         String outputFile = TEMP_OUTPUT_DIR + "/custom-project-name.txt";
 
         // Run deptrast with custom project name
