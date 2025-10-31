@@ -36,7 +36,13 @@ import org.cyclonedx.model.Component;
 import org.cyclonedx.model.Dependency;
 import org.cyclonedx.model.Metadata;
 import org.cyclonedx.model.Tool;
+import org.cyclonedx.model.metadata.ToolInformation;
+import org.cyclonedx.model.ExternalReference;
+import org.cyclonedx.model.OrganizationalContact;
 import org.cyclonedx.Version;
+
+import java.io.InputStream;
+import java.util.Properties;
 
 /**
  * Main application class for generating dependency trees
@@ -576,12 +582,41 @@ public class DependencyTreeGenerator {
 
             Metadata metadata = new Metadata();
             metadata.setTimestamp(new Date());
-            Tool tool = new Tool();
-            tool.setName("deptrast");
-            tool.setVendor("Contrast Security");
-            List<Tool> tools = new ArrayList<>();
-            tools.add(tool);
-            metadata.setTools(tools);
+
+            // Create tool component using modern CycloneDX 1.6 format
+            Component toolComponent = new Component();
+            toolComponent.setGroup("com.contrastsecurity");
+            toolComponent.setName("deptrast");
+            toolComponent.setVersion(getVersion());
+            toolComponent.setType(Component.Type.APPLICATION);
+
+            String toolPurl = "pkg:maven/com.contrastsecurity/deptrast@" + getVersion();
+            toolComponent.setPurl(toolPurl);
+            toolComponent.setBomRef(toolPurl);
+            toolComponent.setPublisher("Contrast Security");
+
+            // Add author
+            OrganizationalContact author = new OrganizationalContact();
+            author.setName("Jeff Williams");
+            List<OrganizationalContact> authors = new ArrayList<>();
+            authors.add(author);
+            toolComponent.setAuthors(authors);
+
+            // Add GitHub repository reference
+            ExternalReference vcsRef = new ExternalReference();
+            vcsRef.setType(ExternalReference.Type.VCS);
+            vcsRef.setUrl("https://github.com/planetlevel/deptrast");
+            List<ExternalReference> externalRefs = new ArrayList<>();
+            externalRefs.add(vcsRef);
+            toolComponent.setExternalReferences(externalRefs);
+
+            // Set tool component in ToolInformation
+            ToolInformation toolInfo = new ToolInformation();
+            List<Component> toolComponents = new ArrayList<>();
+            toolComponents.add(toolComponent);
+            toolInfo.setComponents(toolComponents);
+
+            metadata.setToolChoice(toolInfo);
             bom.setMetadata(metadata);
 
             // Add all packages as components and track purlByPackage for dependency graph
@@ -655,6 +690,25 @@ public class DependencyTreeGenerator {
             logger.error("Error generating SBOM: {}", e.getMessage(), e);
             return "Error generating SBOM: " + e.getMessage();
         }
+    }
+
+    /**
+     * Get the version from pom.xml properties file
+     */
+    private static String getVersion() {
+        try {
+            Properties props = new Properties();
+            try (InputStream is = DependencyTreeGenerator.class.getResourceAsStream("/META-INF/maven/com.contrastsecurity/deptrast/pom.properties")) {
+                if (is != null) {
+                    props.load(is);
+                    return props.getProperty("version", "2.0.3");
+                }
+            }
+        } catch (Exception e) {
+            logger.debug("Could not read version from pom.properties: {}", e.getMessage());
+        }
+        // Fallback to hardcoded version
+        return "2.0.3";
     }
 
     /**
