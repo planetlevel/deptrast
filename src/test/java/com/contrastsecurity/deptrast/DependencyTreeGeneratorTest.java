@@ -332,19 +332,20 @@ public class DependencyTreeGeneratorTest {
         Assumptions.assumeTrue(Files.exists(Paths.get(cdxgenGoldFile)),
                               "CDXgen gold standard not found at " + cdxgenGoldFile);
 
-        String inputFile = "/Users/jeffwilliams/git/spring-petclinic/pom.xml";
+        String inputFile = TEST_DATA_DIR + "/petclinic-pom.xml";
 
-        // Skip if spring-petclinic pom.xml doesn't exist
+        // Skip if petclinic-pom.xml doesn't exist
         Assumptions.assumeTrue(Files.exists(Paths.get(inputFile)),
-                              "Spring PetClinic pom.xml not found at " + inputFile);
+                              "PetClinic pom.xml not found at " + inputFile);
 
         String deptrastOutput = TEMP_OUTPUT_DIR + "/petclinic-deptrast-gold-test.json";
 
-        // Run deptrast
+        // Run deptrast with --itype=roots to match cdxgen behavior
         DependencyTreeGenerator.main(new String[]{
             inputFile,
             deptrastOutput,
             "--iformat=pom",
+            "--itype=roots",
             "--oformat=sbom"
         });
 
@@ -352,13 +353,8 @@ public class DependencyTreeGeneratorTest {
         Set<String> deptrastAllComponents = CDXgenHelper.extractComponents(deptrastOutput);
         Set<String> cdxgenAllComponents = CDXgenHelper.extractComponents(cdxgenGoldFile);
 
-        // Filter out test dependencies (Selenium, Jetty, HtmlUnit) from both
-        // Note: spring-petclinic has <scope>test</scope> commented out for Selenium
-        Set<String> deptrastComponents = deptrastAllComponents.stream()
-            .filter(purl -> !purl.contains("selenium"))
-            .filter(purl -> !purl.contains("jetty"))
-            .filter(purl -> !purl.contains("htmlunit"))
-            .collect(java.util.stream.Collectors.toSet());
+        // Use all deptrast components (--itype=roots already excludes test dependencies)
+        Set<String> deptrastComponents = deptrastAllComponents;
 
         // Filter to Maven components only from CDXgen (already production-only in gold file)
         Set<String> cdxgenMavenComponents = cdxgenAllComponents.stream()
@@ -369,7 +365,7 @@ public class DependencyTreeGeneratorTest {
         double matchPercentage = CDXgenHelper.compareComponents(deptrastComponents, cdxgenMavenComponents);
 
         System.out.println("CDXgen gold standard comparison (production dependencies only):");
-        System.out.println("  Deptrast found: " + deptrastComponents.size() + " components (filtered from " + deptrastAllComponents.size() + " total)");
+        System.out.println("  Deptrast found: " + deptrastComponents.size() + " components");
         System.out.println("  CDXgen found: " + cdxgenMavenComponents.size() + " Maven components (out of " + cdxgenAllComponents.size() + " total)");
         System.out.println("  Match: " + String.format("%.2f%%", matchPercentage));
 
