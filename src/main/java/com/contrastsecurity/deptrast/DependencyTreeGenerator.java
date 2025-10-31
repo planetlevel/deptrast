@@ -142,6 +142,8 @@ public class DependencyTreeGenerator {
 
             // Parse packages from input file based on input format
             List<Package> allPackages;
+            Map<String, String> dependencyManagement = null;
+            Map<String, Set<String>> exclusions = null;
             String originalSbomContent = null; // Store original SBOM if input is SBOM
 
             switch (inputFormat) {
@@ -161,7 +163,12 @@ public class DependencyTreeGenerator {
                     }
                     break;
                 case "pom":
-                    allPackages = FileParser.parsePomFile(inputFilePath);
+                    FileParser.PomParseResult pomResult = FileParser.parsePomFileWithManagement(inputFilePath);
+                    allPackages = pomResult.getPackages();
+                    dependencyManagement = pomResult.getDependencyManagement();
+                    exclusions = pomResult.getExclusions();
+                    logger.info("Parsed {} packages with {} managed versions and {} exclusions from pom.xml",
+                        allPackages.size(), dependencyManagement.size(), exclusions.size());
                     break;
                 case "pypi":
                     allPackages = FileParser.parseRequirementsFile(inputFilePath);
@@ -186,11 +193,27 @@ public class DependencyTreeGenerator {
             // Build dependency trees - currently assumes inputType="all"
             // TODO: Add support for inputType="roots" to fetch transitive dependencies
             graphBuilder = new DependencyGraphBuilder();
+
+            // Apply dependency management if available (from POM files)
+            if (dependencyManagement != null && !dependencyManagement.isEmpty()) {
+                graphBuilder.setDependencyManagement(dependencyManagement);
+                logger.info("Applied {} managed dependency versions to graph builder", dependencyManagement.size());
+            }
+
+            // Apply exclusions if available (from POM files)
+            if (exclusions != null && !exclusions.isEmpty()) {
+                graphBuilder.setExclusions(exclusions);
+                logger.info("Applied {} exclusion rules to graph builder", exclusions.size());
+            }
+
             List<DependencyNode> dependencyTree = graphBuilder.buildDependencyTrees(allPackages);
-            Collection<Package> allTrackedPackages = graphBuilder.getAllPackages();
+
+            // Get reconciled packages from the dependency tree (with managed versions applied)
+            Collection<Package> allTrackedPackages = graphBuilder.getAllReconciledPackages();
             int rootCount = dependencyTree.size();
 
             logger.info("Identified {} root packages", rootCount);
+            logger.info("Using {} reconciled packages for output", allTrackedPackages.size());
 
             PackageCache cache = PackageCache.getInstance();
 

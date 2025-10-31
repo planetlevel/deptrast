@@ -33,11 +33,13 @@ import java.util.concurrent.TimeUnit;
  */
 public class DependencyGraphBuilder implements AutoCloseable {
     private static final Logger logger = LoggerFactory.getLogger(DependencyGraphBuilder.class);
-    private static final String BASE_URL = "https://api.deps.dev/v3alpha/systems";
+    private static final String BASE_URL = "https://api.deps.dev/v3/systems";
 
     private final OkHttpClient client;
     private final Map<String, DependencyNode> completeTrees; // pkg fullName -> its full tree
     private final PackageCache cache;
+    private Map<String, String> dependencyManagement; // groupId:artifactId -> version
+    private Map<String, Set<String>> exclusions; // package name -> set of excluded "groupId:artifactId"
 
     public DependencyGraphBuilder() {
         OkHttpClient.Builder clientBuilder = new OkHttpClient.Builder()
@@ -82,6 +84,31 @@ public class DependencyGraphBuilder implements AutoCloseable {
         this.client = clientBuilder.build();
         this.completeTrees = new HashMap<>();
         this.cache = PackageCache.getInstance();
+        this.dependencyManagement = new HashMap<>();
+        this.exclusions = new HashMap<>();
+    }
+
+    /**
+     * Set dependency management to apply to transitive dependencies
+     *
+     * @param dependencyManagement map of groupId:artifactId to version
+     */
+    public void setDependencyManagement(Map<String, String> dependencyManagement) {
+        this.dependencyManagement = dependencyManagement != null ? dependencyManagement : new HashMap<>();
+        logger.info("DependencyManagement set with {} entries", this.dependencyManagement.size());
+    }
+
+    /**
+     * Set exclusions for dependencies
+     *
+     * @param exclusions map of package name to set of excluded "groupId:artifactId"
+     */
+    public void setExclusions(Map<String, Set<String>> exclusions) {
+        this.exclusions = exclusions != null ? exclusions : new HashMap<>();
+        logger.info("Exclusions set with {} entries", this.exclusions.size());
+        for (Map.Entry<String, Set<String>> entry : this.exclusions.entrySet()) {
+            logger.debug("Package {} excludes: {}", entry.getKey(), entry.getValue());
+        }
     }
 
     /**
@@ -152,6 +179,7 @@ public class DependencyGraphBuilder implements AutoCloseable {
     /**
      * Reconcile versions in the dependency tree with actual runtime versions
      * This handles cases where Maven resolved a different version than what was declared
+     * or when dependency management overrides versions
      */
     private void reconcileTreeVersions(
             DependencyNode node,
@@ -164,17 +192,33 @@ public class DependencyGraphBuilder implements AutoCloseable {
 
         Package pkg = node.getPackage();
         String baseKey = pkg.getSystem().toLowerCase() + ":" + pkg.getName();
+        String currentVersion = pkg.getVersion();
+        String reconciledVersion = null;
 
-        // If this package base name is in our observed versions, update it
-        if (observedVersions.containsKey(baseKey)) {
-            String observedVersion = observedVersions.get(baseKey);
-            String currentVersion = pkg.getVersion();
-
-            if (!observedVersion.equals(currentVersion)) {
-                // Create new package with observed version
-                Package reconciledPkg = new Package(pkg.getSystem(), pkg.getName(), observedVersion);
-                node.setPackage(reconciledPkg);
+        // Priority 1: Check if this package is in our dependencyManagement (from POM)
+        // This handles property overrides like thymeleaf.version in petclinic
+        if (dependencyManagement.containsKey(pkg.getName())) {
+            String managedVersion = dependencyManagement.get(pkg.getName());
+            if (!managedVersion.equals(currentVersion)) {
+                reconciledVersion = managedVersion;
+                logger.debug("Applying managed version for {}: {} -> {}", pkg.getName(), currentVersion, managedVersion);
             }
+        }
+
+        // Priority 2: If this package base name is in our observed versions, update it
+        // This handles actual runtime versions
+        if (reconciledVersion == null && observedVersions.containsKey(baseKey)) {
+            String observedVersion = observedVersions.get(baseKey);
+            if (!observedVersion.equals(currentVersion)) {
+                reconciledVersion = observedVersion;
+                logger.debug("Applying observed version for {}: {} -> {}", baseKey, currentVersion, observedVersion);
+            }
+        }
+
+        // Apply the reconciled version if we found one
+        if (reconciledVersion != null) {
+            Package reconciledPkg = new Package(pkg.getSystem(), pkg.getName(), reconciledVersion);
+            node.setPackage(reconciledPkg);
         }
 
         // Recurse into children
@@ -342,10 +386,20 @@ public class DependencyGraphBuilder implements AutoCloseable {
             return;
         }
 
+        // Get the parent package to check exclusions
+        Package parentPkg = currentTreeNode.getPackage();
+        Set<String> parentExclusions = exclusions.getOrDefault(parentPkg.getName(), Collections.emptySet());
+
         List<Integer> children = adjacency.getOrDefault(currentNode, Collections.emptyList());
         for (int childIndex : children) {
             Package childPkg = nodeTreeMap.get(childIndex).getPackage();
             if (childPkg != null) {
+                // Check if this child is excluded by the parent
+                if (isExcluded(childPkg, parentExclusions)) {
+                    logger.debug("Excluding dependency {} from parent {}", childPkg.getName(), parentPkg.getName());
+                    continue; // Skip this child
+                }
+
                 // Create new node with correct depth
                 DependencyNode newChildNode = new DependencyNode(childPkg, depth + 1);
                 currentTreeNode.addChild(newChildNode);
@@ -372,10 +426,20 @@ public class DependencyGraphBuilder implements AutoCloseable {
         }
         visited.add(currentNodeIndex);
 
+        // Get the parent package to check exclusions
+        Package parentPkg = parentNode.getPackage();
+        Set<String> parentExclusions = exclusions.getOrDefault(parentPkg.getName(), Collections.emptySet());
+
         List<Integer> children = adjacency.getOrDefault(currentNodeIndex, Collections.emptyList());
         for (int childIndex : children) {
             Package childPkg = nodeTreeMap.get(childIndex).getPackage();
             if (childPkg != null) {
+                // Check if this child is excluded by the parent
+                if (isExcluded(childPkg, parentExclusions)) {
+                    logger.debug("Excluding dependency {} from parent {}", childPkg.getName(), parentPkg.getName());
+                    continue; // Skip this child
+                }
+
                 DependencyNode childNode = new DependencyNode(childPkg, depth + 1);
                 parentNode.addChild(childNode);
 
@@ -386,10 +450,148 @@ public class DependencyGraphBuilder implements AutoCloseable {
     }
 
     /**
+     * Check if a package should be excluded based on the parent's exclusions list
+     *
+     * @param pkg the package to check
+     * @param parentExclusions set of excluded "groupId:artifactId"
+     * @return true if the package should be excluded
+     */
+    private boolean isExcluded(Package pkg, Set<String> parentExclusions) {
+        if (parentExclusions.isEmpty()) {
+            return false;
+        }
+
+        // Check if the package name (groupId:artifactId) is in the exclusions set
+        return parentExclusions.contains(pkg.getName());
+    }
+
+    /**
      * Get all packages discovered
      */
     public Collection<Package> getAllPackages() {
         return cache.getAllPackages();
+    }
+
+    /**
+     * Get all packages from the reconciled dependency trees
+     * This returns the actual Package objects with reconciled versions
+     * When multiple versions of the same package exist, keeps the managed version or highest version
+     *
+     * @return collection of all reconciled packages
+     */
+    public Collection<Package> getAllReconciledPackages() {
+        Map<String, Package> packageMap = new HashMap<>();
+
+        for (DependencyNode tree : completeTrees.values()) {
+            collectPackagesFromTree(tree, packageMap);
+        }
+
+        return packageMap.values();
+    }
+
+    /**
+     * Recursively collect all packages from a dependency tree
+     * When encountering the same package with different versions, keeps the managed or highest version
+     */
+    private void collectPackagesFromTree(DependencyNode node, Map<String, Package> packageMap) {
+        if (node == null) {
+            return;
+        }
+
+        Package pkg = node.getPackage();
+        // Use system:name as key (without version) to deduplicate different versions
+        String baseKey = pkg.getSystem().toLowerCase() + ":" + pkg.getName();
+
+        Package existing = packageMap.get(baseKey);
+        if (existing == null) {
+            // First time seeing this package
+            packageMap.put(baseKey, pkg);
+        } else {
+            // Already have this package with a different version
+            // Check if this one is managed or has a higher version
+            String managedVersion = dependencyManagement.get(pkg.getName());
+
+            if (managedVersion != null) {
+                // If current package matches managed version, use it
+                if (pkg.getVersion().equals(managedVersion)) {
+                    packageMap.put(baseKey, pkg);
+                    logger.debug("Replaced {} version {} with managed version {}",
+                        baseKey, existing.getVersion(), pkg.getVersion());
+                }
+                // If existing matches managed version, keep it (do nothing)
+                else if (existing.getVersion().equals(managedVersion)) {
+                    // Keep existing
+                }
+                // Neither matches managed - keep higher version
+                else if (compareVersions(pkg.getVersion(), existing.getVersion()) > 0) {
+                    packageMap.put(baseKey, pkg);
+                    logger.debug("Replaced {} version {} with higher version {}",
+                        baseKey, existing.getVersion(), pkg.getVersion());
+                }
+            } else {
+                // No managed version - use higher version
+                if (compareVersions(pkg.getVersion(), existing.getVersion()) > 0) {
+                    packageMap.put(baseKey, pkg);
+                    logger.debug("Replaced {} version {} with higher version {}",
+                        baseKey, existing.getVersion(), pkg.getVersion());
+                }
+            }
+        }
+
+        for (DependencyNode child : node.getChildren()) {
+            collectPackagesFromTree(child, packageMap);
+        }
+    }
+
+    /**
+     * Simple version comparison - returns positive if v1 > v2, negative if v1 < v2, 0 if equal
+     * This is a simplified comparison that works for most semantic versions
+     */
+    private int compareVersions(String v1, String v2) {
+        if (v1.equals(v2)) {
+            return 0;
+        }
+
+        // Split by dots and dashes
+        String[] parts1 = v1.split("[.\\-]");
+        String[] parts2 = v2.split("[.\\-]");
+
+        int minLength = Math.min(parts1.length, parts2.length);
+        for (int i = 0; i < minLength; i++) {
+            String part1 = parts1[i];
+            String part2 = parts2[i];
+
+            // Try to parse as integers
+            Integer num1 = tryParseInt(part1);
+            Integer num2 = tryParseInt(part2);
+
+            if (num1 != null && num2 != null) {
+                // Both are numbers - compare numerically
+                if (!num1.equals(num2)) {
+                    return num1 - num2;
+                }
+            } else {
+                // At least one is not a number - compare lexicographically
+                int cmp = part1.compareTo(part2);
+                if (cmp != 0) {
+                    return cmp;
+                }
+            }
+        }
+
+        // If all compared parts are equal, longer version is considered higher
+        return parts1.length - parts2.length;
+    }
+
+    /**
+     * Try to parse a string as an integer, returning null if it fails
+     */
+    private Integer tryParseInt(String s) {
+        try {
+            return Integer.parseInt(s);
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     /**

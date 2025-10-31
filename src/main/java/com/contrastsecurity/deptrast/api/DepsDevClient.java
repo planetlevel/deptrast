@@ -34,8 +34,8 @@ import com.contrastsecurity.deptrast.service.PackageCache;
  */
 public class DepsDevClient implements AutoCloseable {
     private static final Logger logger = LoggerFactory.getLogger(DepsDevClient.class);
-    private static final String BASE_URL = "https://api.deps.dev/v3alpha/systems";
-    private static final String BATCH_URL = "https://api.deps.dev/v3alpha/batch";
+    private static final String BASE_URL = "https://api.deps.dev/v3/systems";
+    private static final String BATCH_URL = "https://api.deps.dev/v3/batch";
     private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
     private static final int BATCH_SIZE = 50; // Maximum number of packages to include in one batch request
     private final OkHttpClient client;
