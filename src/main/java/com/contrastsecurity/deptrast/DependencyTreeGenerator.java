@@ -67,7 +67,7 @@ public class DependencyTreeGenerator {
         // Parse options
         String inputFormat = "auto";
         String inputType = "smart";
-        String outputFormat = "tree";
+        String outputFormat = "sbom";
         String outputType = "all";  // Default: output all dependencies
         String projectName = "project";
         boolean verbose = false;
@@ -261,7 +261,7 @@ public class DependencyTreeGenerator {
         System.out.println("                            roots   - Root dependencies (fetch transitive)");
         System.out.println();
         System.out.println("Output Options:");
-        System.out.println("  --oformat=<format>        Output format (default: tree)");
+        System.out.println("  --oformat=<format>        Output format (default: sbom)");
         System.out.println("                            tree, maven, sbom");
         System.out.println("  --otype=<type>            Output type (default: all)");
         System.out.println("                            all     - All packages (roots + transitive)");

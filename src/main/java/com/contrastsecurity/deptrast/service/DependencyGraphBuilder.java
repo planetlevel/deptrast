@@ -6,21 +6,11 @@ import com.contrastsecurity.deptrast.model.Package;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
-import okhttp3.OkHttpClient;
-import okhttp3.Request;
-import okhttp3.Response;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.net.ssl.*;
 import java.io.IOException;
-import java.security.KeyManagementException;
-import java.security.NoSuchAlgorithmException;
-import java.security.cert.CertificateException;
-import java.security.cert.X509Certificate;
 import java.util.*;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Builds complete dependency trees from a list of runtime packages
@@ -33,55 +23,15 @@ import java.util.concurrent.TimeUnit;
  */
 public class DependencyGraphBuilder implements AutoCloseable {
     private static final Logger logger = LoggerFactory.getLogger(DependencyGraphBuilder.class);
-    private static final String BASE_URL = "https://api.deps.dev/v3/systems";
 
-    private final OkHttpClient client;
+    private final DepsDevClient apiClient;
     private final Map<String, DependencyNode> completeTrees; // pkg fullName -> its full tree
     private final PackageCache cache;
     private Map<String, String> dependencyManagement; // groupId:artifactId -> version
     private Map<String, Set<String>> exclusions; // package name -> set of excluded "groupId:artifactId"
 
     public DependencyGraphBuilder() {
-        OkHttpClient.Builder clientBuilder = new OkHttpClient.Builder()
-                .connectTimeout(30, TimeUnit.SECONDS)
-                .readTimeout(30, TimeUnit.SECONDS)
-                .retryOnConnectionFailure(false);
-
-        // Create a trust manager that does not validate certificate chains
-        try {
-            TrustManager[] trustAllCerts = new TrustManager[]{
-                new X509TrustManager() {
-                    @Override
-                    public void checkClientTrusted(X509Certificate[] chain, String authType) throws CertificateException {
-                    }
-
-                    @Override
-                    public void checkServerTrusted(X509Certificate[] chain, String authType) throws CertificateException {
-                    }
-
-                    @Override
-                    public X509Certificate[] getAcceptedIssuers() {
-                        return new X509Certificate[0];
-                    }
-                }
-            };
-
-            // Install the all-trusting trust manager
-            SSLContext sslContext = SSLContext.getInstance("TLS");
-            sslContext.init(null, trustAllCerts, new java.security.SecureRandom());
-
-            // Create an SSL socket factory with our all-trusting manager
-            SSLSocketFactory sslSocketFactory = sslContext.getSocketFactory();
-
-            // Set SSL settings on the client builder
-            clientBuilder.sslSocketFactory(sslSocketFactory, (X509TrustManager) trustAllCerts[0])
-                         .hostnameVerifier((hostname, session) -> true);
-
-        } catch (NoSuchAlgorithmException | KeyManagementException e) {
-            logger.error("Error setting up SSL context: {}", e.getMessage());
-        }
-
-        this.client = clientBuilder.build();
+        this.apiClient = new DepsDevClient();
         this.completeTrees = new HashMap<>();
         this.cache = PackageCache.getInstance();
         this.dependencyManagement = new HashMap<>();
@@ -124,14 +74,36 @@ public class DependencyGraphBuilder implements AutoCloseable {
         Set<String> inputPackageNames = new HashSet<>();
         for (Package pkg : inputPackages) {
             inputPackageNames.add(pkg.getFullName());
+            logger.debug("Input package: {}", pkg.getFullName());
         }
 
         // STEP 2: Fetch complete dependency graph for each package
+        // Skip packages that already appear in other trees to reduce API calls
+        Set<String> packagesAlreadyInTrees = new HashSet<>();
+        int skippedCount = 0;
+
         for (Package pkg : inputPackages) {
+            String pkgName = pkg.getFullName();
+
+            // Check if this package already appears in any fetched tree
+            if (packagesAlreadyInTrees.contains(pkgName)) {
+                logger.debug("Skipping {} - already found in another dependency tree", pkgName);
+                skippedCount++;
+                continue;
+            }
+
             DependencyNode tree = fetchCompleteDependencyTree(pkg, inputPackageNames);
             if (tree != null) {
-                completeTrees.put(pkg.getFullName(), tree);
+                completeTrees.put(pkgName, tree);
+
+                // Add all packages in this tree to the set to avoid redundant fetches
+                collectAllPackageNames(tree, packagesAlreadyInTrees);
             }
+        }
+
+        if (skippedCount > 0) {
+            logger.warn("⚡ Optimization: Skipped {} packages already found in other trees ({} fewer API calls)",
+                skippedCount, skippedCount);
         }
 
         // STEP 2.5: Version reconciliation - replace declared versions with actual runtime versions
@@ -254,28 +226,40 @@ public class DependencyGraphBuilder implements AutoCloseable {
     }
 
     /**
+     * Recursively collect all package names from a dependency tree
+     * Used to avoid fetching trees for packages already discovered
+     *
+     * @param node The tree node to collect from
+     * @param packageNames Set to add package names to
+     */
+    private void collectAllPackageNames(DependencyNode node, Set<String> packageNames) {
+        if (node == null) {
+            return;
+        }
+
+        packageNames.add(node.getPackage().getFullName());
+
+        // Recurse into children
+        for (DependencyNode child : node.getChildren()) {
+            collectAllPackageNames(child, packageNames);
+        }
+    }
+
+    /**
      * Fetch the COMPLETE dependency tree for a package using the full graph
      * returned by deps.dev API
      */
     private DependencyNode fetchCompleteDependencyTree(Package pkg, Set<String> inputPackageNames) {
         try {
-            String url = String.format("%s/%s/packages/%s/versions/%s:dependencies",
-                    BASE_URL, pkg.getSystem().toLowerCase(), pkg.getName(), pkg.getVersion());
+            JsonObject jsonObject = apiClient.getDependencyGraph(pkg);
 
-            Request request = new Request.Builder().url(url).get().build();
-
-            try (Response response = client.newCall(request).execute()) {
-                if (!response.isSuccessful()) {
-                    logger.warn("WARNING: Unknown component {}. Treating as root dependency.", pkg.getFullName());
-                    return new DependencyNode(pkg, 0);
-                }
-
-                String responseBody = response.body().string();
-                JsonObject jsonObject = JsonParser.parseString(responseBody).getAsJsonObject();
-
-                // Parse the FULL graph, not just direct children
-                return parseFullDependencyGraph(jsonObject, pkg, inputPackageNames);
+            if (jsonObject == null) {
+                logger.warn("WARNING: Unknown component {}. Treating as root dependency.", pkg.getFullName());
+                return new DependencyNode(pkg, 0);
             }
+
+            // Parse the FULL graph, not just direct children
+            return parseFullDependencyGraph(jsonObject, pkg, inputPackageNames);
         } catch (IOException e) {
             logger.error("Error fetching dependencies for {}: {}", pkg.getFullName(), e.getMessage());
             return new DependencyNode(pkg, 0);
@@ -599,10 +583,12 @@ public class DependencyGraphBuilder implements AutoCloseable {
      */
     @Override
     public void close() {
-        if (client != null) {
-            client.dispatcher().cancelAll();
-            client.connectionPool().evictAll();
-            client.dispatcher().executorService().shutdown();
+        if (apiClient != null) {
+            try {
+                apiClient.close();
+            } catch (Exception e) {
+                logger.warn("Error closing API client: {}", e.getMessage());
+            }
         }
     }
 }

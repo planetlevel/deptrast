@@ -93,8 +93,37 @@ public class DepsDevClient implements AutoCloseable {
     }
 
     /**
+     * Get the raw dependency graph for a package from deps.dev API
+     *
+     * @param pkg The package to get the dependency graph for
+     * @return JsonObject containing the full dependency graph (nodes and edges)
+     * @throws IOException If there's an error making the HTTP request
+     */
+    public JsonObject getDependencyGraph(Package pkg) throws IOException {
+        String url = String.format("%s/%s/packages/%s/versions/%s:dependencies",
+                BASE_URL, pkg.getSystem().toLowerCase(), pkg.getName(), pkg.getVersion());
+
+        logger.debug("Fetching dependency graph for {}", pkg.getFullName());
+
+        Request request = new Request.Builder()
+                .url(url)
+                .get()
+                .build();
+
+        try (Response response = client.newCall(request).execute()) {
+            if (!response.isSuccessful()) {
+                logger.warn("Failed to get dependency graph for {}: {}", pkg.getFullName(), response.code());
+                return null;
+            }
+
+            String responseBody = response.body().string();
+            return JsonParser.parseString(responseBody).getAsJsonObject();
+        }
+    }
+
+    /**
      * Get the dependencies for a package
-     * 
+     *
      * @param pkg The package to get dependencies for
      * @return List of dependencies
      * @throws IOException If there's an error making the HTTP request
