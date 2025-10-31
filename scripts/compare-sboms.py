@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Compare deptrast and cdxgen SBOM outputs"""
+"""Compare two SBOM files"""
 import json
+import sys
 from collections import defaultdict
 
 def parse_components(sbom_path):
@@ -30,33 +31,41 @@ def parse_components(sbom_path):
     return components
 
 def main():
-    deptrast_file = "/tmp/test-dedup.json"
-    cdxgen_file = "../spring-petclinic/b9ae508b-b9b8-42bb-9496-8f49b85846fa-sbom-cyclonedx.json"
+    if len(sys.argv) != 3:
+        print("Usage: compare-sboms.py <sbom1.json> <sbom2.json>")
+        print("\nCompares two SBOM files and shows differences in components and versions.")
+        sys.exit(1)
 
-    print("Loading SBOMs...")
-    deptrast_components = parse_components(deptrast_file)
-    cdxgen_components = parse_components(cdxgen_file)
+    sbom1_file = sys.argv[1]
+    sbom2_file = sys.argv[2]
+
+    print(f"Loading SBOMs...")
+    print(f"  SBOM 1: {sbom1_file}")
+    print(f"  SBOM 2: {sbom2_file}")
+
+    sbom1_components = parse_components(sbom1_file)
+    sbom2_components = parse_components(sbom2_file)
 
     print(f"\nComponent counts:")
-    print(f"  deptrast: {len(deptrast_components)}")
-    print(f"  cdxgen:   {len(cdxgen_components)}")
+    print(f"  SBOM 1: {len(sbom1_components)}")
+    print(f"  SBOM 2: {len(sbom2_components)}")
 
     # Find packages in both
-    common_packages = set(deptrast_components.keys()) & set(cdxgen_components.keys())
-    deptrast_only = set(deptrast_components.keys()) - set(cdxgen_components.keys())
-    cdxgen_only = set(cdxgen_components.keys()) - set(deptrast_components.keys())
+    common_packages = set(sbom1_components.keys()) & set(sbom2_components.keys())
+    sbom1_only = set(sbom1_components.keys()) - set(sbom2_components.keys())
+    sbom2_only = set(sbom2_components.keys()) - set(sbom1_components.keys())
 
     # Check version matches
     version_matches = []
     version_mismatches = []
 
     for pkg in sorted(common_packages):
-        dep_ver = deptrast_components[pkg]
-        cdx_ver = cdxgen_components[pkg]
-        if dep_ver == cdx_ver:
-            version_matches.append((pkg, dep_ver))
+        sbom1_ver = sbom1_components[pkg]
+        sbom2_ver = sbom2_components[pkg]
+        if sbom1_ver == sbom2_ver:
+            version_matches.append((pkg, sbom1_ver))
         else:
-            version_mismatches.append((pkg, dep_ver, cdx_ver))
+            version_mismatches.append((pkg, sbom1_ver, sbom2_ver))
 
     print(f"\n{'='*80}")
     print(f"COMPARISON RESULTS")
@@ -68,25 +77,25 @@ def main():
 
     if version_mismatches:
         print(f"\nPackages in BOTH (with VERSION MISMATCH): {len(version_mismatches)}")
-        for pkg, dep_ver, cdx_ver in sorted(version_mismatches):
+        for pkg, sbom1_ver, sbom2_ver in sorted(version_mismatches):
             print(f"  ⚠ {pkg}")
-            print(f"      deptrast: {dep_ver}")
-            print(f"      cdxgen:   {cdx_ver}")
+            print(f"      SBOM 1: {sbom1_ver}")
+            print(f"      SBOM 2: {sbom2_ver}")
 
-    if deptrast_only:
-        print(f"\nPackages ONLY in deptrast: {len(deptrast_only)}")
-        for pkg in sorted(deptrast_only):
-            ver = deptrast_components[pkg]
+    if sbom1_only:
+        print(f"\nPackages ONLY in SBOM 1: {len(sbom1_only)}")
+        for pkg in sorted(sbom1_only):
+            ver = sbom1_components[pkg]
             print(f"  + {pkg}@{ver}")
 
-    if cdxgen_only:
-        print(f"\nPackages ONLY in cdxgen: {len(cdxgen_only)}")
-        for pkg in sorted(cdxgen_only):
-            ver = cdxgen_components[pkg]
+    if sbom2_only:
+        print(f"\nPackages ONLY in SBOM 2: {len(sbom2_only)}")
+        for pkg in sorted(sbom2_only):
+            ver = sbom2_components[pkg]
             print(f"  - {pkg}@{ver}")
 
     # Statistics
-    total_unique = len(deptrast_components) + len(cdxgen_components) - len(common_packages)
+    total_unique = len(sbom1_components) + len(sbom2_components) - len(common_packages)
     match_percent = (len(version_matches) / len(common_packages) * 100) if common_packages else 0
     overlap_percent = (len(common_packages) / total_unique * 100) if total_unique else 0
 
@@ -97,8 +106,8 @@ def main():
     print(f"Common packages:                {len(common_packages)} ({overlap_percent:.1f}% overlap)")
     print(f"  - Version matches:            {len(version_matches)} ({match_percent:.1f}%)")
     print(f"  - Version mismatches:         {len(version_mismatches)}")
-    print(f"deptrast-only packages:         {len(deptrast_only)}")
-    print(f"cdxgen-only packages:           {len(cdxgen_only)}")
+    print(f"SBOM 1 only packages:           {len(sbom1_only)}")
+    print(f"SBOM 2 only packages:           {len(sbom2_only)}")
 
 if __name__ == '__main__':
     main()

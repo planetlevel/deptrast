@@ -51,6 +51,19 @@ Security folks will want to detect exactly what components are actually running 
 
 See [SECURITY.md](SECURITY.md) for information about the project's security policy, vulnerability reporting, and best practices. For setup instructions for security scanning, including how to configure the NVD API key for dependency checks, see [SECURITY-SETUP.md](docs/SECURITY-SETUP.md).
 
+### ⚠️ SSL Certificate Validation
+
+**IMPORTANT**: This tool currently disables SSL certificate validation when connecting to Maven Central and the deps.dev API to support environments with SSL-intercepting proxies.
+
+**Security Implications**:
+- The tool is vulnerable to man-in-the-middle (MITM) attacks
+- Compromised or malicious dependencies could be injected
+- Use only on trusted networks
+
+**Why**: Many corporate environments use SSL-intercepting proxies with self-signed certificates that would otherwise cause connection failures.
+
+**Recommendation**: Only use deptrast on trusted networks where you control the infrastructure. Future versions will add a configuration option to enable proper SSL certificate validation.
+
 ## Usage
 
 ```bash

@@ -52,47 +52,7 @@ public class FileParser {
         // Force IPv4 to avoid IPv6 connectivity issues
         System.setProperty("java.net.preferIPv4Stack", "true");
 
-        OkHttpClient.Builder clientBuilder = new OkHttpClient.Builder()
-                .connectTimeout(30, TimeUnit.SECONDS)
-                .readTimeout(30, TimeUnit.SECONDS)
-                .retryOnConnectionFailure(true);
-
-        // Create a trust manager that does not validate certificate chains
-        try {
-            TrustManager[] trustAllCerts = new TrustManager[]{
-                new X509TrustManager() {
-                    @Override
-                    public void checkClientTrusted(X509Certificate[] chain, String authType) throws CertificateException {
-                    }
-
-                    @Override
-                    public void checkServerTrusted(X509Certificate[] chain, String authType) throws CertificateException {
-                    }
-
-                    @Override
-                    public X509Certificate[] getAcceptedIssuers() {
-                        return new X509Certificate[0];
-                    }
-                }
-            };
-
-            // Install the all-trusting trust manager
-            SSLContext sslContext = SSLContext.getInstance("TLS");
-            sslContext.init(null, trustAllCerts, new java.security.SecureRandom());
-
-            // Create an SSL socket factory with our all-trusting manager
-            SSLSocketFactory sslSocketFactory = sslContext.getSocketFactory();
-
-            // Set SSL settings on the client builder
-            clientBuilder.sslSocketFactory(sslSocketFactory, (X509TrustManager) trustAllCerts[0])
-                         .hostnameVerifier((hostname, session) -> true);
-
-        } catch (NoSuchAlgorithmException | KeyManagementException e) {
-            logger.error("Error setting up SSL context: {}", e.getMessage());
-            // Continue with default SSL settings
-        }
-
-        httpClient = clientBuilder.build();
+        httpClient = SSLUtils.createHttpClientBuilder().build();
     }
 
     /**
@@ -231,17 +191,6 @@ public class FileParser {
 
     /**
      * Parse a Maven pom.xml file
-     *
-     * @param filePath path to the pom.xml file
-     * @return list of packages
-     * @deprecated Use parsePomFileWithManagement() to get dependency management info
-     */
-    @Deprecated
-    public static List<Package> parsePomFile(String filePath) {
-        PomParseResult result = parsePomFileWithManagement(filePath);
-        return result.getPackages();
-    }
-
     /**
      * Parse a Maven pom.xml file with dependency management
      *
@@ -297,7 +246,14 @@ public class FileParser {
 
                     // Skip test-scoped dependencies by default
                     String scope = getElementText(element, "scope");
+                    logger.debug("Dependency {}:{} has scope: {}",
+                            getElementText(element, "groupId"),
+                            getElementText(element, "artifactId"),
+                            scope);
                     if ("test".equals(scope)) {
+                        logger.info("Skipping test dependency: {}:{}",
+                                getElementText(element, "groupId"),
+                                getElementText(element, "artifactId"));
                         continue;
                     }
 
@@ -706,13 +662,24 @@ public class FileParser {
                 File parentPomFile = parentPath.toFile();
 
                 if (parentPomFile.exists()) {
-                    logger.info("Found parent POM at: {}", parentPath);
-                    parentDoc = builder.parse(parentPomFile);
-                    parentDoc.getDocumentElement().normalize();
-                    parentDocPath = parentPath.toString();
-                } else {
-                    logger.debug("Parent POM not found at: {}, will try Maven Central", parentPath);
+                    // Verify that the local POM matches the expected coordinates
+                    Document candidateDoc = builder.parse(parentPomFile);
+                    candidateDoc.getDocumentElement().normalize();
 
+                    String candidateGroupId = getElementText(candidateDoc.getDocumentElement(), "groupId");
+                    String candidateArtifactId = getElementText(candidateDoc.getDocumentElement(), "artifactId");
+
+                    if (parentGroupId.equals(candidateGroupId) && parentArtifactId.equals(candidateArtifactId)) {
+                        logger.info("Found parent POM at: {}", parentPath);
+                        parentDoc = candidateDoc;
+                        parentDocPath = parentPath.toString();
+                    } else {
+                        logger.info("Local POM at {} has different coordinates ({}:{}), will try Maven Central",
+                                parentPath, candidateGroupId, candidateArtifactId);
+                    }
+                }
+
+                if (parentDoc == null) {
                     // Try to download from Maven Central
                     if (parentGroupId != null && parentArtifactId != null && parentVersion != null) {
                         parentDoc = downloadPomFromMavenCentral(parentGroupId, parentArtifactId, parentVersion, builder);

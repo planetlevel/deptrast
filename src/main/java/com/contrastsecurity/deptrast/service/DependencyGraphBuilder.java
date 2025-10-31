@@ -26,14 +26,14 @@ public class DependencyGraphBuilder implements AutoCloseable {
 
     private final DepsDevClient apiClient;
     private final Map<String, DependencyNode> completeTrees; // pkg fullName -> its full tree
-    private final PackageCache cache;
+    private final Map<String, Package> allPackages; // fullName -> Package (for deduplication)
     private Map<String, String> dependencyManagement; // groupId:artifactId -> version
     private Map<String, Set<String>> exclusions; // package name -> set of excluded "groupId:artifactId"
 
     public DependencyGraphBuilder() {
         this.apiClient = new DepsDevClient();
         this.completeTrees = new HashMap<>();
-        this.cache = PackageCache.getInstance();
+        this.allPackages = new HashMap<>();
         this.dependencyManagement = new HashMap<>();
         this.exclusions = new HashMap<>();
     }
@@ -189,11 +189,31 @@ public class DependencyGraphBuilder implements AutoCloseable {
 
         // Apply the reconciled version if we found one
         if (reconciledVersion != null) {
+            logger.info("Reconciling {} from {} to {}", pkg.getName(), currentVersion, reconciledVersion);
             Package reconciledPkg = new Package(pkg.getSystem(), pkg.getName(), reconciledVersion);
             node.setPackage(reconciledPkg);
+
+            // IMPORTANT: Fetch the dependency tree for the NEW version
+            // This ensures we get the correct dependencies for the reconciled version
+            logger.debug("Fetching dependencies for reconciled version {}", reconciledPkg.getFullName());
+            DependencyNode newTree = fetchCompleteDependencyTree(reconciledPkg, inputPackageNames);
+
+            if (newTree != null && !newTree.getChildren().isEmpty()) {
+                // Replace the children with the new version's dependencies
+                node.getChildren().clear();
+                for (DependencyNode newChild : newTree.getChildren()) {
+                    node.addChild(newChild);
+                    // Recursively reconcile the new subtree
+                    reconcileTreeVersions(newChild, observedVersions, inputPackageNames);
+                }
+                logger.debug("Replaced {} children for reconciled {}", newTree.getChildren().size(), reconciledPkg.getFullName());
+                return; // Don't recurse into old children - we already processed new ones
+            } else {
+                logger.debug("No new dependencies found for reconciled {}", reconciledPkg.getFullName());
+            }
         }
 
-        // Recurse into children
+        // Recurse into children (only if we didn't replace them above)
         for (DependencyNode child : node.getChildren()) {
             reconcileTreeVersions(child, observedVersions, inputPackageNames);
         }
@@ -293,13 +313,13 @@ public class DependencyGraphBuilder implements AutoCloseable {
             String version = versionKey.get("version").getAsString();
             String relation = node.get("relation").getAsString();
 
-            // Check if we already have this package in the cache
+            // Check if we already have this package (deduplication)
             String fullName = system.toLowerCase() + ":" + name + ":" + version;
-            Package pkg = cache.getCachedPackage(fullName);
+            Package pkg = allPackages.get(fullName);
 
             if (pkg == null) {
                 pkg = new Package(system, name, version);
-                cache.cachePackage(pkg);
+                allPackages.put(fullName, pkg);
             }
 
             nodeMap.put(i, pkg);
@@ -321,24 +341,8 @@ public class DependencyGraphBuilder implements AutoCloseable {
             adjacency.computeIfAbsent(fromNode, k -> new ArrayList<>()).add(toNode);
         }
 
-        // Cache direct dependencies for each package
-        for (Map.Entry<Integer, Package> entry : nodeMap.entrySet()) {
-            int nodeIndex = entry.getKey();
-            Package pkg = entry.getValue();
-
-            // Get direct dependencies (children in adjacency list)
-            List<Integer> childIndices = adjacency.getOrDefault(nodeIndex, Collections.emptyList());
-            List<Package> directDeps = new ArrayList<>();
-            for (int childIndex : childIndices) {
-                Package childPkg = nodeMap.get(childIndex);
-                if (childPkg != null) {
-                    directDeps.add(childPkg);
-                }
-            }
-
-            // Cache the direct dependencies
-            cache.cacheDependencies(pkg, directDeps);
-        }
+        // Note: We don't need to separately cache dependencies since they're
+        // already captured in the tree structure via the adjacency list
 
         // Build tree structure using recursion from SELF node
         if (selfNodeIndex != -1) {
@@ -453,7 +457,7 @@ public class DependencyGraphBuilder implements AutoCloseable {
      * Get all packages discovered
      */
     public Collection<Package> getAllPackages() {
-        return cache.getAllPackages();
+        return allPackages.values();
     }
 
     /**

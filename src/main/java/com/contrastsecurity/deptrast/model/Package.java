@@ -5,7 +5,7 @@ import java.util.Objects;
 /**
  * Represents a software package (immutable value object)
  *
- * Dependency relationships are tracked in PackageCache, not in Package objects.
+ * Dependency relationships are tracked in the DependencyNode tree structure.
  */
 public class Package {
     private final String name;

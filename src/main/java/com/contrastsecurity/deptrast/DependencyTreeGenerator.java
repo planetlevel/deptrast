@@ -12,8 +12,6 @@ import com.contrastsecurity.deptrast.util.MavenDependencyTreeFormatter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.contrastsecurity.deptrast.model.PackageDependencyInfo;
-import com.contrastsecurity.deptrast.service.PackageCache;
 
 import java.io.BufferedWriter;
 import java.io.FileWriter;
@@ -88,6 +86,9 @@ public class DependencyTreeGenerator {
                 projectName = arg.substring(15);
             } else if (arg.equals("--verbose") || arg.equals("-v")) {
                 verbose = true;
+            } else if (arg.startsWith("--loglevel=")) {
+                String logLevel = arg.substring(11).toUpperCase();
+                setLogLevel(logLevel);
             } else {
                 System.err.println("Unknown argument: " + arg + ". Ignoring.");
             }
@@ -136,9 +137,6 @@ public class DependencyTreeGenerator {
                 logger.info("Input: {} (format={}, type={})", inputFilePath, inputFormat, inputType);
                 logger.info("Output: {} (format={}, type={})", outputFilePath, outputFormat, outputType);
             }
-
-            // Initialize the package cache
-            PackageCache.getInstance().clear();
 
             // Parse packages from input file based on input format
             List<Package> allPackages;
@@ -215,8 +213,6 @@ public class DependencyTreeGenerator {
             logger.info("Identified {} root packages", rootCount);
             logger.info("Using {} reconciled packages for output", allTrackedPackages.size());
 
-            PackageCache cache = PackageCache.getInstance();
-
             // Generate output based on output format
             String output = generateOutput(dependencyTree, allTrackedPackages, outputFormat, outputType, projectName, originalSbomContent);
 
@@ -270,11 +266,43 @@ public class DependencyTreeGenerator {
         System.out.println();
         System.out.println("Other:");
         System.out.println("  --verbose, -v             Verbose logging");
+        System.out.println("  --loglevel=<level>        Set log level (TRACE, DEBUG, INFO, WARN, ERROR)");
         System.out.println();
         System.out.println("Examples:");
         System.out.println("  deptrast libraries.txt -");
         System.out.println("  deptrast libraries.txt output.sbom --oformat=sbom");
         System.out.println("  deptrast pom.xml - --iformat=pom --itype=roots");
+        System.out.println("  deptrast pom.xml output.json --loglevel=INFO");
+    }
+
+    private static void setLogLevel(String level) {
+        ch.qos.logback.classic.Logger root = (ch.qos.logback.classic.Logger)
+            org.slf4j.LoggerFactory.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME);
+        ch.qos.logback.classic.Level logbackLevel;
+
+        switch (level) {
+            case "TRACE":
+                logbackLevel = ch.qos.logback.classic.Level.TRACE;
+                break;
+            case "DEBUG":
+                logbackLevel = ch.qos.logback.classic.Level.DEBUG;
+                break;
+            case "INFO":
+                logbackLevel = ch.qos.logback.classic.Level.INFO;
+                break;
+            case "WARN":
+                logbackLevel = ch.qos.logback.classic.Level.WARN;
+                break;
+            case "ERROR":
+                logbackLevel = ch.qos.logback.classic.Level.ERROR;
+                break;
+            default:
+                System.err.println("Unknown log level: " + level + ". Using WARN.");
+                logbackLevel = ch.qos.logback.classic.Level.WARN;
+        }
+
+        root.setLevel(logbackLevel);
+        logger.info("Log level set to: {}", level);
     }
 
     /**
@@ -368,12 +396,11 @@ public class DependencyTreeGenerator {
 
         if ("sbom".equals(outputFormat)) {
             // Generate SBOM JSON
-            PackageCache cache = PackageCache.getInstance();
             // If we have original SBOM content, enhance it instead of creating new
             if (originalSbomContent != null) {
-                return enhanceSbomWithDependencies(originalSbomContent, packagesToOutput);
+                return enhanceSbomWithDependencies(originalSbomContent, packagesToOutput, dependencyTree);
             } else {
-                return generateSbomString(packagesToOutput);
+                return generateSbomString(packagesToOutput, dependencyTree);
             }
         } else if ("maven".equals(outputFormat)) {
             // Generate Maven dependency:tree format
@@ -403,11 +430,46 @@ public class DependencyTreeGenerator {
     }
 
     /**
+     * Build a map of Package -> direct dependencies from the dependency tree
+     */
+    private static Map<Package, List<Package>> buildDependencyMap(List<DependencyNode> trees) {
+        Map<Package, List<Package>> dependencyMap = new HashMap<>();
+
+        for (DependencyNode tree : trees) {
+            collectDependenciesFromTree(tree, dependencyMap);
+        }
+
+        return dependencyMap;
+    }
+
+    /**
+     * Recursively collect dependency relationships from tree
+     */
+    private static void collectDependenciesFromTree(DependencyNode node, Map<Package, List<Package>> dependencyMap) {
+        if (node == null) {
+            return;
+        }
+
+        Package pkg = node.getPackage();
+        List<Package> children = new ArrayList<>();
+
+        for (DependencyNode child : node.getChildren()) {
+            children.add(child.getPackage());
+            // Recurse into children
+            collectDependenciesFromTree(child, dependencyMap);
+        }
+
+        // Store this package's direct dependencies
+        dependencyMap.put(pkg, children);
+    }
+
+    /**
      * Enhance existing SBOM with dependencies section
      */
-    private static String enhanceSbomWithDependencies(String originalSbom, Collection<Package> packages) {
+    private static String enhanceSbomWithDependencies(String originalSbom, Collection<Package> packages, List<DependencyNode> trees) {
         try {
-            PackageCache cache = PackageCache.getInstance();
+            // Build dependency map from tree structure
+            Map<Package, List<Package>> dependencyMap = buildDependencyMap(trees);
 
             // Parse original SBOM
             JsonObject sbom = JsonParser.parseString(originalSbom).getAsJsonObject();
@@ -445,8 +507,8 @@ public class DependencyTreeGenerator {
                 JsonObject dependency = new JsonObject();
                 dependency.addProperty("ref", pkgPurl);
 
-                // Get direct dependencies from cache
-                List<Package> directDeps = cache.getCachedDependencies(pkg);
+                // Get direct dependencies from dependency map
+                List<Package> directDeps = dependencyMap.get(pkg);
                 if (directDeps != null && !directDeps.isEmpty()) {
                     JsonArray dependsOn = new JsonArray();
                     for (Package depPkg : directDeps) {
@@ -490,9 +552,10 @@ public class DependencyTreeGenerator {
     /**
      * Generate SBOM as a string
      */
-    private static String generateSbomString(Collection<Package> packages) {
+    private static String generateSbomString(Collection<Package> packages, List<DependencyNode> trees) {
         try {
-            PackageCache cache = PackageCache.getInstance();
+            // Build dependency map from tree structure
+            Map<Package, List<Package>> dependencyMap = buildDependencyMap(trees);
 
             // Create a new BOM
             Bom bom = new Bom();
@@ -551,8 +614,8 @@ public class DependencyTreeGenerator {
                 String pkgPurl = purlByPackage.get(pkg);
                 Dependency dependency = new Dependency(pkgPurl);
 
-                // Get direct dependencies from the cache
-                List<Package> directDeps = cache.getCachedDependencies(pkg);
+                // Get direct dependencies from dependency map
+                List<Package> directDeps = dependencyMap.get(pkg);
                 if (directDeps != null && !directDeps.isEmpty()) {
                     for (Package depPkg : directDeps) {
                         if (purlByPackage.containsKey(depPkg)) {

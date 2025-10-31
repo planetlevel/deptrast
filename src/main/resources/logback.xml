@@ -22,7 +22,7 @@
         <appender-ref ref="CONSOLE" />
         <appender-ref ref="FILE" />
     </root>
-    
+
     <!-- Set specific logger levels -->
-    <logger name="com.contrastsecurity.deptrast" level="WARN"/>
+    <logger name="com.contrastsecurity.deptrast" level="INFO"/>
 </configuration>
