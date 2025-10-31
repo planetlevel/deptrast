@@ -40,7 +40,16 @@ Security folks will want to detect exactly what components are actually running 
 
 ## Example Use
 
-> java -jar target/deptrast-2.0.jar test-data/libraries.txt -
+```bash
+# Generate SBOM from flat list (default output format)
+java -jar target/deptrast-2.0.2.jar test-data/libraries.txt output.json
+
+# Or output to stdout
+java -jar target/deptrast-2.0.2.jar test-data/libraries.txt -
+
+# Analyze Maven pom.xml
+java -jar target/deptrast-2.0.2.jar pom.xml output.json --iformat=pom --itype=roots
+```
 
 ## Requirements
 
@@ -49,7 +58,7 @@ Security folks will want to detect exactly what components are actually running 
 
 ## Project Security
 
-See [SECURITY.md](SECURITY.md) for information about the project's security policy, vulnerability reporting, and best practices. For setup instructions for security scanning, including how to configure the NVD API key for dependency checks, see [SECURITY-SETUP.md](docs/SECURITY-SETUP.md).
+See [SECURITY.md](SECURITY.md) for information about the project's security policy, vulnerability reporting, and best practices.
 
 ### ⚠️ SSL Certificate Validation
 
@@ -92,10 +101,10 @@ deptrast <input-file> <output-file> [options]
 
 ### Output Options
 
-- `--oformat=<format>` - Output format (default: tree)
+- `--oformat=<format>` - Output format (default: sbom)
+  - `sbom` - CycloneDX 1.6 SBOM JSON
   - `tree` - ASCII tree with unicode characters
   - `maven` - Maven dependency:tree format
-  - `sbom` - CycloneDX 1.6 SBOM JSON
 
 - `--otype=<type>` - Output type (default: all)
   - `all` - All packages (roots + transitive dependencies)
@@ -106,6 +115,7 @@ deptrast <input-file> <output-file> [options]
 ### Other Options
 
 - `--verbose`, `-v` - Enable verbose logging
+- `--loglevel=<level>` - Set log level (TRACE, DEBUG, INFO, WARN, ERROR) - default: WARN
 
 ### Input File Formats
 
@@ -157,14 +167,19 @@ CycloneDX SBOM JSON files (v1.x). Deptrast extracts components via purl (Package
 
 ### Examples
 
-**Basic usage (tree output to stdout):**
+**Basic usage (SBOM output to file - default format):**
+```bash
+deptrast libraries.txt output.json
+```
+
+**SBOM output to stdout:**
 ```bash
 deptrast libraries.txt -
 ```
 
-**Generate SBOM:**
+**Tree format output:**
 ```bash
-deptrast libraries.txt output.sbom --oformat=sbom
+deptrast libraries.txt - --oformat=tree
 ```
 
 **Maven format to file:**
@@ -172,42 +187,44 @@ deptrast libraries.txt output.sbom --oformat=sbom
 deptrast libraries.txt deps.txt --oformat=maven --project-name=my-app
 ```
 
-**Verbose output:**
+**Analyze Maven pom.xml:**
 ```bash
-deptrast libraries.txt - --verbose
-```
-
-**Convert SBOM to tree:**
-```bash
-deptrast input.sbom - --iformat=sbom
-```
-
-**Analyze pom.xml:**
-```bash
-deptrast pom.xml - --iformat=pom --itype=roots
+deptrast pom.xml output.json --iformat=pom --itype=roots
 ```
 
 **Python requirements.txt to SBOM:**
 ```bash
-deptrast requirements.txt output.sbom --iformat=pypi --oformat=sbom
+deptrast requirements.txt output.json --iformat=pypi
 ```
 
 **Analyze Gradle build file:**
 ```bash
-deptrast build.gradle - --iformat=gradle --itype=roots
+deptrast build.gradle output.json --iformat=gradle --itype=roots
 ```
 
-**Enhance existing SBOM with dependencies:**
+**Convert SBOM to tree visualization:**
 ```bash
-deptrast input.sbom enhanced.sbom --iformat=sbom --oformat=sbom
+deptrast input.sbom - --iformat=sbom --oformat=tree
+```
+
+**Enhance existing SBOM with dependency graph:**
+```bash
+deptrast input.sbom enhanced.sbom --iformat=sbom
 ```
 This preserves all original SBOM metadata (tools, timestamps, custom fields) and adds/updates the dependencies section with computed dependency relationships.
 
 **Generate SBOM with only root dependencies:**
 ```bash
-deptrast libraries.txt roots-only.sbom --oformat=sbom --otype=roots
+deptrast libraries.txt roots-only.json --otype=roots
 ```
 Outputs only the root packages in the SBOM, excluding all transitive dependencies.
+
+**Verbose logging:**
+```bash
+deptrast libraries.txt - --verbose
+# Or with specific log level
+deptrast libraries.txt - --loglevel=DEBUG
+```
 
 ## Building the Project
 
@@ -215,5 +232,22 @@ Outputs only the root packages in the SBOM, excluding all transitive dependencie
 mvn clean package
 ```
 
-This will create an executable JAR file as `target/deptrast-2.0.0.jar`.
+This will create an executable JAR file as `target/deptrast-2.0.2.jar`.
+
+## Testing
+
+Run the comprehensive test suite:
+
+```bash
+mvn test
+```
+
+The test suite includes:
+- Input/output format validation
+- POM file parsing with property resolution
+- Dependency graph construction
+- SBOM generation and enhancement
+- Comparison with CDXgen gold standard (95.7% component match)
+
+Tests validate deptrast against CDXgen (the industry-standard SBOM generator) using a real-world Spring Boot application. Results show excellent accuracy with proper Maven dependency reconciliation.
 
