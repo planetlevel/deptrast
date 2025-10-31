@@ -475,7 +475,9 @@ public class DependencyTreeGenerator {
             JsonObject sbom = JsonParser.parseString(originalSbom).getAsJsonObject();
 
             // Build purl lookup map from original components
+            // Use bom-ref if present, otherwise use purl
             Map<Package, String> purlByPackage = new HashMap<>();
+            Map<Package, String> bomRefByPackage = new HashMap<>();
             JsonArray components = sbom.getAsJsonArray("components");
 
             if (components != null) {
@@ -490,6 +492,16 @@ public class DependencyTreeGenerator {
                             String expectedPurl = buildPurl(pkg);
                             if (purl.equals(expectedPurl)) {
                                 purlByPackage.put(pkg, purl);
+
+                                // Check if component has bom-ref, use it if present
+                                JsonElement bomRefElement = component.get("bom-ref");
+                                if (bomRefElement != null && !bomRefElement.isJsonNull()) {
+                                    bomRefByPackage.put(pkg, bomRefElement.getAsString());
+                                } else {
+                                    // If no bom-ref, add it to the component
+                                    component.addProperty("bom-ref", purl);
+                                    bomRefByPackage.put(pkg, purl);
+                                }
                                 break;
                             }
                         }
@@ -497,23 +509,24 @@ public class DependencyTreeGenerator {
                 }
             }
 
-            // Build dependencies array
+            // Build dependencies array using bom-refs
             JsonArray dependenciesArray = new JsonArray();
 
             for (Package pkg : packages) {
-                String pkgPurl = purlByPackage.get(pkg);
-                if (pkgPurl == null) continue;
+                String pkgBomRef = bomRefByPackage.get(pkg);
+                if (pkgBomRef == null) continue;
 
                 JsonObject dependency = new JsonObject();
-                dependency.addProperty("ref", pkgPurl);
+                dependency.addProperty("ref", pkgBomRef);
 
                 // Get direct dependencies from dependency map
                 List<Package> directDeps = dependencyMap.get(pkg);
                 if (directDeps != null && !directDeps.isEmpty()) {
                     JsonArray dependsOn = new JsonArray();
                     for (Package depPkg : directDeps) {
-                        if (purlByPackage.containsKey(depPkg)) {
-                            dependsOn.add(purlByPackage.get(depPkg));
+                        String depBomRef = bomRefByPackage.get(depPkg);
+                        if (depBomRef != null) {
+                            dependsOn.add(depBomRef);
                         }
                     }
                     if (dependsOn.size() > 0) {
@@ -600,6 +613,7 @@ public class DependencyTreeGenerator {
 
                 component.setVersion(pkg.getVersion());
                 component.setPurl(purl);
+                component.setBomRef(purl);  // Use PURL as bom-ref for consistent referencing
                 components.add(component);
                 purlByPackage.put(pkg, purl);
             }

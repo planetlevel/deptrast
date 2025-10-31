@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class DependencyTreeGeneratorTest {
 
-    private static final String TEST_DATA_DIR = "test-data";
+    private static final String TEST_DATA_DIR = "src/test/resources/test-data";
     private static final String TEMP_OUTPUT_DIR = "target/test-output";
     // Target: deptrast should achieve 90% match with CDXgen
     // CDXgen uses Maven dependency resolution to analyze POMs
@@ -326,7 +326,7 @@ public class DependencyTreeGeneratorTest {
     @Order(9)
     @DisplayName("Compare with CDXgen gold standard: Spring PetClinic (target 90%)")
     void testCompareWithCDXgenGoldStandard() throws Exception {
-        String cdxgenGoldFile = TEST_DATA_DIR + "/spring-petclinic-cdxgen-gold.json";
+        String cdxgenGoldFile = TEST_DATA_DIR + "/petclinic-cdxgen.sbom";
 
         // Skip if gold standard doesn't exist
         Assumptions.assumeTrue(Files.exists(Paths.get(cdxgenGoldFile)),
@@ -602,7 +602,7 @@ public class DependencyTreeGeneratorTest {
     @Order(16)
     @DisplayName("Regenerate dependency tree from stripped SBOM")
     void testRegenerateDependencyTree() throws IOException {
-        String goldStandardFile = TEST_DATA_DIR + "/spring-petclinic-cdxgen-gold.json";
+        String goldStandardFile = TEST_DATA_DIR + "/petclinic-cdxgen.sbom";
 
         // Skip if gold standard doesn't exist
         Assumptions.assumeTrue(Files.exists(Paths.get(goldStandardFile)),

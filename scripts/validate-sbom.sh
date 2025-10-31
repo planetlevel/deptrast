@@ -56,6 +56,7 @@ echo "Component Validation:"
 MISSING_PURL=$(jq '[.components[] | select(.purl == null)] | length' "$SBOM_FILE")
 MISSING_VERSION=$(jq '[.components[] | select(.version == null)] | length' "$SBOM_FILE")
 MISSING_TYPE=$(jq '[.components[] | select(.type == null)] | length' "$SBOM_FILE")
+MISSING_BOMREF=$(jq '[.components[] | select(."bom-ref" == null)] | length' "$SBOM_FILE")
 
 if [ "$MISSING_PURL" -eq 0 ]; then
     echo "✅ All components have PURL"
@@ -73,6 +74,12 @@ if [ "$MISSING_TYPE" -eq 0 ]; then
     echo "✅ All components have type"
 else
     echo "⚠️  $MISSING_TYPE component(s) missing type"
+fi
+
+if [ "$MISSING_BOMREF" -eq 0 ]; then
+    echo "✅ All components have bom-ref"
+else
+    echo "⚠️  $MISSING_BOMREF component(s) missing bom-ref (recommended for tool compatibility)"
 fi
 
 # Dependency validation
