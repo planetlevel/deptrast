@@ -322,7 +322,8 @@ public class DependencyTreeGenerator {
             return "gradle";
         } else if (lower.endsWith("requirements.txt")) {
             return "pypi";
-        } else if (lower.endsWith(".json") && (lower.contains("sbom") || lower.contains("bom"))) {
+        } else if (lower.endsWith(".sbom") || lower.endsWith(".cdx.json") ||
+                   (lower.endsWith(".json") && (lower.contains("sbom") || lower.contains("bom") || lower.contains("cdx")))) {
             return "sbom";
         } else {
             return "flat";
