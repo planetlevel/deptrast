@@ -6,7 +6,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-TEST_DATA_DIR="$PROJECT_DIR/src/test/resources/test-data"
+TEST_DATA_DIR="$PROJECT_DIR/src/test/resources"
 
 POM_FILE="$TEST_DATA_DIR/petclinic-pom.xml"
 OUTPUT_FILE="$TEST_DATA_DIR/petclinic-cdxgen.sbom"
@@ -33,7 +33,7 @@ if [ -f "$OUTPUT_FILE" ]; then
     echo "✅ Success! Generated SBOM with $COMPONENT_COUNT components"
     echo ""
     echo "To compare with deptrast output, run:"
-    echo "  python3 scripts/compare-sboms.py src/test/resources/test-data/petclinic-deptrast-from-maven.sbom src/test/resources/test-data/petclinic-cdxgen.sbom"
+    echo "  python3 scripts/compare-sboms.py src/test/resources/petclinic-deptrast-from-maven.sbom src/test/resources/petclinic-cdxgen.sbom"
 else
     echo "❌ Error: Failed to generate SBOM"
     exit 1

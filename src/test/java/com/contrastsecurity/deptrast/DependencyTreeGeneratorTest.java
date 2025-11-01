@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class DependencyTreeGeneratorTest {
 
-    private static final String TEST_DATA_DIR = "src/test/resources/test-data";
+    private static final String TEST_DATA_DIR = "src/test/resources";
     private static final String TEMP_OUTPUT_DIR = "target/test-output";
     // Target: deptrast should achieve 90% match with CDXgen
     // CDXgen uses Maven dependency resolution to analyze POMs
