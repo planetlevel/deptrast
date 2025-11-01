@@ -77,7 +77,7 @@ public class SSLUtils {
             builder.sslSocketFactory(sslContext.getSocketFactory(), (X509TrustManager) trustAllCerts[0])
                    .hostnameVerifier((hostname, session) -> true);
 
-            logger.warn("SSL certificate validation is DISABLED. Use only on trusted networks.");
+            logger.info("SSL certificate validation is DISABLED. Use only on trusted networks.");
         } catch (NoSuchAlgorithmException | KeyManagementException e) {
             logger.error("Error configuring SSL context: {}", e.getMessage());
         }

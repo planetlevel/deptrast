@@ -38,17 +38,17 @@ Security folks will want to detect exactly what components are actually running 
 - Supports multiple package ecosystems (Maven, NPM, PyPI)
 - **SBOM Enhancement** - When input and output are both SBOM, preserves original metadata and adds dependency graph
 
-## Example Use
+## Quick Start
 
 ```bash
-# Generate SBOM from flat list (default output format)
-java -jar target/deptrast-2.0.2.jar test-data/libraries.txt output.json
+# Create SBOM from pom.xml
+java -jar target/deptrast-2.0.3.jar create pom.xml output.sbom
 
-# Or output to stdout
-java -jar target/deptrast-2.0.2.jar test-data/libraries.txt -
+# Enrich existing SBOM with dependency graph
+java -jar target/deptrast-2.0.3.jar enrich input.sbom enriched.sbom
 
-# Analyze Maven pom.xml
-java -jar target/deptrast-2.0.2.jar pom.xml output.json --iformat=pom --itype=roots
+# Print SBOM as tree visualization
+java -jar target/deptrast-2.0.3.jar print input.sbom --output=tree
 ```
 
 ## Requirements
@@ -76,46 +76,58 @@ See [SECURITY.md](SECURITY.md) for information about the project's security poli
 ## Usage
 
 ```bash
-deptrast <input-file> <output-file> [options]
+deptrast <subcommand> [args...] [options]
 ```
 
-### Required Arguments
+### Subcommands
 
-- `<input-file>` - Input file path
-- `<output-file>` - Output file path (use `"-"` for stdout)
+- **`create <input> <output>`** - Create SBOM or other formats from source files
+- **`enrich <sbom> <output>`** - Add dependency graph to existing SBOM
+- **`print <sbom>`** - Display SBOM in different formats
+- **`stats <sbom>`** - Show statistics about SBOM
+- **`compare <sbom1> <sbom2>`** - Compare two SBOMs
+- **`validate <sbom>`** - Validate SBOM structure
+- **`help`** - Show help message
 
-### Input Options
+### Common Options
 
-- `--iformat=<format>` - Input format (default: auto)
-  - `auto` - Auto-detect from file extension
-  - `flat` - Flat list (system:name:version per line)
-  - `pom` - Maven pom.xml
-  - `gradle` - Gradle build.gradle / build.gradle.kts
-  - `pypi` - Python requirements.txt
-  - `sbom` - CycloneDX SBOM JSON
+#### Input Type (`create` command only)
+- `--input=roots|list` - How to interpret input (default: auto-detected)
+  - `roots` - Root packages (fetch transitive deps from API)
+  - `list` - Complete flat list (find roots by analysis)
+  - Auto-detection: pom/gradle/pypi → roots, flat/sbom → list
 
-- `--itype=<type>` - Input type (default: smart)
-  - `all` - All dependencies (find roots by analysis)
-  - `roots` - Root dependencies (fetch transitive deps from API)
-  - `smart` - Auto-detect based on format (pom/gradle/pypi→roots, flat/sbom→all)
+#### Output Format
+- `--output=sbom|roots|tree|list` - Output format (default: sbom)
+  - `sbom` - Full CycloneDX SBOM (JSON) with all packages
+  - `roots` - SBOM with only root packages
+  - `tree` - Tree visualization (text)
+  - `list` - Flat list (one package per line)
 
-### Output Options
+#### Tree Format
+- `--format=tree|maven` - Tree visualization format (default: tree)
+  - `tree` - Unicode tree with root indicators (🔴)
+  - `maven` - Maven dependency:tree compatible format
 
-- `--oformat=<format>` - Output format (default: sbom)
-  - `sbom` - CycloneDX 1.6 SBOM JSON
-  - `tree` - ASCII tree with unicode characters
-  - `maven` - Maven dependency:tree format
+#### Dependency Graph Options (`create` command only)
+- `--use-existing-deps` - Use existing dependency graph from SBOM (fast mode, no API calls)
+  - Only works when input is an SBOM file
+  - Skips rebuilding the dependency tree, using the existing `dependencies` array
+  - Much faster since it avoids hundreds of API calls to deps.dev
+  - Ideal for: `print`, `validate`, format conversions
+- `--rebuild-deps` - Rebuild dependency graph from scratch (default for `create`, `enrich`)
+  - Makes API calls to deps.dev to validate and rebuild the full dependency tree
+  - Slower but ensures accuracy and handles version reconciliation
+  - Ideal for: creating new SBOMs, validating dependency trees
 
-- `--otype=<type>` - Output type (default: all)
-  - `all` - All packages (roots + transitive dependencies)
-  - `roots` - Root packages only
+**Smart Defaults:**
+- `print` command: Uses `--use-existing-deps` by default (fast)
+- `create` and `enrich` commands: Use `--rebuild-deps` by default (accurate)
 
-- `--project-name=<name>` - Project name for root node (tree/maven output)
-
-### Other Options
-
+#### Other Options
+- `--project-name=<name>` - Project name for tree output
 - `--verbose`, `-v` - Enable verbose logging
-- `--loglevel=<level>` - Set log level (TRACE, DEBUG, INFO, WARN, ERROR) - default: WARN
+- `--loglevel=<level>` - Set log level (TRACE, DEBUG, INFO, WARN, ERROR)
 
 ### Input File Formats
 
@@ -167,63 +179,124 @@ CycloneDX SBOM JSON files (v1.x). Deptrast extracts components via purl (Package
 
 ### Examples
 
-**Basic usage (SBOM output to file - default format):**
+#### Create Command
+
+**Create SBOM from pom.xml:**
 ```bash
-deptrast libraries.txt output.json
+deptrast create pom.xml output.sbom
 ```
 
-**SBOM output to stdout:**
+**Create SBOM from flat list:**
 ```bash
-deptrast libraries.txt -
+deptrast create libraries.txt output.sbom
 ```
 
-**Tree format output:**
+**Create flat list from pom.xml:**
 ```bash
-deptrast libraries.txt - --oformat=tree
+deptrast create pom.xml output.txt --output=list
 ```
 
-**Maven format to file:**
+**Create tree visualization from flat list:**
 ```bash
-deptrast libraries.txt deps.txt --oformat=maven --project-name=my-app
+deptrast create libraries.txt - --output=tree
 ```
 
-**Analyze Maven pom.xml:**
+**Output to stdout:**
 ```bash
-deptrast pom.xml output.json --iformat=pom --itype=roots
+deptrast create pom.xml - --output=sbom
 ```
 
 **Python requirements.txt to SBOM:**
 ```bash
-deptrast requirements.txt output.json --iformat=pypi
+deptrast create requirements.txt output.sbom
 ```
 
 **Analyze Gradle build file:**
 ```bash
-deptrast build.gradle output.json --iformat=gradle --itype=roots
+deptrast create build.gradle output.sbom
 ```
 
-**Convert SBOM to tree visualization:**
+**Create SBOM with only root dependencies:**
 ```bash
-deptrast input.sbom - --iformat=sbom --oformat=tree
+deptrast create libraries.txt roots-only.sbom --output=roots
 ```
 
-**Enhance existing SBOM with dependency graph:**
+**Maven dependency:tree format:**
 ```bash
-deptrast input.sbom enhanced.sbom --iformat=sbom
+deptrast create pom.xml - --output=tree --format=maven --project-name=my-app
+```
+
+**Fast mode - Use existing dependency graph:**
+```bash
+# Convert SBOM to tree instantly (no API calls)
+deptrast create input.sbom - --output=tree --use-existing-deps
+
+# Convert SBOM to different format (fast)
+deptrast create input.sbom output.json --use-existing-deps
+```
+
+**Slow mode - Rebuild dependency graph:**
+```bash
+# Rebuild dependency graph with validation (slow but accurate)
+deptrast create input.sbom validated.sbom --rebuild-deps
+```
+
+#### Enrich Command
+
+**Add dependency graph to existing SBOM:**
+```bash
+deptrast enrich input.sbom enriched.sbom
 ```
 This preserves all original SBOM metadata (tools, timestamps, custom fields) and adds/updates the dependencies section with computed dependency relationships.
 
-**Generate SBOM with only root dependencies:**
+#### Print Command
+
+**Display SBOM as tree:**
 ```bash
-deptrast libraries.txt roots-only.json --otype=roots
+deptrast print input.sbom --output=tree
 ```
-Outputs only the root packages in the SBOM, excluding all transitive dependencies.
+
+**Display SBOM as flat list:**
+```bash
+deptrast print input.sbom --output=list
+```
+
+**Display only root packages:**
+```bash
+deptrast print input.sbom --output=roots
+```
+
+#### Stats Command
+
+**Show SBOM statistics:**
+```bash
+deptrast stats input.sbom
+```
+Output includes total packages, root packages, and transitive dependencies count.
+
+#### Compare Command
+
+**Compare two SBOMs:**
+```bash
+deptrast compare sbom1.json sbom2.json
+```
+Shows packages in both, only in first, and only in second SBOM.
+
+#### Validate Command
+
+**Validate SBOM structure:**
+```bash
+deptrast validate input.sbom
+```
+Checks required fields and reports warnings for missing metadata.
+
+#### Other Options
 
 **Verbose logging:**
 ```bash
-deptrast libraries.txt - --verbose
+deptrast create libraries.txt - --verbose
 # Or with specific log level
-deptrast libraries.txt - --loglevel=DEBUG
+deptrast create libraries.txt - --loglevel=DEBUG
 ```
 
 ## Building the Project
@@ -232,7 +305,7 @@ deptrast libraries.txt - --loglevel=DEBUG
 mvn clean package
 ```
 
-This will create an executable JAR file as `target/deptrast-2.0.2.jar`.
+This will create an executable JAR file as `target/deptrast-2.0.3.jar`.
 
 ## Testing
 

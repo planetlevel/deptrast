@@ -21,6 +21,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -60,34 +61,83 @@ public class DependencyTreeGenerator {
             cleanupResources();
         }));
 
-        if (args.length < 2) {
+        if (args.length < 1) {
             printUsage();
             return;
         }
 
-        String inputFilePath = args[0];
-        String outputFilePath = args[1];
+        String subcommand = args[0].toLowerCase();
+
+        // Dispatch to appropriate subcommand handler
+        try {
+            switch (subcommand) {
+                case "create":
+                    handleCreate(args);
+                    break;
+                case "enrich":
+                    handleEnrich(args);
+                    break;
+                case "print":
+                    handlePrint(args);
+                    break;
+                case "stats":
+                    handleStats(args);
+                    break;
+                case "compare":
+                    handleCompare(args);
+                    break;
+                case "validate":
+                    handleValidate(args);
+                    break;
+                case "--help":
+                case "-h":
+                case "help":
+                    printUsage();
+                    break;
+                default:
+                    System.err.println("Unknown subcommand: " + subcommand);
+                    System.err.println("Run 'deptrast help' for usage information");
+                    return;
+            }
+        } catch (Exception e) {
+            logger.error("Error executing {}: {}", subcommand, e.getMessage(), e);
+            System.err.println("Error: " + e.getMessage());
+            return;
+        } finally {
+            cleanupResources();
+        }
+    }
+
+    /**
+     * Handle 'create' subcommand
+     */
+    private static void handleCreate(String[] args) throws Exception {
+        if (args.length < 3) {
+            System.err.println("Usage: deptrast create <input-file> <output-file> [options]");
+            return;
+        }
+
+        String inputFilePath = args[1];
+        String outputFilePath = args[2];
 
         // Parse options
-        String inputFormat = "auto";
-        String inputType = "smart";
-        String outputFormat = "sbom";
-        String outputType = "all";  // Default: output all dependencies
+        String inputType = "smart";  // roots or list
+        String outputFormat = "sbom"; // sbom, roots, tree, list
+        String treeFormat = "tree";   // tree or maven (for tree output)
         String projectName = "project";
         boolean verbose = false;
+        boolean useExistingDeps = false;  // Use existing dependency graph from SBOM
 
         // Parse additional arguments
-        for (int i = 2; i < args.length; i++) {
+        for (int i = 3; i < args.length; i++) {
             String arg = args[i];
 
-            if (arg.startsWith("--iformat=")) {
-                inputFormat = arg.substring(10).toLowerCase();
-            } else if (arg.startsWith("--itype=")) {
+            if (arg.startsWith("--input=")) {
                 inputType = arg.substring(8).toLowerCase();
-            } else if (arg.startsWith("--oformat=")) {
-                outputFormat = arg.substring(10).toLowerCase();
-            } else if (arg.startsWith("--otype=")) {
-                outputType = arg.substring(8).toLowerCase();
+            } else if (arg.startsWith("--output=")) {
+                outputFormat = arg.substring(9).toLowerCase();
+            } else if (arg.startsWith("--format=")) {
+                treeFormat = arg.substring(9).toLowerCase();
             } else if (arg.startsWith("--project-name=")) {
                 projectName = arg.substring(15);
             } else if (arg.equals("--verbose") || arg.equals("-v")) {
@@ -95,107 +145,113 @@ public class DependencyTreeGenerator {
             } else if (arg.startsWith("--loglevel=")) {
                 String logLevel = arg.substring(11).toUpperCase();
                 setLogLevel(logLevel);
+            } else if (arg.equals("--use-existing-deps")) {
+                useExistingDeps = true;
+            } else if (arg.equals("--rebuild-deps")) {
+                useExistingDeps = false;
             } else {
                 System.err.println("Unknown argument: " + arg + ". Ignoring.");
             }
         }
 
-        // Auto-detect input format if set to "auto"
-        if ("auto".equals(inputFormat)) {
-            inputFormat = detectInputFormat(inputFilePath);
+        // Validate input type
+        if (!inputType.equals("roots") && !inputType.equals("list") && !inputType.equals("smart")) {
+            System.err.println("Invalid --input value: " + inputType);
+            System.err.println("Valid values: roots, list");
+            return;
         }
 
-        // Smart input type detection
+        // Validate output format
+        if (!outputFormat.equals("sbom") && !outputFormat.equals("roots") &&
+            !outputFormat.equals("tree") && !outputFormat.equals("list")) {
+            System.err.println("Invalid --output value: " + outputFormat);
+            System.err.println("Valid values: sbom, roots, tree, list");
+            return;
+        }
+
+        // Auto-detect input file format
+        String detectedFormat = detectInputFormat(inputFilePath);
+
+        // Smart input type detection: infer based on detected format
         if ("smart".equals(inputType)) {
-            inputType = getSmartInputType(inputFormat);
+            inputType = getSmartInputType(detectedFormat);
         }
 
-        // Validate formats
-        if (!isValidInputFormat(inputFormat)) {
-            System.err.println("Invalid input format: " + inputFormat);
-            System.err.println("Valid formats: auto, flat, pom, gradle, pypi, sbom");
-            return;
+        // Set logging level based on verbose flag
+        if (verbose) {
+            setLoggingLevel(Level.INFO);
+            logger.info("Verbose mode enabled");
+            logger.info("Input: {} (format={}, type={})", inputFilePath, detectedFormat, inputType);
+            logger.info("Output: {} (format={})", outputFilePath, outputFormat);
         }
 
-        if (!isValidInputType(inputType)) {
-            System.err.println("Invalid input type: " + inputType);
-            System.err.println("Valid types: all, roots, smart");
-            return;
-        }
+        // Parse packages from input file based on detected format
+        List<Package> allPackages;
+        Map<String, String> dependencyManagement = null;
+        Map<String, Set<String>> exclusions = null;
+        String originalSbomContent = null; // Store original SBOM if input is SBOM
 
-        if (!isValidOutputFormat(outputFormat)) {
-            System.err.println("Invalid output format: " + outputFormat);
-            System.err.println("Valid formats: tree, maven, sbom");
-            return;
-        }
-
-        if (!isValidOutputType(outputType)) {
-            System.err.println("Invalid output type: " + outputType);
-            System.err.println("Valid types: all, roots");
-            return;
-        }
-
-        try {
-            // Set logging level based on verbose flag
-            if (verbose) {
-                setLoggingLevel(Level.INFO);
-                logger.info("Verbose mode enabled");
-                logger.info("Input: {} (format={}, type={})", inputFilePath, inputFormat, inputType);
-                logger.info("Output: {} (format={}, type={})", outputFilePath, outputFormat, outputType);
-            }
-
-            // Parse packages from input file based on input format
-            List<Package> allPackages;
-            Map<String, String> dependencyManagement = null;
-            Map<String, Set<String>> exclusions = null;
-            String originalSbomContent = null; // Store original SBOM if input is SBOM
-
-            switch (inputFormat) {
-                case "flat":
-                    allPackages = FileParser.parsePackagesFromFile(inputFilePath);
-                    break;
-                case "sbom":
-                    allPackages = FileParser.parseSbomFile(inputFilePath);
-                    // If output is also SBOM, preserve original content
-                    if ("sbom".equals(outputFormat)) {
-                        try {
-                            originalSbomContent = new String(java.nio.file.Files.readAllBytes(
-                                java.nio.file.Paths.get(inputFilePath)));
-                        } catch (IOException e) {
-                            logger.warn("Could not read original SBOM content: {}", e.getMessage());
-                        }
+        switch (detectedFormat) {
+            case "flat":
+                allPackages = FileParser.parsePackagesFromFile(inputFilePath);
+                break;
+            case "sbom":
+                allPackages = FileParser.parseSbomFile(inputFilePath);
+                // If output is also SBOM, preserve original content
+                if ("sbom".equals(outputFormat) || "roots".equals(outputFormat)) {
+                    try {
+                        originalSbomContent = new String(java.nio.file.Files.readAllBytes(
+                            java.nio.file.Paths.get(inputFilePath)));
+                    } catch (IOException e) {
+                        logger.warn("Could not read original SBOM content: {}", e.getMessage());
                     }
-                    break;
-                case "pom":
-                    FileParser.PomParseResult pomResult = FileParser.parsePomFileWithManagement(inputFilePath);
-                    allPackages = pomResult.getPackages();
-                    dependencyManagement = pomResult.getDependencyManagement();
-                    exclusions = pomResult.getExclusions();
-                    logger.info("Parsed {} packages with {} managed versions and {} exclusions from pom.xml",
-                        allPackages.size(), dependencyManagement.size(), exclusions.size());
-                    break;
-                case "pypi":
-                    allPackages = FileParser.parseRequirementsFile(inputFilePath);
-                    break;
-                case "gradle":
-                    allPackages = FileParser.parseGradleFile(inputFilePath);
-                    break;
-                default:
-                    System.err.println("Unknown input format: " + inputFormat);
-                    return;
-            }
-
-            if (allPackages.isEmpty()) {
-                logger.error("No valid packages found in the input file");
-                System.out.println("No valid packages found in the input file. Check format and try again.");
+                }
+                break;
+            case "pom":
+                FileParser.PomParseResult pomResult = FileParser.parsePomFileWithManagement(inputFilePath);
+                allPackages = pomResult.getPackages();
+                dependencyManagement = pomResult.getDependencyManagement();
+                exclusions = pomResult.getExclusions();
+                logger.info("Parsed {} packages with {} managed versions and {} exclusions from pom.xml",
+                    allPackages.size(), dependencyManagement.size(), exclusions.size());
+                break;
+            case "pypi":
+                allPackages = FileParser.parseRequirementsFile(inputFilePath);
+                break;
+            case "gradle":
+                allPackages = FileParser.parseGradleFile(inputFilePath);
+                break;
+            default:
+                System.err.println("Unknown input format: " + detectedFormat);
                 return;
-            }
+        }
 
-            logger.info("Loaded {} packages from the input file", allPackages.size());
-            System.out.println("Analyzing dependencies for " + allPackages.size() + " packages...");
+        if (allPackages.isEmpty()) {
+            logger.error("No valid packages found in the input file");
+            System.out.println("No valid packages found in the input file. Check format and try again.");
+            return;
+        }
 
-            // Build dependency trees - currently assumes inputType="all"
-            // TODO: Add support for inputType="roots" to fetch transitive dependencies
+        logger.info("Loaded {} packages from the input file", allPackages.size());
+
+        List<DependencyNode> dependencyTree;
+        Collection<Package> allTrackedPackages;
+        int rootCount;
+
+        // Check if we should use existing dependency graph or rebuild it
+        if (useExistingDeps && "sbom".equals(detectedFormat) && originalSbomContent != null) {
+            logger.info("Using existing dependency graph from SBOM (fast mode)");
+
+            // Parse the existing dependency graph from the SBOM
+            dependencyTree = parseDependencyGraphFromSbom(originalSbomContent, allPackages);
+            allTrackedPackages = allPackages;
+            rootCount = dependencyTree.size();
+
+            logger.info("Using existing dependency graph with {} root packages", rootCount);
+        } else {
+            // Build dependency trees from scratch using API
+            logger.info("Analyzing dependencies for {} packages...", allPackages.size());
+
             graphBuilder = new DependencyGraphBuilder();
 
             // Apply dependency management if available (from POM files)
@@ -210,75 +266,656 @@ public class DependencyTreeGenerator {
                 logger.info("Applied {} exclusion rules to graph builder", exclusions.size());
             }
 
-            List<DependencyNode> dependencyTree = graphBuilder.buildDependencyTrees(allPackages);
+            dependencyTree = graphBuilder.buildDependencyTrees(allPackages);
 
             // Get reconciled packages from the dependency tree (with managed versions applied)
-            Collection<Package> allTrackedPackages = graphBuilder.getAllReconciledPackages();
-            int rootCount = dependencyTree.size();
+            allTrackedPackages = graphBuilder.getAllReconciledPackages();
+            rootCount = dependencyTree.size();
+        }
 
-            logger.info("Identified {} root packages", rootCount);
-            logger.info("Using {} reconciled packages for output", allTrackedPackages.size());
+        logger.info("Identified {} root packages", rootCount);
+        logger.info("Using {} reconciled packages for output", allTrackedPackages.size());
 
-            // Generate output based on output format
-            String output = generateOutput(dependencyTree, allTrackedPackages, outputFormat, outputType, projectName, originalSbomContent);
+        // Generate output based on output format
+        String output;
 
-            // Write output to file or stdout
-            if ("-".equals(outputFilePath)) {
-                System.out.println(output);
+        if ("list".equals(outputFormat)) {
+            // Simple flat list format: one package per line
+            output = generateListOutput(allTrackedPackages);
+        } else if ("roots".equals(outputFormat)) {
+            // SBOM with only root packages
+            Collection<Package> rootPackages = new ArrayList<>();
+            for (DependencyNode node : dependencyTree) {
+                rootPackages.add(node.getPackage());
+            }
+            output = generateSbomString(rootPackages, dependencyTree);
+        } else if ("tree".equals(outputFormat)) {
+            // Tree visualization
+            if ("maven".equals(treeFormat)) {
+                output = MavenDependencyTreeFormatter.formatMavenDependencyTree(projectName, dependencyTree);
             } else {
-                try (BufferedWriter writer = new BufferedWriter(new FileWriter(outputFilePath))) {
-                    writer.write(output);
-                    logger.info("Output written to: {}", outputFilePath);
-                    System.out.println("Output written to: " + outputFilePath);
+                output = generateTreeOutput(dependencyTree, allTrackedPackages, projectName);
+            }
+        } else {
+            // Default: full SBOM
+            if (originalSbomContent != null) {
+                output = enhanceSbomWithDependencies(originalSbomContent, allTrackedPackages, dependencyTree);
+            } else {
+                output = generateSbomString(allTrackedPackages, dependencyTree);
+            }
+        }
+
+        // Write output to file or stdout
+        if ("-".equals(outputFilePath)) {
+            System.out.println(output);
+        } else {
+            try (BufferedWriter writer = new BufferedWriter(new FileWriter(outputFilePath))) {
+                writer.write(output);
+                logger.info("Output written to: {}", outputFilePath);
+                System.out.println("Output written to: " + outputFilePath);
+            }
+        }
+
+        logger.info("Dependency tree generation completed successfully");
+    }
+
+    /**
+     * Handle 'enrich' subcommand
+     */
+    private static void handleEnrich(String[] args) throws Exception {
+        if (args.length < 3) {
+            System.err.println("Usage: deptrast enrich <input-sbom> <output-sbom> [options]");
+            System.err.println();
+            System.err.println("Enriches an existing SBOM by adding dependency relationships.");
+            return;
+        }
+
+        // Delegate to create with SBOM input/output
+        String[] createArgs = new String[args.length];
+        createArgs[0] = "create";
+        System.arraycopy(args, 1, createArgs, 1, args.length - 1);
+        handleCreate(createArgs);
+    }
+
+    /**
+     * Handle 'print' subcommand
+     */
+    private static void handlePrint(String[] args) throws Exception {
+        if (args.length < 2) {
+            System.err.println("Usage: deptrast print <input-sbom> [options]");
+            System.err.println();
+            System.err.println("Options:");
+            System.err.println("  --output=tree|list|roots   Output format (default: tree)");
+            System.err.println("  --format=tree|maven        Tree visualization format (default: tree)");
+            System.err.println("  --project-name=NAME        Project name for tree output");
+            return;
+        }
+
+        String inputFilePath = args[1];
+        String outputFormat = "tree"; // tree, list, roots
+        String treeFormat = "tree";   // tree or maven
+        String projectName = "project";
+
+        // Parse additional arguments
+        for (int i = 2; i < args.length; i++) {
+            String arg = args[i];
+
+            if (arg.startsWith("--output=")) {
+                outputFormat = arg.substring(9).toLowerCase();
+            } else if (arg.startsWith("--format=")) {
+                treeFormat = arg.substring(9).toLowerCase();
+            } else if (arg.startsWith("--project-name=")) {
+                projectName = arg.substring(15);
+            } else {
+                System.err.println("Unknown argument: " + arg + ". Ignoring.");
+            }
+        }
+
+        // Delegate to create with stdout output
+        // Use existing dependency graph from SBOM by default (fast mode)
+        List<String> createArgs = new ArrayList<>();
+        createArgs.add("create");
+        createArgs.add(inputFilePath);
+        createArgs.add("-"); // stdout
+        createArgs.add("--output=" + outputFormat);
+        if ("tree".equals(outputFormat)) {
+            createArgs.add("--format=" + treeFormat);
+        }
+        createArgs.add("--project-name=" + projectName);
+        createArgs.add("--use-existing-deps"); // Fast mode: use existing dependency graph
+
+        handleCreate(createArgs.toArray(new String[0]));
+    }
+
+    /**
+     * Handle 'stats' subcommand
+     */
+    private static void handleStats(String[] args) throws Exception {
+        if (args.length < 2) {
+            System.err.println("Usage: deptrast stats <input-sbom>");
+            return;
+        }
+
+        String inputFilePath = args[1];
+
+        // Parse SBOM
+        List<Package> allPackages = FileParser.parseSbomFile(inputFilePath);
+
+        // Build dependency trees to get root count
+        graphBuilder = new DependencyGraphBuilder();
+        List<DependencyNode> dependencyTree = graphBuilder.buildDependencyTrees(allPackages);
+        Collection<Package> allTrackedPackages = graphBuilder.getAllReconciledPackages();
+
+        System.out.println("SBOM Statistics:");
+        System.out.println("  Total Packages: " + allTrackedPackages.size());
+        System.out.println("  Root Packages: " + dependencyTree.size());
+        System.out.println("  Transitive Packages: " + (allTrackedPackages.size() - dependencyTree.size()));
+    }
+
+    /**
+     * Normalize a purl by removing qualifiers (everything after ?)
+     */
+    private static String normalizePurl(String purl) {
+        int qualifierIndex = purl.indexOf('?');
+        if (qualifierIndex > 0) {
+            return purl.substring(0, qualifierIndex);
+        }
+        return purl;
+    }
+
+    /**
+     * Parse existing dependency graph from SBOM
+     */
+    private static List<DependencyNode> parseDependencyGraphFromSbom(String sbomContent, List<Package> allPackages) {
+        try {
+            JsonObject sbom = JsonParser.parseString(sbomContent).getAsJsonObject();
+
+            // Build a map of purl -> Package for quick lookup
+            Map<String, Package> purlToPackage = new HashMap<>();
+            for (Package pkg : allPackages) {
+                String purl = normalizePurl(buildPurl(pkg));
+                purlToPackage.put(purl, pkg);
+            }
+
+            // Build a map of bom-ref -> Package
+            Map<String, Package> bomRefToPackage = new HashMap<>();
+            if (sbom.has("components")) {
+                JsonArray components = sbom.getAsJsonArray("components");
+                for (JsonElement elem : components) {
+                    JsonObject component = elem.getAsJsonObject();
+                    if (component.has("bom-ref") && component.has("purl")) {
+                        String bomRef = component.get("bom-ref").getAsString();
+                        String purl = normalizePurl(component.get("purl").getAsString());
+                        Package pkg = purlToPackage.get(purl);
+                        if (pkg != null) {
+                            bomRefToPackage.put(bomRef, pkg);
+                        }
+                    }
                 }
             }
 
-            logger.info("Dependency tree generation completed successfully");
+            // Parse dependencies array
+            Map<String, List<String>> depGraph = new HashMap<>();
+            if (sbom.has("dependencies")) {
+                JsonArray dependencies = sbom.getAsJsonArray("dependencies");
+                for (JsonElement elem : dependencies) {
+                    JsonObject dep = elem.getAsJsonObject();
+                    if (dep.has("ref")) {
+                        String ref = dep.get("ref").getAsString();
+                        List<String> deps = new ArrayList<>();
+                        if (dep.has("dependsOn")) {
+                            JsonArray dependsOn = dep.getAsJsonArray("dependsOn");
+                            for (JsonElement depElem : dependsOn) {
+                                deps.add(depElem.getAsString());
+                            }
+                        }
+                        depGraph.put(ref, deps);
+                    }
+                }
+            }
 
-            cleanupResources();
+            // Build DependencyNode tree structure
+            // Find root nodes (nodes that are not dependencies of any other node)
+            Set<String> allRefs = new HashSet<>(depGraph.keySet());
+            Set<String> nonRootRefs = new HashSet<>();
+            for (List<String> deps : depGraph.values()) {
+                nonRootRefs.addAll(deps);
+            }
+            Set<String> rootRefs = new HashSet<>(allRefs);
+            rootRefs.removeAll(nonRootRefs);
+
+            // Build tree from roots
+            List<DependencyNode> trees = new ArrayList<>();
+            Map<String, DependencyNode> refToNode = new HashMap<>();
+
+            for (String rootRef : rootRefs) {
+                Package pkg = bomRefToPackage.get(rootRef);
+                if (pkg != null) {
+                    DependencyNode rootNode = buildDependencyNode(rootRef, depGraph, bomRefToPackage, refToNode, 0);
+                    if (rootNode != null) {
+                        trees.add(rootNode);
+                    }
+                }
+            }
+
+            return trees;
+
         } catch (Exception e) {
-            logger.error("Error generating dependency tree: {}", e.getMessage(), e);
-            System.err.println("Error generating dependency tree: " + e.getMessage());
-            e.printStackTrace();
-        } finally {
-            cleanupResources();
+            logger.error("Error parsing dependency graph from SBOM: {}", e.getMessage(), e);
+            return new ArrayList<>();
         }
+    }
+
+    /**
+     * Recursively build DependencyNode from SBOM dependency graph
+     */
+    private static DependencyNode buildDependencyNode(String ref,
+                                                       Map<String, List<String>> depGraph,
+                                                       Map<String, Package> bomRefToPackage,
+                                                       Map<String, DependencyNode> refToNode,
+                                                       int depth) {
+        // Check if already built (handle cycles)
+        if (refToNode.containsKey(ref)) {
+            return refToNode.get(ref);
+        }
+
+        Package pkg = bomRefToPackage.get(ref);
+        if (pkg == null) {
+            return null;
+        }
+
+        DependencyNode node = new DependencyNode(pkg, depth, false);
+        refToNode.put(ref, node);
+
+        // Add children
+        List<String> childRefs = depGraph.get(ref);
+        if (childRefs != null) {
+            for (String childRef : childRefs) {
+                DependencyNode childNode = buildDependencyNode(childRef, depGraph, bomRefToPackage, refToNode, depth + 1);
+                if (childNode != null) {
+                    node.addChild(childNode);
+                }
+            }
+        }
+
+        return node;
+    }
+
+    /**
+     * Extract package name without version from a purl
+     */
+    private static String getPackageNameFromPurl(String purl) {
+        // Remove qualifiers first
+        String normalized = normalizePurl(purl);
+        // Remove version (everything after last @)
+        int versionIndex = normalized.lastIndexOf('@');
+        if (versionIndex > 0) {
+            return normalized.substring(0, versionIndex);
+        }
+        return normalized;
+    }
+
+    /**
+     * Handle 'compare' subcommand
+     */
+    private static void handleCompare(String[] args) throws Exception {
+        if (args.length < 3) {
+            System.err.println("Usage: deptrast compare <sbom1> <sbom2>");
+            System.err.println();
+            System.err.println("Compares two SBOMs and shows differences.");
+            return;
+        }
+
+        String sbom1Path = args[1];
+        String sbom2Path = args[2];
+
+        List<Package> packages1 = FileParser.parseSbomFile(sbom1Path);
+        List<Package> packages2 = FileParser.parseSbomFile(sbom2Path);
+
+        // Build maps for comparison
+        Map<String, String> purls1Map = packages1.stream()
+            .collect(Collectors.toMap(
+                pkg -> normalizePurl(buildPurl(pkg)),
+                pkg -> normalizePurl(buildPurl(pkg))
+            ));
+        Map<String, String> purls2Map = packages2.stream()
+            .collect(Collectors.toMap(
+                pkg -> normalizePurl(buildPurl(pkg)),
+                pkg -> normalizePurl(buildPurl(pkg))
+            ));
+
+        // Build package name -> full purl maps for version comparison
+        Map<String, String> packageNames1 = new HashMap<>();
+        Map<String, String> packageNames2 = new HashMap<>();
+
+        for (String purl : purls1Map.values()) {
+            packageNames1.put(getPackageNameFromPurl(purl), purl);
+        }
+        for (String purl : purls2Map.values()) {
+            packageNames2.put(getPackageNameFromPurl(purl), purl);
+        }
+
+        Set<String> purls1 = new HashSet<>(purls1Map.values());
+        Set<String> purls2 = new HashSet<>(purls2Map.values());
+
+        // Find exact matches
+        Set<String> inBoth = new HashSet<>(purls1);
+        inBoth.retainAll(purls2);
+
+        // Find packages only in one or the other
+        Set<String> onlyIn1 = new HashSet<>(purls1);
+        onlyIn1.removeAll(purls2);
+
+        Set<String> onlyIn2 = new HashSet<>(purls2);
+        onlyIn2.removeAll(purls1);
+
+        // Find version differences (same package name, different version)
+        Map<String, String[]> versionDiffs = new HashMap<>();
+        Set<String> processedNames = new HashSet<>();
+
+        for (String purl1 : onlyIn1) {
+            String packageName = getPackageNameFromPurl(purl1);
+            if (packageNames2.containsKey(packageName)) {
+                String purl2 = packageNames2.get(packageName);
+                versionDiffs.put(packageName, new String[]{purl1, purl2});
+                processedNames.add(packageName);
+            }
+        }
+
+        // Remove version diffs from the "only in" sets
+        onlyIn1.removeIf(purl -> processedNames.contains(getPackageNameFromPurl(purl)));
+        onlyIn2.removeIf(purl -> processedNames.contains(getPackageNameFromPurl(purl)));
+
+        System.out.println("SBOM Comparison:");
+        System.out.println("  " + sbom1Path + ": " + packages1.size() + " components");
+        System.out.println("  " + sbom2Path + ": " + packages2.size() + " components");
+        System.out.println();
+        System.out.println("  Same version: " + inBoth.size());
+        System.out.println("  Version differences: " + versionDiffs.size());
+        System.out.println("  Only in " + sbom1Path + ": " + onlyIn1.size());
+        System.out.println("  Only in " + sbom2Path + ": " + onlyIn2.size());
+
+        if (!versionDiffs.isEmpty()) {
+            System.out.println();
+            System.out.println("Version differences:");
+            versionDiffs.entrySet().stream()
+                .limit(10)
+                .forEach(entry -> {
+                    String[] purls = entry.getValue();
+                    System.out.println("  - " + entry.getKey());
+                    System.out.println("    " + sbom1Path + ": " + purls[0].substring(purls[0].lastIndexOf('@') + 1));
+                    System.out.println("    " + sbom2Path + ": " + purls[1].substring(purls[1].lastIndexOf('@') + 1));
+                });
+            if (versionDiffs.size() > 10) {
+                System.out.println("  ... and " + (versionDiffs.size() - 10) + " more");
+            }
+        }
+
+        if (!onlyIn1.isEmpty()) {
+            System.out.println();
+            System.out.println("Components only in " + sbom1Path + ":");
+            onlyIn1.stream().limit(10).forEach(purl -> System.out.println("  - " + purl));
+            if (onlyIn1.size() > 10) {
+                System.out.println("  ... and " + (onlyIn1.size() - 10) + " more");
+            }
+        }
+
+        if (!onlyIn2.isEmpty()) {
+            System.out.println();
+            System.out.println("Components only in " + sbom2Path + ":");
+            onlyIn2.stream().limit(10).forEach(purl -> System.out.println("  - " + purl));
+            if (onlyIn2.size() > 10) {
+                System.out.println("  ... and " + (onlyIn2.size() - 10) + " more");
+            }
+        }
+    }
+
+    /**
+     * Handle 'validate' subcommand
+     */
+    private static void handleValidate(String[] args) throws Exception {
+        if (args.length < 2) {
+            System.err.println("Usage: deptrast validate <input-sbom>");
+            return;
+        }
+
+        String inputFilePath = args[1];
+
+        // Read and parse SBOM
+        String content = new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get(inputFilePath)));
+        JsonObject sbom = JsonParser.parseString(content).getAsJsonObject();
+
+        boolean valid = true;
+        List<String> errors = new ArrayList<>();
+        List<String> warnings = new ArrayList<>();
+        List<String> checks = new ArrayList<>();
+
+        // Check required fields
+        if (!sbom.has("bomFormat")) {
+            errors.add("Missing required field: bomFormat");
+            valid = false;
+        } else {
+            checks.add("bomFormat: " + sbom.get("bomFormat").getAsString());
+        }
+
+        if (!sbom.has("specVersion")) {
+            errors.add("Missing required field: specVersion");
+            valid = false;
+        } else {
+            checks.add("specVersion: " + sbom.get("specVersion").getAsString());
+        }
+
+        if (!sbom.has("components")) {
+            errors.add("Missing required field: components");
+            valid = false;
+        }
+
+        // Check optional metadata
+        if (sbom.has("metadata")) {
+            JsonObject metadata = sbom.getAsJsonObject("metadata");
+            if (metadata.has("timestamp")) {
+                checks.add("metadata.timestamp: " + metadata.get("timestamp").getAsString());
+            }
+            if (metadata.has("tools")) {
+                checks.add("metadata.tools: present");
+            }
+        }
+
+        // Check serialNumber
+        if (sbom.has("serialNumber")) {
+            checks.add("serialNumber: present (URN format)");
+        }
+
+        // Check components
+        int componentCount = 0;
+        int withPurl = 0;
+        int withBomRef = 0;
+        int withVersion = 0;
+
+        if (sbom.has("components")) {
+            JsonArray components = sbom.getAsJsonArray("components");
+            componentCount = components.size();
+
+            for (JsonElement elem : components) {
+                JsonObject component = elem.getAsJsonObject();
+                if (component.has("purl") && !component.get("purl").isJsonNull()) {
+                    withPurl++;
+                }
+                if (component.has("bom-ref") && !component.get("bom-ref").isJsonNull()) {
+                    withBomRef++;
+                }
+                if (component.has("version") && !component.get("version").isJsonNull()) {
+                    withVersion++;
+                }
+            }
+
+            checks.add("components: " + componentCount + " total");
+            checks.add("components with PURL: " + withPurl + " (" +
+                      (componentCount > 0 ? (withPurl * 100 / componentCount) : 0) + "%)");
+            checks.add("components with bom-ref: " + withBomRef + " (" +
+                      (componentCount > 0 ? (withBomRef * 100 / componentCount) : 0) + "%)");
+            checks.add("components with version: " + withVersion + " (" +
+                      (componentCount > 0 ? (withVersion * 100 / componentCount) : 0) + "%)");
+
+            int missingPurl = componentCount - withPurl;
+            int missingBomRef = componentCount - withBomRef;
+
+            if (missingPurl > 0) {
+                warnings.add(missingPurl + " component(s) missing PURL");
+            }
+            if (missingBomRef > 0) {
+                warnings.add(missingBomRef + " component(s) missing bom-ref");
+            }
+        }
+
+        // Check dependencies
+        int depCount = 0;
+        int depsWithDependsOn = 0;
+
+        if (!sbom.has("dependencies")) {
+            warnings.add("No dependencies array (SBOM lacks dependency graph)");
+        } else {
+            JsonArray dependencies = sbom.getAsJsonArray("dependencies");
+            depCount = dependencies.size();
+
+            for (JsonElement elem : dependencies) {
+                JsonObject dep = elem.getAsJsonObject();
+                if (dep.has("dependsOn") && dep.getAsJsonArray("dependsOn").size() > 0) {
+                    depsWithDependsOn++;
+                }
+            }
+
+            checks.add("dependencies: " + depCount + " entries");
+            checks.add("dependencies with dependsOn: " + depsWithDependsOn);
+
+            if (depCount == 0) {
+                warnings.add("Dependencies array is empty");
+            }
+        }
+
+        // Print results
+        System.out.println("SBOM Validation Results:");
+        System.out.println("  File: " + inputFilePath);
+        System.out.println();
+
+        // Show what was checked
+        System.out.println("Validation Checks:");
+        for (String check : checks) {
+            System.out.println("  ✓ " + check);
+        }
+
+        if (!errors.isEmpty() || !warnings.isEmpty()) {
+            if (!errors.isEmpty()) {
+                System.out.println();
+                System.out.println("Errors:");
+                errors.forEach(err -> System.out.println("  ✗ " + err));
+            }
+            if (!warnings.isEmpty()) {
+                System.out.println();
+                System.out.println("Warnings:");
+                warnings.forEach(warn -> System.out.println("  ⚠ " + warn));
+            }
+        }
+
+        System.out.println();
+        if (valid && warnings.isEmpty()) {
+            System.out.println("Result: ✓ Valid CycloneDX SBOM with no issues");
+        } else if (valid) {
+            System.out.println("Result: ✓ Valid CycloneDX SBOM with " + warnings.size() + " warning(s)");
+        } else {
+            System.out.println("Result: ✗ Invalid SBOM - " + errors.size() + " error(s)");
+        }
+
+        if (!valid) {
+            return;
+        }
+    }
+
+    /**
+     * Generate simple list output format
+     */
+    private static String generateListOutput(Collection<Package> packages) {
+        StringBuilder output = new StringBuilder();
+        for (Package pkg : packages) {
+            output.append(pkg.getFullName()).append(NEW_LINE);
+        }
+        return output.toString();
+    }
+
+    /**
+     * Generate tree output format
+     */
+    private static String generateTreeOutput(List<DependencyNode> dependencyTree,
+                                             Collection<Package> allTrackedPackages,
+                                             String projectName) {
+        StringBuilder output = new StringBuilder();
+        output.append("Dependency Tree:").append(NEW_LINE).append(NEW_LINE);
+
+        // Add project root node for tree format
+        DependencyNode projectRootNode = new DependencyNode(
+            new Package("project", projectName, "1.0.0"), 0, false);
+        for (DependencyNode node : new ArrayList<>(dependencyTree)) {
+            projectRootNode.addChild(node);
+        }
+
+        output.append(projectRootNode.getTreeRepresentation());
+        output.append(NEW_LINE).append("Dependency Statistics:").append(NEW_LINE);
+        output.append("  Total Packages: ").append(allTrackedPackages.size()).append(NEW_LINE);
+        output.append("  Root Packages: ").append(dependencyTree.size()).append(NEW_LINE);
+
+        return output.toString();
     }
 
     /**
      * Print usage information
      */
     private static void printUsage() {
-        System.out.println("Usage: deptrast <input-file> <output-file> [options]");
+        System.out.println("Usage: deptrast <subcommand> [args...] [options]");
         System.out.println();
-        System.out.println("Required:");
-        System.out.println("  <input-file>              Input file path");
-        System.out.println("  <output-file>             Output file path (use \"-\" for stdout)");
+        System.out.println("Subcommands:");
+        System.out.println("  create <input> <output>   Create SBOM or other formats from source files");
+        System.out.println("  enrich <sbom> <output>    Add dependency graph to existing SBOM");
+        System.out.println("  print <sbom>              Display SBOM in different formats");
+        System.out.println("  stats <sbom>              Show statistics about SBOM");
+        System.out.println("  compare <sbom1> <sbom2>   Compare two SBOMs");
+        System.out.println("  validate <sbom>           Validate SBOM structure");
+        System.out.println("  help                      Show this help message");
         System.out.println();
-        System.out.println("Input Options:");
-        System.out.println("  --iformat=<format>        Input format (default: auto)");
-        System.out.println("                            auto, flat, pom, gradle, pypi, sbom");
-        System.out.println("  --itype=<type>            Input type (default: smart)");
-        System.out.println("                            all     - All dependencies (find roots)");
-        System.out.println("                            roots   - Root dependencies (fetch transitive)");
-        System.out.println();
-        System.out.println("Output Options:");
-        System.out.println("  --oformat=<format>        Output format (default: sbom)");
-        System.out.println("                            tree, maven, sbom");
-        System.out.println("  --otype=<type>            Output type (default: all)");
-        System.out.println("                            all     - All packages (roots + transitive)");
-        System.out.println("                            roots   - Root packages only");
-        System.out.println("  --project-name=<name>     Project name for root node (tree/maven)");
-        System.out.println();
-        System.out.println("Other:");
+        System.out.println("Create Options:");
+        System.out.println("  --input=roots|list        Input type (default: auto-detected)");
+        System.out.println("                            roots - Root packages (fetch transitives)");
+        System.out.println("                            list  - Complete flat list (find roots)");
+        System.out.println("  --output=sbom|roots|tree|list  Output format (default: sbom)");
+        System.out.println("                            sbom  - Full CycloneDX SBOM (JSON)");
+        System.out.println("                            roots - SBOM with only root packages");
+        System.out.println("                            tree  - Tree visualization (text)");
+        System.out.println("                            list  - Flat list (one per line)");
+        System.out.println("  --format=tree|maven       Tree format (default: tree)");
+        System.out.println("  --project-name=<name>     Project name for tree output");
         System.out.println("  --verbose, -v             Verbose logging");
-        System.out.println("  --loglevel=<level>        Set log level (TRACE, DEBUG, INFO, WARN, ERROR)");
+        System.out.println("  --loglevel=<level>        Log level (TRACE, DEBUG, INFO, WARN, ERROR)");
         System.out.println();
         System.out.println("Examples:");
-        System.out.println("  deptrast libraries.txt -");
-        System.out.println("  deptrast libraries.txt output.sbom --oformat=sbom");
-        System.out.println("  deptrast pom.xml - --iformat=pom --itype=roots");
-        System.out.println("  deptrast pom.xml output.json --loglevel=INFO");
+        System.out.println("  # Create SBOM from pom.xml");
+        System.out.println("  deptrast create pom.xml output.sbom");
+        System.out.println();
+        System.out.println("  # Create flat list from pom.xml");
+        System.out.println("  deptrast create pom.xml output.txt --output=list");
+        System.out.println();
+        System.out.println("  # Create tree visualization from flat list");
+        System.out.println("  deptrast create libraries.txt - --output=tree");
+        System.out.println();
+        System.out.println("  # Enrich existing SBOM with dependency graph");
+        System.out.println("  deptrast enrich input.sbom output.sbom");
+        System.out.println();
+        System.out.println("  # Print SBOM as tree");
+        System.out.println("  deptrast print input.sbom --output=tree");
+        System.out.println();
+        System.out.println("  # Compare two SBOMs");
+        System.out.println("  deptrast compare sbom1.json sbom2.json");
+        System.out.println();
+        System.out.println("  # Validate SBOM structure");
+        System.out.println("  deptrast validate input.sbom");
     }
 
     private static void setLogLevel(String level) {
@@ -343,96 +980,6 @@ public class DependencyTreeGenerator {
             case "sbom":
             default:
                 return "all";
-        }
-    }
-
-    /**
-     * Validate input format
-     */
-    private static boolean isValidInputFormat(String format) {
-        return "auto".equals(format) || "flat".equals(format) || "pom".equals(format) ||
-               "gradle".equals(format) || "pypi".equals(format) || "sbom".equals(format);
-    }
-
-    /**
-     * Validate input type
-     */
-    private static boolean isValidInputType(String type) {
-        return "all".equals(type) || "roots".equals(type) || "smart".equals(type);
-    }
-
-    /**
-     * Validate output format
-     */
-    private static boolean isValidOutputFormat(String format) {
-        return "tree".equals(format) || "maven".equals(format) || "sbom".equals(format);
-    }
-
-    /**
-     * Validate output type
-     */
-    private static boolean isValidOutputType(String type) {
-        return "all".equals(type) || "roots".equals(type);
-    }
-
-    /**
-     * Generate output based on format
-     */
-    private static String generateOutput(List<DependencyNode> dependencyTree,
-                                         Collection<Package> allTrackedPackages,
-                                         String outputFormat,
-                                         String outputType,
-                                         String projectName,
-                                         String originalSbomContent) {
-        StringBuilder output = new StringBuilder();
-        int rootCount = dependencyTree.size();
-
-        // Filter packages based on output type
-        Collection<Package> packagesToOutput;
-        if ("roots".equals(outputType)) {
-            // Only output root packages (no transitive dependencies)
-            packagesToOutput = new ArrayList<>();
-            for (DependencyNode rootNode : dependencyTree) {
-                packagesToOutput.add(rootNode.getPackage());
-            }
-            logger.info("Output type is 'roots': outputting {} root packages only", packagesToOutput.size());
-        } else {
-            // Output all packages
-            packagesToOutput = allTrackedPackages;
-        }
-
-        if ("sbom".equals(outputFormat)) {
-            // Generate SBOM JSON
-            // If we have original SBOM content, enhance it instead of creating new
-            if (originalSbomContent != null) {
-                return enhanceSbomWithDependencies(originalSbomContent, packagesToOutput, dependencyTree);
-            } else {
-                return generateSbomString(packagesToOutput, dependencyTree);
-            }
-        } else if ("maven".equals(outputFormat)) {
-            // Generate Maven dependency:tree format
-            return MavenDependencyTreeFormatter.formatMavenDependencyTree(projectName, dependencyTree);
-        } else {
-            // Generate tree format (default)
-            output.append("Identified ").append(rootCount).append(" root dependencies:").append(NEW_LINE);
-            for (DependencyNode rootNode : dependencyTree) {
-                output.append("  ").append(rootNode.getPackage().getFullName()).append(NEW_LINE);
-            }
-            output.append(NEW_LINE).append("Dependency Tree:").append(NEW_LINE).append(NEW_LINE);
-
-            // Add project root node for tree format
-            DependencyNode projectRootNode = new DependencyNode(
-                new Package("project", projectName, "1.0.0"), 0, false);
-            for (DependencyNode node : new ArrayList<>(dependencyTree)) {
-                projectRootNode.addChild(node);
-            }
-
-            output.append(projectRootNode.getTreeRepresentation());
-            output.append(NEW_LINE).append("Dependency Statistics:").append(NEW_LINE);
-            output.append("  Total Packages: ").append(allTrackedPackages.size()).append(NEW_LINE);
-            output.append("  Root Packages: ").append(rootCount).append(NEW_LINE);
-
-            return output.toString();
         }
     }
 

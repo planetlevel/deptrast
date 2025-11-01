@@ -102,7 +102,7 @@ public class DependencyGraphBuilder implements AutoCloseable {
         }
 
         if (skippedCount > 0) {
-            logger.warn("⚡ Optimization: Skipped {} packages already found in other trees ({} fewer API calls)",
+            logger.info("⚡ Optimization: Skipped {} packages already found in other trees ({} fewer API calls)",
                 skippedCount, skippedCount);
         }
 

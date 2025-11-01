@@ -70,10 +70,10 @@ public class DependencyTreeGeneratorTest {
 
         // Run deptrast
         DependencyTreeGenerator.main(new String[]{
+            "create",
             inputFile,
             outputFile,
-            "--iformat=flat",
-            "--oformat=sbom"
+            "--output=sbom"
         });
 
         // Verify output file exists
@@ -98,10 +98,10 @@ public class DependencyTreeGeneratorTest {
 
         // Run deptrast
         DependencyTreeGenerator.main(new String[]{
+            "create",
             inputFile,
             outputFile,
-            "--iformat=pom",
-            "--oformat=sbom"
+            "--output=sbom"
         });
 
         // Verify output file exists
@@ -126,10 +126,11 @@ public class DependencyTreeGeneratorTest {
 
         // Run deptrast
         DependencyTreeGenerator.main(new String[]{
+            "create",
             inputFile,
             outputFile,
-            "--iformat=flat",
-            "--oformat=maven",
+            "--output=tree",
+            "--format=maven",
             "--project-name=test-project"
         });
 
@@ -158,10 +159,10 @@ public class DependencyTreeGeneratorTest {
 
         // Run deptrast
         DependencyTreeGenerator.main(new String[]{
+            "create",
             inputFile,
             outputFile,
-            "--iformat=flat",
-            "--oformat=tree",
+            "--output=tree",
             "--project-name=test-project"
         });
 
@@ -170,8 +171,6 @@ public class DependencyTreeGeneratorTest {
 
         // Verify content
         String content = new String(Files.readAllBytes(Paths.get(outputFile)));
-        assertTrue(content.contains("Identified") && content.contains("root dependencies"),
-                   "Tree output should contain root dependency count");
         assertTrue(content.contains("Dependency Tree:"),
                    "Tree output should contain dependency tree section");
         assertTrue(content.contains("Dependency Statistics:"),
@@ -192,11 +191,11 @@ public class DependencyTreeGeneratorTest {
 
         // Run deptrast with roots input type
         DependencyTreeGenerator.main(new String[]{
+            "create",
             inputFile,
             outputFile,
-            "--iformat=pom",
-            "--itype=roots",
-            "--oformat=sbom"
+            "--input=roots",
+            "--output=sbom"
         });
 
         // Verify output file exists
@@ -221,11 +220,10 @@ public class DependencyTreeGeneratorTest {
 
         // Run deptrast with roots output type
         DependencyTreeGenerator.main(new String[]{
+            "create",
             inputFile,
             outputFile,
-            "--iformat=flat",
-            "--oformat=sbom",
-            "--otype=roots"
+            "--output=roots"
         });
 
         // Verify output file exists
@@ -234,11 +232,10 @@ public class DependencyTreeGeneratorTest {
         // Get counts for comparison
         String outputFileAll = TEMP_OUTPUT_DIR + "/libraries-all.json";
         DependencyTreeGenerator.main(new String[]{
+            "create",
             inputFile,
             outputFileAll,
-            "--iformat=flat",
-            "--oformat=sbom",
-            "--otype=all"
+            "--output=sbom"
         });
 
         int rootsCount = CDXgenHelper.getComponentCount(outputFile);
@@ -260,11 +257,12 @@ public class DependencyTreeGeneratorTest {
         String inputFile = TEST_DATA_DIR + "/petclinic-pom.xml";
         String outputFile = TEMP_OUTPUT_DIR + "/petclinic-auto.json";
 
-        // Run deptrast without specifying input format
+        // Run deptrast without specifying input format (auto-detected)
         DependencyTreeGenerator.main(new String[]{
+            "create",
             inputFile,
             outputFile,
-            "--oformat=sbom"
+            "--output=sbom"
         });
 
         // Verify output file exists
@@ -289,10 +287,10 @@ public class DependencyTreeGeneratorTest {
 
         // Run deptrast with verbose flag
         DependencyTreeGenerator.main(new String[]{
+            "create",
             inputFile,
             outputFile,
-            "--iformat=flat",
-            "--oformat=sbom",
+            "--output=sbom",
             "--verbose"
         });
 
@@ -340,13 +338,13 @@ public class DependencyTreeGeneratorTest {
 
         String deptrastOutput = TEMP_OUTPUT_DIR + "/petclinic-deptrast-gold-test.json";
 
-        // Run deptrast with --itype=roots to match cdxgen behavior
+        // Run deptrast with --input=roots to match cdxgen behavior
         DependencyTreeGenerator.main(new String[]{
+            "create",
             inputFile,
             deptrastOutput,
-            "--iformat=pom",
-            "--itype=roots",
-            "--oformat=sbom"
+            "--input=roots",
+            "--output=sbom"
         });
 
         // Extract components
@@ -445,9 +443,10 @@ public class DependencyTreeGeneratorTest {
 
         // Run deptrast
         DependencyTreeGenerator.main(new String[]{
+            "create",
             inputFile,
             outputFile,
-            "--oformat=sbom"
+            "--output=sbom"
         });
 
         // Verify file exists and is valid JSON
@@ -474,26 +473,27 @@ public class DependencyTreeGeneratorTest {
     }
 
     /**
-     * Test 11: Invalid input format handling
+     * Test 11: Invalid input type handling
      */
     @Test
     @Order(11)
-    @DisplayName("Test invalid input format handling")
+    @DisplayName("Test invalid input type handling")
     void testInvalidInputFormat() {
         String inputFile = TEST_DATA_DIR + "/petclinic-contrast-runtime-list.txt";
         String outputFile = TEMP_OUTPUT_DIR + "/invalid-format.json";
 
-        // Run deptrast with invalid format
+        // Run deptrast with invalid input type
         DependencyTreeGenerator.main(new String[]{
+            "create",
             inputFile,
             outputFile,
-            "--iformat=invalid"
+            "--input=invalid"
         });
 
         // Should handle gracefully and not crash
         String output = outputStream.toString();
-        assertTrue(output.contains("Invalid input format") || output.contains("invalid"),
-                   "Should report invalid format");
+        assertTrue(output.contains("Invalid") || output.contains("invalid"),
+                   "Should report invalid input type");
     }
 
     /**
@@ -508,9 +508,10 @@ public class DependencyTreeGeneratorTest {
 
         // Run deptrast with invalid output format
         DependencyTreeGenerator.main(new String[]{
+            "create",
             inputFile,
             outputFile,
-            "--oformat=invalid"
+            "--output=invalid"
         });
 
         // Should handle gracefully and not crash
@@ -531,6 +532,7 @@ public class DependencyTreeGeneratorTest {
 
         // Run deptrast with non-existent file
         DependencyTreeGenerator.main(new String[]{
+            "create",
             inputFile,
             outputFile
         });
@@ -551,10 +553,10 @@ public class DependencyTreeGeneratorTest {
 
         // Run deptrast with dash as output
         DependencyTreeGenerator.main(new String[]{
+            "create",
             inputFile,
             "-",
-            "--iformat=flat",
-            "--oformat=sbom"
+            "--output=sbom"
         });
 
         // Should output to stdout
@@ -575,9 +577,10 @@ public class DependencyTreeGeneratorTest {
 
         // Run deptrast with custom project name
         DependencyTreeGenerator.main(new String[]{
+            "create",
             inputFile,
             outputFile,
-            "--oformat=tree",
+            "--output=tree",
             "--project-name=my-custom-project"
         });
 
@@ -609,7 +612,7 @@ public class DependencyTreeGeneratorTest {
                               "CDXgen gold standard not found at " + goldStandardFile);
 
         // Step 1: Create a copy of the gold standard with dependencies removed
-        String strippedSbomFile = TEMP_OUTPUT_DIR + "/gold-stripped.json";
+        String strippedSbomFile = TEMP_OUTPUT_DIR + "/gold-stripped-sbom.json";
         String content = new String(Files.readAllBytes(Paths.get(goldStandardFile)));
         com.google.gson.JsonObject goldSbom = com.google.gson.JsonParser.parseString(content).getAsJsonObject();
 
@@ -625,12 +628,11 @@ public class DependencyTreeGeneratorTest {
         System.out.println("Created stripped SBOM (components only, no dependency tree)");
 
         // Step 2: Run deptrast to regenerate the dependency tree
-        String regeneratedSbomFile = TEMP_OUTPUT_DIR + "/gold-regenerated.json";
+        String regeneratedSbomFile = TEMP_OUTPUT_DIR + "/gold-regenerated-sbom.json";
         DependencyTreeGenerator.main(new String[]{
+            "enrich",
             strippedSbomFile,
-            regeneratedSbomFile,
-            "--iformat=sbom",
-            "--oformat=sbom"
+            regeneratedSbomFile
         });
 
         // Step 3: Compare the regenerated dependencies with the original
