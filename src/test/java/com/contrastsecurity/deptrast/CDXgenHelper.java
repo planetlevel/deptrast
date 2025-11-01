@@ -182,4 +182,94 @@ public class CDXgenHelper {
         JsonArray componentsArray = sbom.getAsJsonArray("components");
         return componentsArray != null ? componentsArray.size() : 0;
     }
+
+    /**
+     * Get count of dependencies from SBOM file
+     */
+    public static int getDependencyCount(String sbomFilePath) throws IOException {
+        String content = new String(Files.readAllBytes(Paths.get(sbomFilePath)));
+        JsonObject sbom = JsonParser.parseString(content).getAsJsonObject();
+
+        JsonArray dependenciesArray = sbom.getAsJsonArray("dependencies");
+        return dependenciesArray != null ? dependenciesArray.size() : 0;
+    }
+
+    /**
+     * Validation result for an SBOM
+     */
+    public static class ValidationResult {
+        public boolean valid;
+        public int componentCount;
+        public int dependencyCount;
+        public int componentsWithPurl;
+        public int componentsWithBomRef;
+        public String errorMessage;
+
+        public ValidationResult(boolean valid, int componentCount, int dependencyCount,
+                              int componentsWithPurl, int componentsWithBomRef) {
+            this.valid = valid;
+            this.componentCount = componentCount;
+            this.dependencyCount = dependencyCount;
+            this.componentsWithPurl = componentsWithPurl;
+            this.componentsWithBomRef = componentsWithBomRef;
+        }
+
+        public ValidationResult(String errorMessage) {
+            this.valid = false;
+            this.errorMessage = errorMessage;
+        }
+    }
+
+    /**
+     * Validate SBOM structure and return validation result
+     */
+    public static ValidationResult validateSbom(String sbomFilePath) throws IOException {
+        String content = new String(Files.readAllBytes(Paths.get(sbomFilePath)));
+        JsonObject sbom = JsonParser.parseString(content).getAsJsonObject();
+
+        // Check required fields
+        if (!sbom.has("bomFormat")) {
+            return new ValidationResult("Missing required field: bomFormat");
+        }
+        if (!sbom.has("specVersion")) {
+            return new ValidationResult("Missing required field: specVersion");
+        }
+        if (!sbom.has("components")) {
+            return new ValidationResult("Missing required field: components");
+        }
+
+        // Check bomFormat value
+        String bomFormat = sbom.get("bomFormat").getAsString();
+        if (!"CycloneDX".equals(bomFormat)) {
+            return new ValidationResult("Invalid bomFormat: " + bomFormat);
+        }
+
+        // Count components and their attributes
+        int componentCount = 0;
+        int withPurl = 0;
+        int withBomRef = 0;
+
+        JsonArray components = sbom.getAsJsonArray("components");
+        if (components != null) {
+            componentCount = components.size();
+            for (JsonElement elem : components) {
+                JsonObject component = elem.getAsJsonObject();
+                if (component.has("purl") && !component.get("purl").isJsonNull()) {
+                    withPurl++;
+                }
+                if (component.has("bom-ref") && !component.get("bom-ref").isJsonNull()) {
+                    withBomRef++;
+                }
+            }
+        }
+
+        // Count dependencies
+        int dependencyCount = 0;
+        if (sbom.has("dependencies")) {
+            JsonArray dependencies = sbom.getAsJsonArray("dependencies");
+            dependencyCount = dependencies != null ? dependencies.size() : 0;
+        }
+
+        return new ValidationResult(true, componentCount, dependencyCount, withPurl, withBomRef);
+    }
 }

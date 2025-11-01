@@ -79,11 +79,31 @@ public class DependencyTreeGeneratorTest {
         // Verify output file exists
         assertTrue(Files.exists(Paths.get(outputFile)), "Output file should be created");
 
-        // Verify it's valid JSON with components
-        int componentCount = CDXgenHelper.getComponentCount(outputFile);
-        assertTrue(componentCount > 0, "SBOM should contain components");
+        // Validate SBOM structure
+        CDXgenHelper.ValidationResult result = CDXgenHelper.validateSbom(outputFile);
+        assertTrue(result.valid, "SBOM should be valid: " + result.errorMessage);
 
-        System.out.println("Flat file test: Found " + componentCount + " components");
+        // Verify specific expected values (from petclinic-contrast-runtime-list.txt)
+        // This file has 117 declared components but resolves to 136 with transitives
+        assertEquals(136, result.componentCount,
+            "Expected 136 components from petclinic-contrast-runtime-list.txt");
+
+        // All components should have PURLs
+        assertEquals(136, result.componentsWithPurl,
+            "All components should have PURLs");
+
+        // All components should have bom-refs
+        assertEquals(136, result.componentsWithBomRef,
+            "All components should have bom-refs");
+
+        // Should have dependency relationships
+        assertTrue(result.dependencyCount > 0,
+            "SBOM should contain dependency graph");
+        assertEquals(136, result.dependencyCount,
+            "Should have dependency entries for all components");
+
+        System.out.println("Flat file test: " + result.componentCount + " components, " +
+                         result.dependencyCount + " dependencies - VALID");
     }
 
     /**
@@ -107,11 +127,29 @@ public class DependencyTreeGeneratorTest {
         // Verify output file exists
         assertTrue(Files.exists(Paths.get(outputFile)), "Output file should be created");
 
-        // Verify it's valid JSON with components
-        int componentCount = CDXgenHelper.getComponentCount(outputFile);
-        assertTrue(componentCount > 0, "SBOM should contain components");
+        // Validate SBOM structure
+        CDXgenHelper.ValidationResult result = CDXgenHelper.validateSbom(outputFile);
+        assertTrue(result.valid, "SBOM should be valid: " + result.errorMessage);
 
-        System.out.println("POM file test: Found " + componentCount + " components");
+        // Verify specific expected values (from petclinic-pom.xml)
+        // This POM resolves to 117 components with full transitive dependency resolution
+        assertEquals(117, result.componentCount,
+            "Expected 117 components from petclinic-pom.xml");
+
+        // All components should have PURLs
+        assertEquals(117, result.componentsWithPurl,
+            "All components should have PURLs");
+
+        // All components should have bom-refs
+        assertEquals(117, result.componentsWithBomRef,
+            "All components should have bom-refs");
+
+        // Should have dependency relationships
+        assertEquals(117, result.dependencyCount,
+            "Should have dependency entries for all components");
+
+        System.out.println("POM file test: " + result.componentCount + " components, " +
+                         result.dependencyCount + " dependencies - VALID");
     }
 
     /**
@@ -449,10 +487,14 @@ public class DependencyTreeGeneratorTest {
             "--output=sbom"
         });
 
-        // Verify file exists and is valid JSON
+        // Verify file exists
         assertTrue(Files.exists(Paths.get(outputFile)), "Output file should exist");
 
-        // Read and parse JSON
+        // Validate SBOM structure thoroughly
+        CDXgenHelper.ValidationResult result = CDXgenHelper.validateSbom(outputFile);
+        assertTrue(result.valid, "SBOM should be valid: " + result.errorMessage);
+
+        // Read and parse JSON for additional checks
         String content = new String(Files.readAllBytes(Paths.get(outputFile)));
         com.google.gson.JsonObject sbom = com.google.gson.JsonParser.parseString(content).getAsJsonObject();
 
@@ -462,14 +504,23 @@ public class DependencyTreeGeneratorTest {
         assertTrue(sbom.has("serialNumber"), "SBOM should have serialNumber");
         assertTrue(sbom.has("components"), "SBOM should have components");
         assertTrue(sbom.has("dependencies"), "SBOM should have dependencies");
+        assertTrue(sbom.has("metadata"), "SBOM should have metadata");
 
         assertEquals("CycloneDX", sbom.get("bomFormat").getAsString());
 
-        // Verify components array is not empty
-        com.google.gson.JsonArray components = sbom.getAsJsonArray("components");
-        assertTrue(components.size() > 0, "SBOM should contain components");
+        // Verify expected counts match
+        assertEquals(136, result.componentCount, "Should have 136 components");
+        assertEquals(136, result.componentsWithPurl, "All components should have PURLs");
+        assertEquals(136, result.componentsWithBomRef, "All components should have bom-refs");
+        assertEquals(136, result.dependencyCount, "Should have 136 dependency entries");
 
-        System.out.println("SBOM structure verification passed with " + components.size() + " components");
+        // Verify metadata has tool information
+        com.google.gson.JsonObject metadata = sbom.getAsJsonObject("metadata");
+        assertTrue(metadata.has("tools"), "Metadata should have tools information");
+        assertTrue(metadata.has("timestamp"), "Metadata should have timestamp");
+
+        System.out.println("SBOM structure verification passed: " + result.componentCount +
+                         " components, " + result.dependencyCount + " dependencies - VALID");
     }
 
     /**
@@ -635,7 +686,11 @@ public class DependencyTreeGeneratorTest {
             regeneratedSbomFile
         });
 
-        // Step 3: Compare the regenerated dependencies with the original
+        // Step 3: Validate the regenerated SBOM
+        CDXgenHelper.ValidationResult result = CDXgenHelper.validateSbom(regeneratedSbomFile);
+        assertTrue(result.valid, "Regenerated SBOM should be valid: " + result.errorMessage);
+
+        // Step 4: Compare with the original
         String regeneratedContent = new String(Files.readAllBytes(Paths.get(regeneratedSbomFile)));
         com.google.gson.JsonObject regeneratedSbom = com.google.gson.JsonParser.parseString(regeneratedContent).getAsJsonObject();
 
@@ -653,6 +708,17 @@ public class DependencyTreeGeneratorTest {
         // Verify we have dependencies in the regenerated SBOM
         assertTrue(regeneratedDepCount > 0, "Regenerated SBOM should contain dependencies");
 
+        // Verify component counts match
+        int originalComponentCount = CDXgenHelper.getComponentCount(goldStandardFile);
+        assertEquals(originalComponentCount, result.componentCount,
+            "Should preserve all components from original SBOM");
+
+        // All components should still have PURLs and bom-refs
+        assertEquals(result.componentCount, result.componentsWithPurl,
+            "All components should have PURLs");
+        assertEquals(result.componentCount, result.componentsWithBomRef,
+            "All components should have bom-refs");
+
         // Calculate match percentage (how many relationships were preserved)
         if (originalDepCount > 0) {
             double matchPercentage = (regeneratedDepCount * 100.0) / originalDepCount;
@@ -664,10 +730,6 @@ public class DependencyTreeGeneratorTest {
                       "Should regenerate at least 30% of dependency relationships");
         }
 
-        // Verify components are preserved
-        com.google.gson.JsonArray regeneratedComponents = regeneratedSbom.getAsJsonArray("components");
-        assertTrue(regeneratedComponents.size() > 0, "Should preserve components");
-
-        System.out.println("Dependency tree regeneration test passed");
+        System.out.println("Dependency tree regeneration test passed - SBOM VALID");
     }
 }
