@@ -892,6 +892,10 @@ public class DependencyTreeGenerator {
         System.out.println("                            list  - Flat list (one per line)");
         System.out.println("  --format=tree|maven       Tree format (default: tree)");
         System.out.println("  --project-name=<name>     Project name for tree output");
+        System.out.println("  --use-existing-deps       Use existing dependency graph from SBOM (fast)");
+        System.out.println("                            Skips API calls, ideal for format conversions");
+        System.out.println("  --rebuild-deps            Rebuild dependency graph from scratch (default)");
+        System.out.println("                            Makes API calls, ensures accuracy");
         System.out.println("  --verbose, -v             Verbose logging");
         System.out.println("  --loglevel=<level>        Log level (TRACE, DEBUG, INFO, WARN, ERROR)");
         System.out.println();
@@ -916,6 +920,9 @@ public class DependencyTreeGenerator {
         System.out.println();
         System.out.println("  # Validate SBOM structure");
         System.out.println("  deptrast validate input.sbom");
+        System.out.println();
+        System.out.println("  # Fast mode - Use existing dependency graph");
+        System.out.println("  deptrast create input.sbom output.json --use-existing-deps");
     }
 
     private static void setLogLevel(String level) {
