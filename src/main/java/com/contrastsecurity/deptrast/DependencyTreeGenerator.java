@@ -197,14 +197,12 @@ public class DependencyTreeGenerator {
                 break;
             case "sbom":
                 allPackages = FileParser.parseSbomFile(inputFilePath);
-                // If output is also SBOM, preserve original content
-                if ("sbom".equals(outputFormat) || "roots".equals(outputFormat)) {
-                    try {
-                        originalSbomContent = new String(java.nio.file.Files.readAllBytes(
-                            java.nio.file.Paths.get(inputFilePath)));
-                    } catch (IOException e) {
-                        logger.warn("Could not read original SBOM content: {}", e.getMessage());
-                    }
+                // Read original SBOM content for potential fast mode usage
+                try {
+                    originalSbomContent = new String(java.nio.file.Files.readAllBytes(
+                        java.nio.file.Paths.get(inputFilePath)));
+                } catch (IOException e) {
+                    logger.warn("Could not read original SBOM content: {}", e.getMessage());
                 }
                 break;
             case "pom":
@@ -348,6 +346,10 @@ public class DependencyTreeGenerator {
             System.err.println("  --output=tree|list|roots   Output format (default: tree)");
             System.err.println("  --format=tree|maven        Tree visualization format (default: tree)");
             System.err.println("  --project-name=NAME        Project name for tree output");
+            System.err.println("  --use-existing-deps        Use existing dependency graph (default, fast)");
+            System.err.println("  --rebuild-deps             Rebuild dependency graph from scratch");
+            System.err.println("  --verbose, -v              Verbose logging");
+            System.err.println("  --loglevel=LEVEL           Set log level (TRACE, DEBUG, INFO, WARN, ERROR)");
             return;
         }
 
@@ -355,6 +357,9 @@ public class DependencyTreeGenerator {
         String outputFormat = "tree"; // tree, list, roots
         String treeFormat = "tree";   // tree or maven
         String projectName = "project";
+        boolean useExistingDeps = true; // Default to fast mode for print
+        boolean verbose = false;
+        String logLevel = null;
 
         // Parse additional arguments
         for (int i = 2; i < args.length; i++) {
@@ -366,13 +371,20 @@ public class DependencyTreeGenerator {
                 treeFormat = arg.substring(9).toLowerCase();
             } else if (arg.startsWith("--project-name=")) {
                 projectName = arg.substring(15);
+            } else if (arg.equals("--use-existing-deps")) {
+                useExistingDeps = true;
+            } else if (arg.equals("--rebuild-deps")) {
+                useExistingDeps = false;
+            } else if (arg.equals("--verbose") || arg.equals("-v")) {
+                verbose = true;
+            } else if (arg.startsWith("--loglevel=")) {
+                logLevel = arg.substring(11);
             } else {
                 System.err.println("Unknown argument: " + arg + ". Ignoring.");
             }
         }
 
         // Delegate to create with stdout output
-        // Use existing dependency graph from SBOM by default (fast mode)
         List<String> createArgs = new ArrayList<>();
         createArgs.add("create");
         createArgs.add(inputFilePath);
@@ -382,7 +394,21 @@ public class DependencyTreeGenerator {
             createArgs.add("--format=" + treeFormat);
         }
         createArgs.add("--project-name=" + projectName);
-        createArgs.add("--use-existing-deps"); // Fast mode: use existing dependency graph
+
+        // Add dependency mode flag
+        if (useExistingDeps) {
+            createArgs.add("--use-existing-deps");
+        } else {
+            createArgs.add("--rebuild-deps");
+        }
+
+        // Add logging flags
+        if (verbose) {
+            createArgs.add("--verbose");
+        }
+        if (logLevel != null) {
+            createArgs.add("--loglevel=" + logLevel);
+        }
 
         handleCreate(createArgs.toArray(new String[0]));
     }
@@ -494,6 +520,22 @@ public class DependencyTreeGenerator {
                     DependencyNode rootNode = buildDependencyNode(rootRef, depGraph, bomRefToPackage, refToNode, 0);
                     if (rootNode != null) {
                         trees.add(rootNode);
+                    }
+                } else {
+                    // Root ref not in components (likely project/metadata reference)
+                    // Treat its direct dependencies as the actual roots
+                    logger.debug("Root ref not in components: {}. Using its dependencies as roots.", rootRef);
+                    List<String> childRefs = depGraph.get(rootRef);
+                    if (childRefs != null) {
+                        for (String childRef : childRefs) {
+                            Package childPkg = bomRefToPackage.get(childRef);
+                            if (childPkg != null) {
+                                DependencyNode childNode = buildDependencyNode(childRef, depGraph, bomRefToPackage, refToNode, 0);
+                                if (childNode != null) {
+                                    trees.add(childNode);
+                                }
+                            }
+                        }
                     }
                 }
             }
