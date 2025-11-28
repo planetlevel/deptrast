@@ -146,6 +146,21 @@ class OutputFormatter:
         # Add dependencies to SBOM
         sbom['dependencies'] = dependencies
 
+        # Reorder component fields to match Java output: type, bom-ref, group, name, version, purl
+        reordered_components = []
+        for comp in sbom.get('components', []):
+            ordered_comp = {
+                'type': comp.get('type'),
+                'bom-ref': comp.get('bom-ref'),
+                'group': comp.get('group'),
+                'name': comp.get('name'),
+                'version': comp.get('version'),
+                'purl': comp.get('purl')
+            }
+            # Remove None values
+            ordered_comp = {k: v for k, v in ordered_comp.items() if v is not None}
+            reordered_components.append(ordered_comp)
+
         # Reorder to match Java output: metadata first, then components, then dependencies
         ordered_sbom = {
             'bomFormat': sbom.get('bomFormat'),
@@ -153,7 +168,7 @@ class OutputFormatter:
             'serialNumber': sbom.get('serialNumber'),
             'version': sbom.get('version', 1),
             'metadata': sbom.get('metadata'),
-            'components': sbom.get('components'),
+            'components': reordered_components,
             'dependencies': sbom.get('dependencies')
         }
 
