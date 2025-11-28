@@ -1,0 +1,15 @@
+README.md
+pyproject.toml
+deptrast/__init__.py
+deptrast/__main__.py
+deptrast/api_client.py
+deptrast/formatters.py
+deptrast/graph_builder.py
+deptrast/models.py
+deptrast/parsers.py
+deptrast.egg-info/PKG-INFO
+deptrast.egg-info/SOURCES.txt
+deptrast.egg-info/dependency_links.txt
+deptrast.egg-info/entry_points.txt
+deptrast.egg-info/requires.txt
+deptrast.egg-info/top_level.txt

@@ -1,0 +1,2 @@
+[console_scripts]
+deptrast = deptrast.__main__:main

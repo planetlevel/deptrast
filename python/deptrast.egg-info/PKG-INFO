@@ -1,0 +1,83 @@
+Metadata-Version: 2.4
+Name: deptrast
+Version: 3.0.1
+Summary: The ultimate dependency tree converter, enhancer, and streamliner
+Author-email: Jeff Williams <jeff.williams@contrastsecurity.com>
+License: MIT
+Project-URL: Homepage, https://github.com/planetlevel/deptrast
+Project-URL: Repository, https://github.com/planetlevel/deptrast
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+Requires-Dist: requests>=2.28.0
+Requires-Dist: cyclonedx-python-lib>=5.0.0
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0.0; extra == "dev"
+Requires-Dist: pytest-cov>=3.0.0; extra == "dev"
+
+# Deptrast (Python Version)
+
+**The ultimate dependency tree converter, enhancer, and streamliner** - Python edition
+
+This is a clean Python implementation of deptrast with the same features as the Java version.
+
+## Features
+
+- Parse multiple input formats (flat lists, Maven pom.xml, Gradle, Python requirements.txt, SBOM)
+- Fetch complete dependency graphs from deps.dev API
+- Smart root dependency detection
+- Generate CycloneDX SBOMs
+- Tree visualizations (Unicode and Maven-style)
+- Version reconciliation with dependency management
+
+## Installation
+
+```bash
+# Install in development mode
+cd python
+pip install -e .
+
+# Or install dependencies only
+pip install -r requirements.txt
+```
+
+## Usage
+
+Same CLI as the Java version:
+
+```bash
+# Create SBOM from pom.xml
+deptrast create pom.xml output.sbom
+
+# Enrich existing SBOM
+deptrast enrich input.sbom enriched.sbom
+
+# Print as tree
+deptrast print input.sbom --output=tree
+
+# Create from flat list
+deptrast create libraries.txt output.sbom
+```
+
+## Requirements
+
+- Python 3.8+
+- requests
+- cyclonedx-python-lib
+
+## Development
+
+```bash
+# Install dev dependencies
+pip install -e ".[dev]"
+
+# Run tests
+pytest
+```
