@@ -228,8 +228,8 @@ class OutputFormatter:
             'dependencies': sbom.get('dependencies')
         }
 
-        # Use separators with no space before colon (user preference)
-        return json.dumps(ordered_sbom, indent=2, separators=(', ', ': '))
+        # Use separators to match Java (space before and after colon)
+        return json.dumps(ordered_sbom, indent=2, separators=(', ', ' : '))
 
     @staticmethod
     def enhance_sbom_with_dependencies(
