@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 from datetime import datetime
 from typing import List, Collection, Dict
 from uuid import uuid4
@@ -100,18 +101,34 @@ class OutputFormatter:
         # Set serial number - just use UUID, the library will format it
         bom.serial_number = uuid4()
 
-        # Create metadata with tool information
-        tool = Tool(
-            vendor="Contrast Security",
-            name="deptrast",
-            version="3.0.1"
-        )
-        bom.metadata.tools.tools.add(tool)
-        bom.metadata.timestamp = datetime.utcnow()
+        # Create metadata with tool information as a component (like Java version)
+        tool_purl = PackageURL.from_string("pkg:maven/com.contrastsecurity/deptrast@3.0.1")
 
-        # Add author
-        author = OrganizationalContact(name="Jeff Williams")
-        bom.metadata.authors.add(author)
+        # Create external reference for VCS
+        vcs_ref = ExternalReference(
+            type=ExternalReferenceType.VCS,
+            url=XsUri("https://github.com/planetlevel/deptrast")
+        )
+
+        tool_component = Component(
+            name="deptrast",
+            version="3.0.1",
+            type=ComponentType.APPLICATION,
+            group="com.contrastsecurity",
+            publisher="Contrast Security",
+            purl=tool_purl,
+            bom_ref="pkg:maven/com.contrastsecurity/deptrast@3.0.1",
+            external_references=[vcs_ref]
+        )
+
+        # Add authors to tool component
+        tool_author = OrganizationalContact(name="Jeff Williams")
+        tool_component.authors.add(tool_author)
+
+        # Add to tools.components
+        bom.metadata.tools.components.add(tool_component)
+        # Timestamp will be manually set in JSON to match Java's format
+        bom.metadata.timestamp = datetime.utcnow().replace(microsecond=0)
 
         # Build dependency map from tree structure
         dependency_map = OutputFormatter._build_dependency_map(dependency_trees)
@@ -132,14 +149,16 @@ class OutputFormatter:
         dependencies = []
         for pkg in packages:
             purl = OutputFormatter._build_purl(pkg)
-            dep_entry = {"ref": purl}
 
             # Get direct dependencies
             direct_deps = dependency_map.get(pkg, [])
-            if direct_deps:
-                depends_on = [OutputFormatter._build_purl(dep) for dep in direct_deps if dep in packages]
-                if depends_on:
-                    dep_entry["dependsOn"] = depends_on
+            depends_on = [OutputFormatter._build_purl(dep) for dep in direct_deps if dep in packages]
+
+            # Always include dependsOn (even if empty) to match Java
+            dep_entry = {
+                "ref": purl,
+                "dependsOn": depends_on
+            }
 
             dependencies.append(dep_entry)
 
@@ -161,18 +180,50 @@ class OutputFormatter:
             ordered_comp = {k: v for k, v in ordered_comp.items() if v is not None}
             reordered_components.append(ordered_comp)
 
+        # Reorder metadata.tools.components fields to match Java
+        metadata = sbom.get('metadata', {})
+        if 'tools' in metadata and 'components' in metadata['tools']:
+            reordered_tool_comps = []
+            for tool_comp in metadata['tools']['components']:
+                ordered_tool = {
+                    'type': tool_comp.get('type'),
+                    'bom-ref': tool_comp.get('bom-ref'),
+                    'authors': tool_comp.get('authors'),
+                    'publisher': tool_comp.get('publisher'),
+                    'group': tool_comp.get('group'),
+                    'name': tool_comp.get('name'),
+                    'version': tool_comp.get('version'),
+                    'purl': tool_comp.get('purl'),
+                    'externalReferences': tool_comp.get('externalReferences')
+                }
+                # Remove None values
+                ordered_tool = {k: v for k, v in ordered_tool.items() if v is not None}
+                reordered_tool_comps.append(ordered_tool)
+            metadata['tools']['components'] = reordered_tool_comps
+
+        # Fix timestamp format to match Java (UTC with Z suffix, no microseconds)
+        if 'timestamp' in metadata:
+            # Convert to UTC Z format like Java: "2025-11-28T21:37:57Z"
+            ts = metadata['timestamp']
+            # Remove timezone offset (e.g., -05:00, +00:00) and add Z
+            # Match pattern like 2025-11-28T21:40:39-05:00 or 2025-11-28T21:40:39+00:00
+            match = re.match(r'(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})', ts)
+            if match:
+                metadata['timestamp'] = match.group(1) + 'Z'
+
         # Reorder to match Java output: metadata first, then components, then dependencies
         ordered_sbom = {
             'bomFormat': sbom.get('bomFormat'),
             'specVersion': sbom.get('specVersion'),
             'serialNumber': sbom.get('serialNumber'),
             'version': sbom.get('version', 1),
-            'metadata': sbom.get('metadata'),
+            'metadata': metadata,
             'components': reordered_components,
             'dependencies': sbom.get('dependencies')
         }
 
-        return json.dumps(ordered_sbom, indent=2)
+        # Use separators with no space before colon (user preference)
+        return json.dumps(ordered_sbom, indent=2, separators=(', ', ': '))
 
     @staticmethod
     def enhance_sbom_with_dependencies(
