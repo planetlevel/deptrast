@@ -146,7 +146,18 @@ class OutputFormatter:
         # Add dependencies to SBOM
         sbom['dependencies'] = dependencies
 
-        return json.dumps(sbom, indent=2)
+        # Reorder to match Java output: metadata first, then components, then dependencies
+        ordered_sbom = {
+            'bomFormat': sbom.get('bomFormat'),
+            'specVersion': sbom.get('specVersion'),
+            'serialNumber': sbom.get('serialNumber'),
+            'version': sbom.get('version', 1),
+            'metadata': sbom.get('metadata'),
+            'components': sbom.get('components'),
+            'dependencies': sbom.get('dependencies')
+        }
+
+        return json.dumps(ordered_sbom, indent=2)
 
     @staticmethod
     def enhance_sbom_with_dependencies(
