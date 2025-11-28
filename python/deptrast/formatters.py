@@ -228,8 +228,13 @@ class OutputFormatter:
             'dependencies': sbom.get('dependencies')
         }
 
-        # Use separators to match Java (space before and after colon)
-        return json.dumps(ordered_sbom, indent=2, separators=(', ', ' : '))
+        # Use separators to match Java (no trailing space after comma, space before and after colon)
+        sbom_json = json.dumps(ordered_sbom, indent=2, separators=(',', ' : '))
+
+        # Replace empty arrays [] with [ ] to match Java formatting
+        sbom_json = sbom_json.replace('[]', '[ ]')
+
+        return sbom_json
 
     @staticmethod
     def enhance_sbom_with_dependencies(
