@@ -60,19 +60,6 @@ java -jar target/deptrast-2.0.3.jar print input.sbom --output=tree
 
 See [SECURITY.md](SECURITY.md) for information about the project's security policy, vulnerability reporting, and best practices.
 
-### ⚠️ SSL Certificate Validation
-
-**IMPORTANT**: This tool currently disables SSL certificate validation when connecting to Maven Central and the deps.dev API to support environments with SSL-intercepting proxies.
-
-**Security Implications**:
-- The tool is vulnerable to man-in-the-middle (MITM) attacks
-- Compromised or malicious dependencies could be injected
-- Use only on trusted networks
-
-**Why**: Many corporate environments use SSL-intercepting proxies with self-signed certificates that would otherwise cause connection failures.
-
-**Recommendation**: Only use deptrast on trusted networks where you control the infrastructure. Future versions will add a configuration option to enable proper SSL certificate validation.
-
 ## Usage
 
 ```bash
@@ -113,7 +100,7 @@ deptrast <subcommand> [args...] [options]
 - `--use-existing-deps` - Use existing dependency graph from SBOM (fast mode, no API calls)
   - Only works when input is an SBOM file
   - Skips rebuilding the dependency tree, using the existing `dependencies` array
-  - Much faster since it avoids hundreds of API calls to deps.dev
+  - Much faster since it avoids API calls to deps.dev
   - Ideal for: `print`, `validate`, format conversions
 - `--rebuild-deps` - Rebuild dependency graph from scratch (default for `create`, `enrich`)
   - Makes API calls to deps.dev to validate and rebuild the full dependency tree
@@ -305,7 +292,7 @@ deptrast create libraries.txt - --loglevel=DEBUG
 mvn clean package
 ```
 
-This will create an executable JAR file as `target/deptrast-2.0.3.jar`.
+This will create an executable JAR file as `target/deptrast-x.x.x.jar`.
 
 ## Testing
 
@@ -315,12 +302,4 @@ Run the comprehensive test suite:
 mvn test
 ```
 
-The test suite includes:
-- Input/output format validation
-- POM file parsing with property resolution
-- Dependency graph construction
-- SBOM generation and enhancement
-- Comparison with CDXgen gold standard (95.7% component match)
-
-Tests validate deptrast against CDXgen (the industry-standard SBOM generator) using a real-world Spring Boot application. Results show excellent accuracy with proper Maven dependency reconciliation.
 
