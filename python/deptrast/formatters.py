@@ -162,6 +162,9 @@ class OutputFormatter:
 
             dependencies.append(dep_entry)
 
+        # Sort dependencies alphabetically by ref for consistent ordering
+        dependencies.sort(key=lambda d: d.get('ref', ''))
+
         # Add dependencies to SBOM
         sbom['dependencies'] = dependencies
 
@@ -179,6 +182,9 @@ class OutputFormatter:
             # Remove None values
             ordered_comp = {k: v for k, v in ordered_comp.items() if v is not None}
             reordered_components.append(ordered_comp)
+
+        # Sort components alphabetically by purl for consistent ordering
+        reordered_components.sort(key=lambda c: c.get('purl', ''))
 
         # Reorder metadata.tools.components fields to match Java
         metadata = sbom.get('metadata', {})

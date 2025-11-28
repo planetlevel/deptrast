@@ -1250,6 +1250,13 @@ public class DependencyTreeGenerator {
                 purlByPackage.put(pkg, purl);
             }
 
+            // Sort components alphabetically by purl for consistent ordering
+            components.sort((c1, c2) -> {
+                String purl1 = c1.getPurl() != null ? c1.getPurl() : "";
+                String purl2 = c2.getPurl() != null ? c2.getPurl() : "";
+                return purl1.compareTo(purl2);
+            });
+
             bom.setComponents(components);
 
             // Build dependency graph from the cache
@@ -1273,6 +1280,13 @@ public class DependencyTreeGenerator {
 
                 dependencies.add(dependency);
             }
+
+            // Sort dependencies alphabetically by ref for consistent ordering
+            dependencies.sort((d1, d2) -> {
+                String ref1 = d1.getRef() != null ? d1.getRef() : "";
+                String ref2 = d2.getRef() != null ? d2.getRef() : "";
+                return ref1.compareTo(ref2);
+            });
 
             // Set dependencies on BOM
             for (Dependency dependency : dependencies) {
