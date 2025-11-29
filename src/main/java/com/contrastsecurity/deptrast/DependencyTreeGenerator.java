@@ -130,11 +130,11 @@ public class DependencyTreeGenerator {
         String outputFormat = "sbom"; // sbom, roots, tree, list
         String treeFormat = "tree";   // tree or maven (for tree output)
         String projectName = "project";
-        String scope = "all";  // runtime, compile, provided, test, all
+        String scope = "compile";  // runtime, compile, provided, test, all
         boolean verbose = false;
         boolean useExistingDeps = false;  // Use existing dependency graph from SBOM
         boolean includeOptional = false;  // Include optional/provided dependencies (default: exclude)
-        String resolutionStrategy = "highest";  // maven or highest (default: highest)
+        String resolutionStrategy = "maven";  // maven or highest (default: maven)
 
         // Parse additional arguments
         for (int i = 3; i < args.length; i++) {
@@ -968,10 +968,10 @@ public class DependencyTreeGenerator {
         System.out.println("  --format=tree|maven       Tree format (default: tree)");
         System.out.println("  --project-name=<name>     Project name for tree output");
         System.out.println("  --scope=<scope>           Maven scope filter (runtime, compile, provided, test, all)");
-        System.out.println("                            Default: all");
+        System.out.println("                            Default: compile");
         System.out.println("  --resolution-strategy=<strategy>  Version resolution strategy (maven, highest)");
-        System.out.println("                            maven - Use Maven's nearest-wins algorithm");
-        System.out.println("                            highest - Use highest version encountered (default)");
+        System.out.println("                            maven - Use Maven's nearest-wins algorithm (default)");
+        System.out.println("                            highest - Use highest version encountered");
         System.out.println("  --include-optional        Include optional/provided dependencies from POM");
         System.out.println("                            Default: exclude (Maven runtime behavior)");
         System.out.println("  --use-existing-deps       Use existing dependency graph from SBOM (fast)");

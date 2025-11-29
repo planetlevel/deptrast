@@ -35,6 +35,9 @@ def handle_create(args):
     """Handle the 'create' subcommand."""
     input_file = args.input
     output_file = args.output
+    scope = args.scope if hasattr(args, 'scope') else 'compile'
+    resolution_strategy = args.resolution_strategy if hasattr(args, 'resolution_strategy') else 'maven'
+    include_optional = args.include_optional if hasattr(args, 'include_optional') else False
 
     # Setup logging
     setup_logging(args.verbose, args.loglevel)
@@ -70,7 +73,7 @@ def handle_create(args):
                 with open(input_file, 'r') as f:
                     original_sbom_content = f.read()
         elif detected_format == 'pom':
-            packages, dependency_management, exclusions = FileParser.parse_pom_file(input_file)
+            packages, dependency_management, exclusions = FileParser.parse_pom_file(input_file, scope)
             logger.info(
                 f"Parsed {len(packages)} packages with {len(dependency_management)} "
                 f"managed versions and {len(exclusions)} exclusions from pom.xml"
@@ -119,6 +122,10 @@ def handle_create(args):
             if exclusions:
                 graph_builder.set_exclusions(exclusions)
                 logger.info(f"Applied {len(exclusions)} exclusion rules")
+
+            # Set resolution strategy
+            graph_builder.set_resolution_strategy(resolution_strategy)
+            logger.info(f"Using {resolution_strategy} resolution strategy")
 
             dependency_trees = graph_builder.build_dependency_trees(packages)
             all_tracked_packages = list(graph_builder.get_all_reconciled_packages())
@@ -322,6 +329,14 @@ def main():
                                help='Tree visualization format (default: tree)')
     create_parser.add_argument('--project-name', default='project',
                                help='Project name for tree output')
+    create_parser.add_argument('--scope', default='compile',
+                               choices=['runtime', 'compile', 'provided', 'test', 'all'],
+                               help='Maven dependency scope to include (default: compile)')
+    create_parser.add_argument('--resolution-strategy', default='maven',
+                               choices=['maven', 'highest'],
+                               help='Version resolution strategy: maven (nearest-wins, default) or highest')
+    create_parser.add_argument('--include-optional', action='store_true',
+                               help='Include optional/provided dependencies from POM (default: exclude)')
     create_parser.add_argument('--use-existing-deps', action='store_true',
                                help='Use existing dependency graph from SBOM (fast mode)')
     create_parser.add_argument('--rebuild-deps', action='store_false', dest='use_existing_deps',
