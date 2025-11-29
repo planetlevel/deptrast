@@ -195,9 +195,11 @@ public class FileParser {
      * Parse a Maven pom.xml file with dependency management
      *
      * @param filePath path to the pom.xml file
+     * @param scopeFilter scope filter (runtime, compile, provided, test, or all)
+     * @param includeOptional whether to include optional/provided dependencies (default: false)
      * @return PomParseResult containing packages and dependency management
      */
-    public static PomParseResult parsePomFileWithManagement(String filePath) {
+    public static PomParseResult parsePomFileWithManagement(String filePath, String scopeFilter, boolean includeOptional) {
         List<Package> packages = new ArrayList<>();
         Map<String, String> dependencyManagement = new HashMap<>();
         Map<String, Set<String>> exclusions = new HashMap<>(); // package name -> excluded dependencies
@@ -244,16 +246,42 @@ public class FileParser {
                 if (node.getNodeType() == Node.ELEMENT_NODE) {
                     Element element = (Element) node;
 
-                    // Skip test-scoped dependencies by default
+                    // Apply scope filtering
                     String scope = getElementText(element, "scope");
+                    // Default scope is compile if not specified
+                    if (scope == null || scope.isEmpty()) {
+                        scope = "compile";
+                    }
+
                     logger.debug("Dependency {}:{} has scope: {}",
                             getElementText(element, "groupId"),
                             getElementText(element, "artifactId"),
                             scope);
-                    if ("test".equals(scope)) {
-                        logger.info("Skipping test dependency: {}:{}",
+
+                    // Skip provided scope dependencies unless includeOptional is true
+                    if (!includeOptional && "provided".equalsIgnoreCase(scope)) {
+                        logger.info("Skipping provided scope dependency: {}:{}",
                                 getElementText(element, "groupId"),
                                 getElementText(element, "artifactId"));
+                        continue;
+                    }
+
+                    // Skip optional dependencies unless includeOptional is true
+                    String optional = getElementText(element, "optional");
+                    if (!includeOptional && "true".equalsIgnoreCase(optional)) {
+                        logger.info("Skipping optional dependency: {}:{}",
+                                getElementText(element, "groupId"),
+                                getElementText(element, "artifactId"));
+                        continue;
+                    }
+
+                    // Skip dependencies that don't match the scope filter
+                    if (!shouldIncludeScope(scope, scopeFilter)) {
+                        logger.info("Skipping {} scope dependency: {}:{} (filter: {})",
+                                scope,
+                                getElementText(element, "groupId"),
+                                getElementText(element, "artifactId"),
+                                scopeFilter);
                         continue;
                     }
 
@@ -952,5 +980,32 @@ public class FileParser {
             return node.getTextContent().trim();
         }
         return null;
+    }
+
+    /**
+     * Check if a dependency scope should be included based on the scope filter
+     *
+     * @param dependencyScope the scope of the dependency (compile, runtime, provided, test)
+     * @param scopeFilter the scope filter to apply (compile, runtime, provided, test, or all)
+     * @return true if the dependency should be included
+     */
+    private static boolean shouldIncludeScope(String dependencyScope, String scopeFilter) {
+        // "all" includes everything
+        if ("all".equals(scopeFilter)) {
+            return true;
+        }
+
+        // If filter matches scope exactly, include it
+        if (scopeFilter.equals(dependencyScope)) {
+            return true;
+        }
+
+        // Special case: runtime filter should include both compile and runtime scopes
+        // because compile dependencies are available at runtime
+        if ("runtime".equals(scopeFilter) && "compile".equals(dependencyScope)) {
+            return true;
+        }
+
+        return false;
     }
 }

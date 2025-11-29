@@ -36,6 +36,7 @@ import org.cyclonedx.model.Bom;
 import org.cyclonedx.model.Component;
 import org.cyclonedx.model.Dependency;
 import org.cyclonedx.model.Metadata;
+import org.cyclonedx.model.Property;
 import org.cyclonedx.model.Tool;
 import org.cyclonedx.model.metadata.ToolInformation;
 import org.cyclonedx.model.ExternalReference;
@@ -49,10 +50,11 @@ import java.util.Properties;
  * Main application class for generating dependency trees
  */
 public class DependencyTreeGenerator {
-    
+
     private static DependencyGraphBuilder graphBuilder;
     private static final String NEW_LINE = System.lineSeparator();
     private static final Logger logger = LoggerFactory.getLogger(DependencyTreeGenerator.class);
+    private static String originalCommandLine = null;  // Store original command line for SBOM metadata
 
     public static void main(String[] args) {
         // Register shutdown hook for clean termination
@@ -112,6 +114,9 @@ public class DependencyTreeGenerator {
      * Handle 'create' subcommand
      */
     private static void handleCreate(String[] args) throws Exception {
+        // Capture original command line for SBOM metadata
+        originalCommandLine = "deptrast " + String.join(" ", args);
+
         if (args.length < 3) {
             System.err.println("Usage: deptrast create <input-file> <output-file> [options]");
             return;
@@ -125,8 +130,10 @@ public class DependencyTreeGenerator {
         String outputFormat = "sbom"; // sbom, roots, tree, list
         String treeFormat = "tree";   // tree or maven (for tree output)
         String projectName = "project";
+        String scope = "all";  // runtime, compile, provided, test, all
         boolean verbose = false;
         boolean useExistingDeps = false;  // Use existing dependency graph from SBOM
+        boolean includeOptional = false;  // Include optional/provided dependencies (default: exclude)
 
         // Parse additional arguments
         for (int i = 3; i < args.length; i++) {
@@ -140,6 +147,10 @@ public class DependencyTreeGenerator {
                 treeFormat = arg.substring(9).toLowerCase();
             } else if (arg.startsWith("--project-name=")) {
                 projectName = arg.substring(15);
+            } else if (arg.startsWith("--scope=")) {
+                scope = arg.substring(8).toLowerCase();
+            } else if (arg.equals("--include-optional")) {
+                includeOptional = true;
             } else if (arg.equals("--verbose") || arg.equals("-v")) {
                 verbose = true;
             } else if (arg.startsWith("--loglevel=")) {
@@ -166,6 +177,14 @@ public class DependencyTreeGenerator {
             !outputFormat.equals("tree") && !outputFormat.equals("list")) {
             System.err.println("Invalid --output value: " + outputFormat);
             System.err.println("Valid values: sbom, roots, tree, list");
+            return;
+        }
+
+        // Validate scope
+        if (!scope.equals("runtime") && !scope.equals("compile") && !scope.equals("provided") &&
+            !scope.equals("test") && !scope.equals("all")) {
+            System.err.println("Invalid --scope value: " + scope);
+            System.err.println("Valid values: runtime, compile, provided, test, all");
             return;
         }
 
@@ -206,7 +225,7 @@ public class DependencyTreeGenerator {
                 }
                 break;
             case "pom":
-                FileParser.PomParseResult pomResult = FileParser.parsePomFileWithManagement(inputFilePath);
+                FileParser.PomParseResult pomResult = FileParser.parsePomFileWithManagement(inputFilePath, scope, includeOptional);
                 allPackages = pomResult.getPackages();
                 dependencyManagement = pomResult.getDependencyManagement();
                 exclusions = pomResult.getExclusions();
@@ -566,7 +585,7 @@ public class DependencyTreeGenerator {
             return null;
         }
 
-        DependencyNode node = new DependencyNode(pkg, depth, false);
+        DependencyNode node = new DependencyNode(pkg, false);
         refToNode.put(ref, node);
 
         // Add children
@@ -895,7 +914,7 @@ public class DependencyTreeGenerator {
 
         // Add project root node for tree format
         DependencyNode projectRootNode = new DependencyNode(
-            new Package("project", projectName, "1.0.0"), 0, false);
+            new Package("project", projectName, "1.0.0"), false);
         for (DependencyNode node : new ArrayList<>(dependencyTree)) {
             projectRootNode.addChild(node);
         }
@@ -934,6 +953,10 @@ public class DependencyTreeGenerator {
         System.out.println("                            list  - Flat list (one per line)");
         System.out.println("  --format=tree|maven       Tree format (default: tree)");
         System.out.println("  --project-name=<name>     Project name for tree output");
+        System.out.println("  --scope=<scope>           Maven scope filter (runtime, compile, provided, test, all)");
+        System.out.println("                            Default: all");
+        System.out.println("  --include-optional        Include optional/provided dependencies from POM");
+        System.out.println("                            Default: exclude (Maven runtime behavior)");
         System.out.println("  --use-existing-deps       Use existing dependency graph from SBOM (fast)");
         System.out.println("                            Skips API calls, ideal for format conversions");
         System.out.println("  --rebuild-deps            Rebuild dependency graph from scratch (default)");
@@ -1125,14 +1148,21 @@ public class DependencyTreeGenerator {
                 // Get direct dependencies from dependency map
                 List<Package> directDeps = dependencyMap.get(pkg);
                 if (directDeps != null && !directDeps.isEmpty()) {
-                    JsonArray dependsOn = new JsonArray();
+                    // Collect dependsOn purls and sort for consistent ordering
+                    List<String> dependsOnList = new ArrayList<>();
                     for (Package depPkg : directDeps) {
                         String depBomRef = bomRefByPackage.get(depPkg);
                         if (depBomRef != null) {
-                            dependsOn.add(depBomRef);
+                            dependsOnList.add(depBomRef);
                         }
                     }
-                    if (dependsOn.size() > 0) {
+                    Collections.sort(dependsOnList);
+
+                    if (!dependsOnList.isEmpty()) {
+                        JsonArray dependsOn = new JsonArray();
+                        for (String purl : dependsOnList) {
+                            dependsOn.add(purl);
+                        }
                         dependency.add("dependsOn", dependsOn);
                     }
                 }
@@ -1214,6 +1244,15 @@ public class DependencyTreeGenerator {
             toolInfo.setComponents(toolComponents);
 
             metadata.setToolChoice(toolInfo);
+
+            // Add command-line property to metadata if available
+            if (originalCommandLine != null) {
+                Property cmdLineProperty = new Property();
+                cmdLineProperty.setName("commandLine");
+                cmdLineProperty.setValue(originalCommandLine);
+                metadata.addProperty(cmdLineProperty);
+            }
+
             bom.setMetadata(metadata);
 
             // Add all packages as components and track purlByPackage for dependency graph
@@ -1270,11 +1309,18 @@ public class DependencyTreeGenerator {
                 // Get direct dependencies from dependency map
                 List<Package> directDeps = dependencyMap.get(pkg);
                 if (directDeps != null && !directDeps.isEmpty()) {
+                    // Collect and sort dependsOn purls for consistent ordering
+                    List<String> dependsOnPurls = new ArrayList<>();
                     for (Package depPkg : directDeps) {
                         if (purlByPackage.containsKey(depPkg)) {
-                            String depPurl = purlByPackage.get(depPkg);
-                            dependency.addDependency(new Dependency(depPurl));
+                            dependsOnPurls.add(purlByPackage.get(depPkg));
                         }
+                    }
+                    Collections.sort(dependsOnPurls);
+
+                    // Add sorted dependencies
+                    for (String depPurl : dependsOnPurls) {
+                        dependency.addDependency(new Dependency(depPurl));
                     }
                 }
 
