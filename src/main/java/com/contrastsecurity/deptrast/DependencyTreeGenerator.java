@@ -969,6 +969,9 @@ public class DependencyTreeGenerator {
         System.out.println("  --project-name=<name>     Project name for tree output");
         System.out.println("  --scope=<scope>           Maven scope filter (runtime, compile, provided, test, all)");
         System.out.println("                            Default: all");
+        System.out.println("  --resolution-strategy=<strategy>  Version resolution strategy (maven, highest)");
+        System.out.println("                            maven - Use Maven's nearest-wins algorithm");
+        System.out.println("                            highest - Use highest version encountered (default)");
         System.out.println("  --include-optional        Include optional/provided dependencies from POM");
         System.out.println("                            Default: exclude (Maven runtime behavior)");
         System.out.println("  --use-existing-deps       Use existing dependency graph from SBOM (fast)");
