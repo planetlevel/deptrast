@@ -153,8 +153,10 @@ public class DependencyTreeGenerator {
 
             if (arg.startsWith("--input=")) {
                 inputType = arg.substring(8).toLowerCase();
-            } else if (arg.startsWith("--format=")) {
+            } else if (arg.startsWith("--output=")) {
                 outputFormat = arg.substring(9).toLowerCase();
+            } else if (arg.startsWith("--format=")) {
+                treeFormat = arg.substring(9).toLowerCase();
             } else if (arg.startsWith("--tree-style=")) {
                 treeFormat = arg.substring(13).toLowerCase();
             } else if (arg.startsWith("--project-name=")) {
