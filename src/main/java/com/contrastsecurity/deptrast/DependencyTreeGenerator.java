@@ -134,6 +134,7 @@ public class DependencyTreeGenerator {
         boolean verbose = false;
         boolean useExistingDeps = false;  // Use existing dependency graph from SBOM
         boolean includeOptional = false;  // Include optional/provided dependencies (default: exclude)
+        String resolutionStrategy = "highest";  // maven or highest (default: highest)
 
         // Parse additional arguments
         for (int i = 3; i < args.length; i++) {
@@ -149,6 +150,8 @@ public class DependencyTreeGenerator {
                 projectName = arg.substring(15);
             } else if (arg.startsWith("--scope=")) {
                 scope = arg.substring(8).toLowerCase();
+            } else if (arg.startsWith("--resolution-strategy=")) {
+                resolutionStrategy = arg.substring(22).toLowerCase();
             } else if (arg.equals("--include-optional")) {
                 includeOptional = true;
             } else if (arg.equals("--verbose") || arg.equals("-v")) {
@@ -185,6 +188,13 @@ public class DependencyTreeGenerator {
             !scope.equals("test") && !scope.equals("all")) {
             System.err.println("Invalid --scope value: " + scope);
             System.err.println("Valid values: runtime, compile, provided, test, all");
+            return;
+        }
+
+        // Validate resolution strategy
+        if (!resolutionStrategy.equals("maven") && !resolutionStrategy.equals("highest")) {
+            System.err.println("Invalid --resolution-strategy value: " + resolutionStrategy);
+            System.err.println("Valid values: maven, highest");
             return;
         }
 
@@ -282,6 +292,10 @@ public class DependencyTreeGenerator {
                 graphBuilder.setExclusions(exclusions);
                 logger.info("Applied {} exclusion rules to graph builder", exclusions.size());
             }
+
+            // Set resolution strategy
+            graphBuilder.setResolutionStrategy(resolutionStrategy);
+            logger.info("Using {} resolution strategy", resolutionStrategy);
 
             dependencyTree = graphBuilder.buildDependencyTrees(allPackages);
 

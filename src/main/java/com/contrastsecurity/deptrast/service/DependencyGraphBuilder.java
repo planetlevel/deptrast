@@ -27,13 +27,16 @@ public class DependencyGraphBuilder implements AutoCloseable {
     private final DepsDevClient apiClient;
     private final Map<String, DependencyNode> completeTrees; // pkg fullName -> its full tree
     private final Map<String, Package> allPackages; // fullName -> Package (for deduplication)
+    private final Map<String, DependencyNode> allNodes; // fullName -> DependencyNode (for graph node reuse across API calls)
     private Map<String, String> dependencyManagement; // groupId:artifactId -> version
     private Map<String, Set<String>> exclusions; // package name -> set of excluded "groupId:artifactId"
+    private String resolutionStrategy = "highest"; // maven or highest
 
     public DependencyGraphBuilder() {
         this.apiClient = new DepsDevClient();
         this.completeTrees = new HashMap<>();
         this.allPackages = new HashMap<>();
+        this.allNodes = new HashMap<>();
         this.dependencyManagement = new HashMap<>();
         this.exclusions = new HashMap<>();
     }
@@ -62,6 +65,16 @@ public class DependencyGraphBuilder implements AutoCloseable {
     }
 
     /**
+     * Set resolution strategy (maven or highest)
+     *
+     * @param resolutionStrategy "maven" for Maven nearest-wins, "highest" for highest version
+     */
+    public void setResolutionStrategy(String resolutionStrategy) {
+        this.resolutionStrategy = resolutionStrategy != null ? resolutionStrategy : "highest";
+        logger.info("Resolution strategy set to: {}", this.resolutionStrategy);
+    }
+
+    /**
      * Main algorithm:
      * 1. Fetch complete dependency graph for each input package
      * 2. Track which INPUT packages appear as dependencies in OTHER trees
@@ -85,18 +98,27 @@ public class DependencyGraphBuilder implements AutoCloseable {
         for (Package pkg : inputPackages) {
             String pkgName = pkg.getFullName();
 
-            // Check if this package already appears in any fetched tree
-            if (packagesAlreadyInTrees.contains(pkgName)) {
-                logger.debug("Skipping {} - already found in another dependency tree", pkgName);
+            // Skip if we already have a complete tree for this package
+            if (completeTrees.containsKey(pkgName)) {
+                logger.debug("Skipping {} - already have complete tree", pkgName);
                 skippedCount++;
                 continue;
             }
+
+            // Check if this package appears in any OTHER package's tree
+            // If so, we still need to fetch its tree for cloning purposes
+            boolean foundInOtherTree = packagesAlreadyInTrees.contains(pkgName);
 
             DependencyNode tree = fetchCompleteDependencyTree(pkg, inputPackageNames);
             if (tree != null) {
                 completeTrees.put(pkgName, tree);
 
-                // Add all packages in this tree to the set to avoid redundant fetches
+                if (foundInOtherTree) {
+                    logger.debug("Package {} found in another tree but fetched for cloning", pkgName);
+                    skippedCount++; // Still count as optimization since we found it earlier
+                }
+
+                // Add all packages in this tree to the set to track what we've seen
                 collectAllPackageNames(tree, packagesAlreadyInTrees);
             }
         }
@@ -106,17 +128,24 @@ public class DependencyGraphBuilder implements AutoCloseable {
                 skippedCount, skippedCount);
         }
 
-        // STEP 2.5: Version reconciliation - replace declared versions with actual runtime versions
-        // This handles Maven's dependency resolution where the runtime has a different version
-        // than what was declared in pom.xml files
-        Map<String, String> observedVersions = new HashMap<>();
-        for (Package pkg : inputPackages) {
-            String baseKey = pkg.getSystem().toLowerCase() + ":" + pkg.getName();
-            observedVersions.put(baseKey, pkg.getVersion());
-        }
+        // STEP 2.5/2.6: Version resolution strategy
+        if ("maven".equals(resolutionStrategy)) {
+            // Maven nearest-wins: Use the version found nearest to the root in the dependency tree
+            logger.info("Applying Maven nearest-wins version resolution");
+            applyNearestWinsResolution(new ArrayList<>(completeTrees.values()));
+        } else {
+            // Default: Highest version reconciliation - replace declared versions with actual runtime versions
+            // This handles Maven's dependency resolution where the runtime has a different version
+            // than what was declared in pom.xml files
+            Map<String, String> observedVersions = new HashMap<>();
+            for (Package pkg : inputPackages) {
+                String baseKey = pkg.getSystem().toLowerCase() + ":" + pkg.getName();
+                observedVersions.put(baseKey, pkg.getVersion());
+            }
 
-        for (DependencyNode tree : completeTrees.values()) {
-            reconcileTreeVersions(tree, observedVersions, inputPackageNames);
+            for (DependencyNode tree : completeTrees.values()) {
+                reconcileTreeVersions(tree, observedVersions, inputPackageNames);
+            }
         }
 
         // STEP 3: Find which INPUT packages appear as dependencies in OTHER input packages' trees
@@ -275,14 +304,33 @@ public class DependencyGraphBuilder implements AutoCloseable {
 
             if (jsonObject == null) {
                 logger.warn("WARNING: Unknown component {}. Treating as root dependency.", pkg.getFullName());
-                return new DependencyNode(pkg, 0);
+
+                // CRITICAL: Check if we already have this node from another package's graph
+                // If we do, return the existing node (which may have children populated)
+                // Don't create a new empty node that would lose the children!
+                String fullName = pkg.getFullName();
+                if (allNodes.containsKey(fullName)) {
+                    logger.debug("Package {} returned 404 but already exists in allNodes with children - reusing", fullName);
+                    return allNodes.get(fullName);
+                }
+
+                // Only create new empty node if we've never seen this package before
+                return new DependencyNode(pkg);
             }
 
             // Parse the FULL graph, not just direct children
             return parseFullDependencyGraph(jsonObject, pkg, inputPackageNames);
         } catch (IOException e) {
             logger.error("Error fetching dependencies for {}: {}", pkg.getFullName(), e.getMessage());
-            return new DependencyNode(pkg, 0);
+
+            // Same check for error case
+            String fullName = pkg.getFullName();
+            if (allNodes.containsKey(fullName)) {
+                logger.debug("Package {} threw error but already exists in allNodes with children - reusing", fullName);
+                return allNodes.get(fullName);
+            }
+
+            return new DependencyNode(pkg);
         }
     }
 
@@ -295,12 +343,13 @@ public class DependencyGraphBuilder implements AutoCloseable {
         JsonArray edges = graph.getAsJsonArray("edges");
 
         if (nodes == null || edges == null) {
-            return new DependencyNode(rootPackage, 0);
+            return new DependencyNode(rootPackage);
         }
 
         // Build map: node index -> Package
+        // Also build ONE DependencyNode per unique package (graph, not tree!)
         Map<Integer, Package> nodeMap = new HashMap<>();
-        Map<Integer, DependencyNode> nodeTreeMap = new HashMap<>();
+        Map<Integer, DependencyNode> nodeGraphMap = new HashMap<>();
         int selfNodeIndex = -1;
 
         // Process all nodes
@@ -323,7 +372,14 @@ public class DependencyGraphBuilder implements AutoCloseable {
             }
 
             nodeMap.put(i, pkg);
-            nodeTreeMap.put(i, new DependencyNode(pkg, 0)); // Depth updated later
+
+            // Reuse existing DependencyNode if we've already created one for this package
+            // Use the class-level allNodes map to share nodes across ALL API calls
+            if (!allNodes.containsKey(fullName)) {
+                allNodes.put(fullName, new DependencyNode(pkg));
+            }
+
+            nodeGraphMap.put(i, allNodes.get(fullName));
 
             // Find the SELF node
             if ("SELF".equals(relation)) {
@@ -337,30 +393,28 @@ public class DependencyGraphBuilder implements AutoCloseable {
             JsonObject edgeObj = edge.getAsJsonObject();
             int fromNode = edgeObj.get("fromNode").getAsInt();
             int toNode = edgeObj.get("toNode").getAsInt();
-
             adjacency.computeIfAbsent(fromNode, k -> new ArrayList<>()).add(toNode);
         }
 
         // Note: We don't need to separately cache dependencies since they're
-        // already captured in the tree structure via the adjacency list
+        // already captured in the graph structure via the adjacency list
 
-        // Build tree structure using recursion from SELF node
+        // Build graph structure using recursion from SELF node
         if (selfNodeIndex != -1) {
-            buildTreeFromAdjacency(nodeTreeMap, adjacency, selfNodeIndex, 0, new HashSet<>());
-            return nodeTreeMap.get(selfNodeIndex);
+            buildTreeFromAdjacency(nodeGraphMap, adjacency, selfNodeIndex, new HashSet<>());
+            return nodeGraphMap.get(selfNodeIndex);
         }
 
-        return new DependencyNode(rootPackage, 0);
+        return new DependencyNode(rootPackage);
     }
 
     /**
-     * Recursively build tree structure from adjacency list
+     * Recursively build graph structure from adjacency list
      */
     private void buildTreeFromAdjacency(
-            Map<Integer, DependencyNode> nodeTreeMap,
+            Map<Integer, DependencyNode> nodeGraphMap,
             Map<Integer, List<Integer>> adjacency,
             int currentNode,
-            int depth,
             Set<Integer> visited) {
 
         // Prevent cycles
@@ -369,18 +423,20 @@ public class DependencyGraphBuilder implements AutoCloseable {
         }
         visited.add(currentNode);
 
-        DependencyNode currentTreeNode = nodeTreeMap.get(currentNode);
-        if (currentTreeNode == null) {
+        DependencyNode currentGraphNode = nodeGraphMap.get(currentNode);
+        if (currentGraphNode == null) {
             return;
         }
 
         // Get the parent package to check exclusions
-        Package parentPkg = currentTreeNode.getPackage();
+        Package parentPkg = currentGraphNode.getPackage();
         Set<String> parentExclusions = exclusions.getOrDefault(parentPkg.getName(), Collections.emptySet());
 
         List<Integer> children = adjacency.getOrDefault(currentNode, Collections.emptyList());
         for (int childIndex : children) {
-            Package childPkg = nodeTreeMap.get(childIndex).getPackage();
+            DependencyNode childNode = nodeGraphMap.get(childIndex);
+            Package childPkg = childNode.getPackage();
+
             if (childPkg != null) {
                 // Check if this child is excluded by the parent
                 if (isExcluded(childPkg, parentExclusions)) {
@@ -388,51 +444,11 @@ public class DependencyGraphBuilder implements AutoCloseable {
                     continue; // Skip this child
                 }
 
-                // Create new node with correct depth
-                DependencyNode newChildNode = new DependencyNode(childPkg, depth + 1);
-                currentTreeNode.addChild(newChildNode);
+                // Just add reference to existing node - NO cloning needed!
+                currentGraphNode.addChild(childNode);
 
-                // Recursively build this child's subtree
-                buildChildSubtree(newChildNode, nodeTreeMap, adjacency, childIndex, depth + 1, new HashSet<>(visited));
-            }
-        }
-    }
-
-    /**
-     * Build subtree for a child node
-     */
-    private void buildChildSubtree(
-            DependencyNode parentNode,
-            Map<Integer, DependencyNode> nodeTreeMap,
-            Map<Integer, List<Integer>> adjacency,
-            int currentNodeIndex,
-            int depth,
-            Set<Integer> visited) {
-
-        if (visited.contains(currentNodeIndex)) {
-            return;
-        }
-        visited.add(currentNodeIndex);
-
-        // Get the parent package to check exclusions
-        Package parentPkg = parentNode.getPackage();
-        Set<String> parentExclusions = exclusions.getOrDefault(parentPkg.getName(), Collections.emptySet());
-
-        List<Integer> children = adjacency.getOrDefault(currentNodeIndex, Collections.emptyList());
-        for (int childIndex : children) {
-            Package childPkg = nodeTreeMap.get(childIndex).getPackage();
-            if (childPkg != null) {
-                // Check if this child is excluded by the parent
-                if (isExcluded(childPkg, parentExclusions)) {
-                    logger.debug("Excluding dependency {} from parent {}", childPkg.getName(), parentPkg.getName());
-                    continue; // Skip this child
-                }
-
-                DependencyNode childNode = new DependencyNode(childPkg, depth + 1);
-                parentNode.addChild(childNode);
-
-                // Recurse
-                buildChildSubtree(childNode, nodeTreeMap, adjacency, childIndex, depth + 1, new HashSet<>(visited));
+                // Recursively build this child's edges
+                buildTreeFromAdjacency(nodeGraphMap, adjacency, childIndex, new HashSet<>(visited));
             }
         }
     }
@@ -451,6 +467,143 @@ public class DependencyGraphBuilder implements AutoCloseable {
 
         // Check if the package name (groupId:artifactId) is in the exclusions set
         return parentExclusions.contains(pkg.getName());
+    }
+
+    /**
+     * Helper class for BFS traversal with depth tracking
+     */
+    private static class NodeWithDepth {
+        DependencyNode node;
+        int depth;
+
+        NodeWithDepth(DependencyNode node, int depth) {
+            this.node = node;
+            this.depth = depth;
+        }
+    }
+
+    /**
+     * Helper class to track version and depth for Maven nearest-wins
+     */
+    private static class VersionDepth {
+        String version;
+        int depth;
+
+        VersionDepth(String version, int depth) {
+            this.version = version;
+            this.depth = depth;
+        }
+    }
+
+    /**
+     * Apply Maven's nearest-wins resolution algorithm
+     * Uses BFS to find the nearest occurrence of each package and updates all nodes to use that version
+     */
+    private void applyNearestWinsResolution(List<DependencyNode> roots) {
+        logger.info("Applying Maven nearest-wins version resolution");
+
+        // Track: package base name -> (version, depth)
+        Map<String, VersionDepth> firstOccurrence = new HashMap<>();
+
+        // BFS traversal to find first occurrence of each package
+        Queue<NodeWithDepth> queue = new LinkedList<>();
+        for (DependencyNode root : roots) {
+            queue.offer(new NodeWithDepth(root, 0));
+        }
+
+        Set<String> visited = new HashSet<>();
+
+        while (!queue.isEmpty()) {
+            NodeWithDepth current = queue.poll();
+            DependencyNode node = current.node;
+            int depth = current.depth;
+
+            Package pkg = node.getPackage();
+            String baseKey = pkg.getSystem().toLowerCase() + ":" + pkg.getName();
+            String nodeId = baseKey + ":" + pkg.getVersion() + ":" + depth;
+
+            // Prevent infinite loops in cyclic dependencies
+            if (visited.contains(nodeId)) {
+                continue;
+            }
+            visited.add(nodeId);
+
+            // First occurrence wins (or nearer occurrence)
+            if (!firstOccurrence.containsKey(baseKey)) {
+                firstOccurrence.put(baseKey, new VersionDepth(pkg.getVersion(), depth));
+                logger.debug("First occurrence: {} at depth {} with version {}",
+                    baseKey, depth, pkg.getVersion());
+            } else {
+                // Check if this occurrence is nearer
+                VersionDepth existing = firstOccurrence.get(baseKey);
+                if (depth < existing.depth) {
+                    // Nearer occurrence - update the winning version
+                    logger.info("Found nearer occurrence of {}: depth {} (v{}) replaces depth {} (v{})",
+                        baseKey, depth, pkg.getVersion(), existing.depth, existing.version);
+                    firstOccurrence.put(baseKey, new VersionDepth(pkg.getVersion(), depth));
+                }
+            }
+
+            // Add children to queue
+            for (DependencyNode child : node.getChildren()) {
+                queue.offer(new NodeWithDepth(child, depth + 1));
+            }
+        }
+
+        // Second pass: Update all nodes to use the winning version
+        for (DependencyNode root : roots) {
+            updateVersionsToNearestWins(root, firstOccurrence, new HashSet<>());
+        }
+
+        logger.info("Applied nearest-wins resolution to {} packages", firstOccurrence.size());
+    }
+
+    /**
+     * Recursively update versions based on nearest-wins resolution
+     */
+    private void updateVersionsToNearestWins(
+            DependencyNode node,
+            Map<String, VersionDepth> winningVersions,
+            Set<String> visited) {
+
+        Package pkg = node.getPackage();
+        String baseKey = pkg.getSystem().toLowerCase() + ":" + pkg.getName();
+        String nodeId = baseKey + ":" + pkg.getVersion();
+
+        // Prevent infinite loops in cyclic dependencies
+        if (visited.contains(nodeId)) {
+            return;
+        }
+        visited.add(nodeId);
+
+        VersionDepth winner = winningVersions.get(baseKey);
+        if (winner != null && !winner.version.equals(pkg.getVersion())) {
+            logger.debug("Updating {} from {} to {} (nearest-wins)",
+                baseKey, pkg.getVersion(), winner.version);
+
+            Package updatedPkg = new Package(pkg.getSystem(), pkg.getName(), winner.version);
+            node.setPackage(updatedPkg);
+
+            // IMPORTANT: Fetch the correct dependency tree for the new version
+            logger.debug("Fetching dependencies for reconciled version {}", updatedPkg.getFullName());
+            DependencyNode winnerTree = fetchCompleteDependencyTree(updatedPkg, new HashSet<>());
+
+            if (winnerTree != null && !winnerTree.getChildren().isEmpty()) {
+                node.getChildren().clear();
+                for (DependencyNode child : winnerTree.getChildren()) {
+                    node.addChild(child);
+                    updateVersionsToNearestWins(child, winningVersions, new HashSet<>(visited));
+                }
+                logger.debug("Replaced {} children for nearest-wins {}", winnerTree.getChildren().size(), updatedPkg.getFullName());
+            } else {
+                logger.debug("No new dependencies found for nearest-wins {}", updatedPkg.getFullName());
+            }
+        } else {
+            // Version is already correct, just recurse
+            for (DependencyNode child : node.getChildren()) {
+                updateVersionsToNearestWins(child, winningVersions, new HashSet<>(visited));
+            }
+        }
     }
 
     /**
