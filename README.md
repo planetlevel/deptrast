@@ -38,65 +38,47 @@ Security folks will want to detect exactly what components are actually running 
 - Supports multiple package ecosystems (Maven, NPM, PyPI)
 - **SBOM Enhancement** - When input and output are both SBOM, preserves original metadata and adds dependency graph
 
-## Quick Start
+## Installation
 
-### Java CLI
+Choose either Java or Python implementation - both provide the identical CLI interface.
+
+### Java (Recommended)
 ```bash
-# Create SBOM from pom.xml
-java -jar deptrast-4.0.0.jar create pom.xml output.sbom
+# Download pre-built JAR from GitHub Releases
+# https://github.com/planetlevel/deptrast/releases
 
-# Enrich existing SBOM with dependency graph
-java -jar deptrast-4.0.0.jar enrich input.sbom enriched.sbom
+# Or build from source
+mvn clean package
 
-# Print SBOM as tree visualization
-java -jar deptrast-4.0.0.jar print input.sbom --output=tree
+# Create an alias for convenience
+alias deptrast='java -jar /path/to/deptrast-4.0.0.jar'
 ```
 
-### Python CLI
+**Requirements:** Java 11 or higher
+
+### Python
 ```bash
 # Install from source
 pip install ./python
 
-# Same commands work in Python
-deptrast create pom.xml output.sbom
-deptrast enrich input.sbom enriched.sbom
-deptrast print input.sbom --output=tree
-```
-
-## Installation
-
-### Java Version
-
-**Download Pre-built JAR:**
-Download the latest `deptrast-4.0.0.jar` from [GitHub Releases](https://github.com/planetlevel/deptrast/releases)
-
-**Or Build from Source:**
-```bash
-mvn clean package
-# Creates target/deptrast-4.0.0.jar
-```
-
-**Requirements:**
-- Java 11 or higher
-- Maven for building
-
-### Python Version
-
-**Install from Source:**
-```bash
-pip install ./python
-```
-
-**Or Install from GitHub:**
-```bash
+# Or install directly from GitHub
 pip install git+https://github.com/planetlevel/deptrast.git#subdirectory=python
 ```
 
-**Requirements:**
-- Python 3.8 or higher
-- pip
+**Requirements:** Python 3.8 or higher
 
-**Note:** The Python implementation provides the same unified CLI interface as the Java version, making it easy to integrate into Python-based workflows without requiring Java.
+## Quick Start
+
+```bash
+# Create SBOM from pom.xml
+deptrast create pom.xml output.sbom
+
+# Enrich existing SBOM with dependency graph
+deptrast enrich input.sbom enriched.sbom
+
+# Print SBOM as tree visualization
+deptrast print input.sbom --output=tree
+```
 
 ## Project Security
 

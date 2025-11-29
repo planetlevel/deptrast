@@ -21,3 +21,4 @@ deptrast/pymaven/errors.py
 deptrast/pymaven/pom.py
 deptrast/pymaven/utils.py
 deptrast/pymaven/versioning.py
+tests/test_deptrast.py
