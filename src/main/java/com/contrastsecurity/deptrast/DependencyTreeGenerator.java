@@ -1430,14 +1430,14 @@ public class DependencyTreeGenerator {
             try (InputStream is = DependencyTreeGenerator.class.getResourceAsStream("/META-INF/maven/com.contrastsecurity/deptrast/pom.properties")) {
                 if (is != null) {
                     props.load(is);
-                    return props.getProperty("version", "2.0.3");
+                    return props.getProperty("version", "4.0.0");
                 }
             }
         } catch (Exception e) {
             logger.debug("Could not read version from pom.properties: {}", e.getMessage());
         }
         // Fallback to hardcoded version
-        return "2.0.3";
+        return "4.0.0";
     }
 
     /**

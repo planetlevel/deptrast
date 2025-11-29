@@ -40,21 +40,63 @@ Security folks will want to detect exactly what components are actually running 
 
 ## Quick Start
 
+### Java CLI
 ```bash
 # Create SBOM from pom.xml
-java -jar target/deptrast-2.0.3.jar create pom.xml output.sbom
+java -jar deptrast-4.0.0.jar create pom.xml output.sbom
 
 # Enrich existing SBOM with dependency graph
-java -jar target/deptrast-2.0.3.jar enrich input.sbom enriched.sbom
+java -jar deptrast-4.0.0.jar enrich input.sbom enriched.sbom
 
 # Print SBOM as tree visualization
-java -jar target/deptrast-2.0.3.jar print input.sbom --output=tree
+java -jar deptrast-4.0.0.jar print input.sbom --output=tree
 ```
 
-## Requirements
+### Python CLI
+```bash
+# Install from source
+pip install ./python
 
+# Same commands work in Python
+deptrast create pom.xml output.sbom
+deptrast enrich input.sbom enriched.sbom
+deptrast print input.sbom --output=tree
+```
+
+## Installation
+
+### Java Version
+
+**Download Pre-built JAR:**
+Download the latest `deptrast-4.0.0.jar` from [GitHub Releases](https://github.com/planetlevel/deptrast/releases)
+
+**Or Build from Source:**
+```bash
+mvn clean package
+# Creates target/deptrast-4.0.0.jar
+```
+
+**Requirements:**
 - Java 11 or higher
-- Maven for building the project
+- Maven for building
+
+### Python Version
+
+**Install from Source:**
+```bash
+pip install ./python
+```
+
+**Or Install from GitHub:**
+```bash
+pip install git+https://github.com/planetlevel/deptrast.git#subdirectory=python
+```
+
+**Requirements:**
+- Python 3.8 or higher
+- pip
+
+**Note:** The Python implementation provides the same unified CLI interface as the Java version, making it easy to integrate into Python-based workflows without requiring Java.
 
 ## Project Security
 

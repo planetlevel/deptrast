@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "deptrast"
-version = "3.0.1"
+version = "4.0.0"
 description = "The ultimate dependency tree converter, enhancer, and streamliner"
 readme = "README.md"
 requires-python = ">=3.8"
