@@ -84,22 +84,22 @@ public class DependencyTreeGeneratorTest {
         assertTrue(result.valid, "SBOM should be valid: " + result.errorMessage);
 
         // Verify specific expected values (from petclinic-contrast-runtime-list.txt)
-        // This file has 117 declared components but resolves to 136 with transitives
-        assertEquals(136, result.componentCount,
-            "Expected 136 components from petclinic-contrast-runtime-list.txt");
+        // This file has 128 declared components but resolves to 162 with transitives
+        assertEquals(162, result.componentCount,
+            "Expected 162 components from petclinic-contrast-runtime-list.txt");
 
         // All components should have PURLs
-        assertEquals(136, result.componentsWithPurl,
+        assertEquals(162, result.componentsWithPurl,
             "All components should have PURLs");
 
         // All components should have bom-refs
-        assertEquals(136, result.componentsWithBomRef,
+        assertEquals(162, result.componentsWithBomRef,
             "All components should have bom-refs");
 
         // Should have dependency relationships
         assertTrue(result.dependencyCount > 0,
             "SBOM should contain dependency graph");
-        assertEquals(136, result.dependencyCount,
+        assertEquals(162, result.dependencyCount,
             "Should have dependency entries for all components");
 
         System.out.println("Flat file test: " + result.componentCount + " components, " +
@@ -509,10 +509,10 @@ public class DependencyTreeGeneratorTest {
         assertEquals("CycloneDX", sbom.get("bomFormat").getAsString());
 
         // Verify expected counts match
-        assertEquals(136, result.componentCount, "Should have 136 components");
-        assertEquals(136, result.componentsWithPurl, "All components should have PURLs");
-        assertEquals(136, result.componentsWithBomRef, "All components should have bom-refs");
-        assertEquals(136, result.dependencyCount, "Should have 136 dependency entries");
+        assertEquals(162, result.componentCount, "Should have 162 components");
+        assertEquals(162, result.componentsWithPurl, "All components should have PURLs");
+        assertEquals(162, result.componentsWithBomRef, "All components should have bom-refs");
+        assertEquals(162, result.dependencyCount, "Should have 162 dependency entries");
 
         // Verify metadata has tool information
         com.google.gson.JsonObject metadata = sbom.getAsJsonObject("metadata");

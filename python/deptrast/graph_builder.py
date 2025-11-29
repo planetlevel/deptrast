@@ -328,7 +328,7 @@ class DependencyGraphBuilder:
         # Apply reconciled version
         if reconciled_version:
             logger.info(f"Reconciling {pkg.name} from {current_version} to {reconciled_version}")
-            reconciled_pkg = Package(system=pkg.system, name=pkg.name, version=reconciled_version)
+            reconciled_pkg = Package(system=pkg.system, name=pkg.name, version=reconciled_version, scope=pkg.scope)
             node.package = reconciled_pkg
 
             # IMPORTANT: Fetch the dependency tree for the NEW version
@@ -538,7 +538,7 @@ class DependencyGraphBuilder:
             if winner_version != pkg.version:
                 logger.debug(f"Updating {base_key} from {pkg.version} to {winner_version} (nearest-wins)")
 
-                updated_pkg = Package(pkg.system, pkg.name, winner_version)
+                updated_pkg = Package(pkg.system, pkg.name, winner_version, pkg.scope)
                 node.package = updated_pkg
 
                 # IMPORTANT: Fetch the correct dependency tree for the new version

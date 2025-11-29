@@ -11,10 +11,14 @@ class Package:
     system: str  # maven, npm, pypi
     name: str
     version: str
+    scope: str = "compile"  # Maven scope: compile, runtime, test, provided, system, optional
 
     def __post_init__(self):
         """Normalize system to lowercase."""
         self.system = self.system.lower()
+        # Default to compile if scope is None or empty
+        if not self.scope:
+            self.scope = "compile"
 
     @property
     def full_name(self) -> str:
@@ -35,23 +39,31 @@ class Package:
 
 @dataclass
 class DependencyNode:
-    """Represents a node in a dependency tree."""
+    """Represents a node in a dependency graph (not a tree - nodes can be shared)."""
 
     package: Package
-    depth: int = 0
     is_root: bool = False
-    children: List['DependencyNode'] = field(default_factory=list)
+    children: List['DependencyNode'] = field(default_factory=list, compare=False, hash=False)
+
+    def __eq__(self, other) -> bool:
+        """Equality based on object identity for graph node sharing."""
+        return self is other
+
+    def __hash__(self) -> int:
+        """Hash based on object identity for graph node sharing."""
+        return id(self)
 
     def add_child(self, child: 'DependencyNode') -> None:
         """Add a child dependency to this node."""
-        self.children.append(child)
+        if child not in self.children:  # Avoid duplicates
+            self.children.append(child)
 
     def mark_as_root(self) -> None:
         """Mark this node as a root dependency."""
         self.is_root = True
 
-    def get_tree_representation(self, prefix: str = "", is_last: bool = True) -> str:
-        """Generate a tree visualization string."""
+    def get_tree_representation(self, prefix: str = "", is_last: bool = True, depth: int = 0) -> str:
+        """Generate a tree visualization string (depth computed on-the-fly)."""
         lines = []
 
         # Root indicator
@@ -59,7 +71,7 @@ class DependencyNode:
 
         # Current node
         connector = "└── " if is_last else "├── "
-        if self.depth == 0:
+        if depth == 0:
             lines.append(f"{root_marker}{self.package.full_name}")
         else:
             lines.append(f"{prefix}{connector}{root_marker}{self.package.full_name}")
@@ -67,11 +79,11 @@ class DependencyNode:
         # Children
         for i, child in enumerate(self.children):
             is_last_child = (i == len(self.children) - 1)
-            if self.depth == 0:
+            if depth == 0:
                 child_prefix = ""
             else:
                 child_prefix = prefix + ("    " if is_last else "│   ")
-            lines.append(child.get_tree_representation(child_prefix, is_last_child))
+            lines.append(child.get_tree_representation(child_prefix, is_last_child, depth + 1))
 
         return "\n".join(lines)
 

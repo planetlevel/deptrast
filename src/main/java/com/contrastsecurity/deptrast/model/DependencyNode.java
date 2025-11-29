@@ -4,23 +4,21 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Represents a node in the dependency tree
+ * Represents a node in the dependency graph (not a tree - nodes can be shared)
  */
 public class DependencyNode {
     private static final String RED_DOT = "🔴";
     private Package pkg;
     private List<DependencyNode> children;
-    private int depth;
     private boolean isRoot;
 
-    public DependencyNode(Package pkg, int depth) {
-        this(pkg, depth, false);
+    public DependencyNode(Package pkg) {
+        this(pkg, false);
     }
-    
-    public DependencyNode(Package pkg, int depth, boolean isRoot) {
+
+    public DependencyNode(Package pkg, boolean isRoot) {
         this.pkg = pkg;
         this.children = new ArrayList<>();
-        this.depth = depth;
         this.isRoot = isRoot;
     }
 
@@ -36,12 +34,11 @@ public class DependencyNode {
         return children;
     }
 
-    public int getDepth() {
-        return depth;
-    }
-
     public void addChild(DependencyNode child) {
-        this.children.add(child);
+        // Avoid duplicates
+        if (!this.children.contains(child)) {
+            this.children.add(child);
+        }
     }
     
     public void markAsRoot() {
@@ -53,15 +50,15 @@ public class DependencyNode {
     }
 
     /**
-     * Generates a tree representation of the dependency
+     * Generates a tree representation of the dependency (depth computed on-the-fly)
      */
     public String getTreeRepresentation() {
         StringBuilder builder = new StringBuilder();
-        printTree(builder, "", true);
+        printTree(builder, "", true, 0);
         return builder.toString();
     }
 
-    private void printTree(StringBuilder builder, String prefix, boolean isLast) {
+    private void printTree(StringBuilder builder, String prefix, boolean isLast, int depth) {
         builder.append(prefix);
         // Skip showing project root node name
         if (!pkg.getSystem().equals("project")) {
@@ -72,7 +69,7 @@ public class DependencyNode {
         for (int i = 0; i < children.size(); i++) {
             DependencyNode child = children.get(i);
             boolean lastChild = (i == children.size() - 1);
-            child.printTree(builder, prefix + (isLast ? "    " : "│   "), lastChild);
+            child.printTree(builder, prefix + (isLast ? "    " : "│   "), lastChild, depth + 1);
         }
     }
 }

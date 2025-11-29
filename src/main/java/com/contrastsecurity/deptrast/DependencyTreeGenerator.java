@@ -53,10 +53,21 @@ public class DependencyTreeGenerator {
 
     private static DependencyGraphBuilder graphBuilder;
     private static final String NEW_LINE = System.lineSeparator();
-    private static final Logger logger = LoggerFactory.getLogger(DependencyTreeGenerator.class);
+    private static final Logger logger;
     private static String originalCommandLine = null;  // Store original command line for SBOM metadata
 
+    // Static initializer to suppress SLF4J initialization messages
+    static {
+        java.io.PrintStream originalErr = System.err;
+        System.setErr(new java.io.PrintStream(new java.io.OutputStream() {
+            public void write(int b) {}
+        }));
+        logger = LoggerFactory.getLogger(DependencyTreeGenerator.class);
+        System.setErr(originalErr);
+    }
+
     public static void main(String[] args) {
+
         // Register shutdown hook for clean termination
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             logger.info("Shutdown hook triggered, cleaning up resources");
@@ -130,7 +141,7 @@ public class DependencyTreeGenerator {
         String outputFormat = "sbom"; // sbom, roots, tree, list
         String treeFormat = "tree";   // tree or maven (for tree output)
         String projectName = "project";
-        String scope = "compile";  // runtime, compile, provided, test, all
+        String scope = "all";  // runtime, compile, provided, test, all (default: all)
         boolean verbose = false;
         boolean useExistingDeps = false;  // Use existing dependency graph from SBOM
         boolean includeOptional = false;  // Include optional/provided dependencies (default: exclude)
@@ -142,16 +153,16 @@ public class DependencyTreeGenerator {
 
             if (arg.startsWith("--input=")) {
                 inputType = arg.substring(8).toLowerCase();
-            } else if (arg.startsWith("--output=")) {
-                outputFormat = arg.substring(9).toLowerCase();
             } else if (arg.startsWith("--format=")) {
-                treeFormat = arg.substring(9).toLowerCase();
+                outputFormat = arg.substring(9).toLowerCase();
+            } else if (arg.startsWith("--tree-style=")) {
+                treeFormat = arg.substring(13).toLowerCase();
             } else if (arg.startsWith("--project-name=")) {
                 projectName = arg.substring(15);
             } else if (arg.startsWith("--scope=")) {
                 scope = arg.substring(8).toLowerCase();
-            } else if (arg.startsWith("--resolution-strategy=")) {
-                resolutionStrategy = arg.substring(22).toLowerCase();
+            } else if (arg.startsWith("--strategy=")) {
+                resolutionStrategy = arg.substring(11).toLowerCase();
             } else if (arg.equals("--include-optional")) {
                 includeOptional = true;
             } else if (arg.equals("--verbose") || arg.equals("-v")) {
@@ -178,7 +189,7 @@ public class DependencyTreeGenerator {
         // Validate output format
         if (!outputFormat.equals("sbom") && !outputFormat.equals("roots") &&
             !outputFormat.equals("tree") && !outputFormat.equals("list")) {
-            System.err.println("Invalid --output value: " + outputFormat);
+            System.err.println("Invalid --format value: " + outputFormat);
             System.err.println("Valid values: sbom, roots, tree, list");
             return;
         }
@@ -193,7 +204,7 @@ public class DependencyTreeGenerator {
 
         // Validate resolution strategy
         if (!resolutionStrategy.equals("maven") && !resolutionStrategy.equals("highest")) {
-            System.err.println("Invalid --resolution-strategy value: " + resolutionStrategy);
+            System.err.println("Invalid --strategy value: " + resolutionStrategy);
             System.err.println("Valid values: maven, highest");
             return;
         }
@@ -275,8 +286,18 @@ public class DependencyTreeGenerator {
             rootCount = dependencyTree.size();
 
             logger.info("Using existing dependency graph with {} root packages", rootCount);
+        } else if ("flat".equals(detectedFormat)) {
+            // For flat runtime lists, don't resolve - these are actual runtime dependencies
+            logger.info("Input is a flat runtime list - skipping dependency resolution");
+            logger.info("Using packages as-is from runtime (no resolution applied)");
+
+            graphBuilder = new DependencyGraphBuilder();
+            // Build minimal dependency tree structure (no resolution)
+            dependencyTree = graphBuilder.buildDependencyTrees(allPackages);
+            allTrackedPackages = allPackages;
+            rootCount = allPackages.size();
         } else {
-            // Build dependency trees from scratch using API
+            // Build dependency trees from scratch using API (for POM, requirements.txt, etc)
             logger.info("Analyzing dependencies for {} packages...", allPackages.size());
 
             graphBuilder = new DependencyGraphBuilder();
@@ -293,7 +314,7 @@ public class DependencyTreeGenerator {
                 logger.info("Applied {} exclusion rules to graph builder", exclusions.size());
             }
 
-            // Set resolution strategy
+            // Set resolution strategy (only for build files that need resolution)
             graphBuilder.setResolutionStrategy(resolutionStrategy);
             logger.info("Using {} resolution strategy", resolutionStrategy);
 
@@ -480,6 +501,33 @@ public class DependencyTreeGenerator {
             return purl.substring(0, qualifierIndex);
         }
         return purl;
+    }
+
+    /**
+     * Map Maven scope to CycloneDX Component.Scope
+     *
+     * Maven scopes:
+     *   compile, runtime -> REQUIRED (needed at runtime)
+     *   test, provided, system -> EXCLUDED (not needed at runtime)
+     *   optional -> OPTIONAL (optional at runtime)
+     */
+    private static Component.Scope mavenScopeToCycloneDxScope(String mavenScope) {
+        if (mavenScope == null || mavenScope.isEmpty()) {
+            mavenScope = "compile";  // Default Maven scope
+        }
+
+        switch (mavenScope.toLowerCase()) {
+            case "optional":
+                return Component.Scope.OPTIONAL;
+            case "test":
+            case "provided":
+            case "system":
+                return Component.Scope.EXCLUDED;
+            case "compile":
+            case "runtime":
+            default:
+                return Component.Scope.REQUIRED;
+        }
     }
 
     /**
@@ -1234,7 +1282,7 @@ public class DependencyTreeGenerator {
             toolComponent.setVersion(getVersion());
             toolComponent.setType(Component.Type.APPLICATION);
 
-            String toolPurl = "pkg:maven/com.contrastsecurity/deptrast@" + getVersion();
+            String toolPurl = "pkg:github/planetlevel/deptrast@" + getVersion();
             toolComponent.setPurl(toolPurl);
             toolComponent.setBomRef(toolPurl);
             toolComponent.setPublisher("Contrast Security");
@@ -1302,6 +1350,13 @@ public class DependencyTreeGenerator {
                 component.setVersion(pkg.getVersion());
                 component.setPurl(purl);
                 component.setBomRef(purl);  // Use PURL as bom-ref for consistent referencing
+
+                // Map Maven scope to CycloneDX scope
+                if ("maven".equalsIgnoreCase(pkg.getSystem())) {
+                    Component.Scope cdxScope = mavenScopeToCycloneDxScope(pkg.getScope());
+                    component.setScope(cdxScope);
+                }
+
                 components.add(component);
                 purlByPackage.put(pkg, purl);
             }

@@ -10,7 +10,7 @@ from uuid import uuid4
 from packageurl import PackageURL
 from cyclonedx.model import ExternalReference, ExternalReferenceType, XsUri
 from cyclonedx.model.bom import Bom
-from cyclonedx.model.component import Component, ComponentType
+from cyclonedx.model.component import Component, ComponentType, ComponentScope
 from cyclonedx.model.contact import OrganizationalContact
 from cyclonedx.model.tool import Tool
 from cyclonedx.output.json import JsonV1Dot6
@@ -40,8 +40,7 @@ class OutputFormatter:
 
         # Create a project root node
         project_root = DependencyNode(
-            package=Package(system='project', name=project_name, version='1.0.0'),
-            depth=0
+            package=Package(system='project', name=project_name, version='1.0.0')
         )
         for tree in dependency_trees:
             project_root.add_child(tree)
@@ -66,17 +65,17 @@ class OutputFormatter:
         lines = [f"[INFO] {project_name}"]
 
         for tree in dependency_trees:
-            lines.extend(OutputFormatter._format_maven_node(tree, "", True))
+            lines.extend(OutputFormatter._format_maven_node(tree, "", True, depth=0))
 
         return '\n'.join(lines) + '\n'
 
     @staticmethod
-    def _format_maven_node(node: DependencyNode, prefix: str, is_last: bool) -> List[str]:
+    def _format_maven_node(node: DependencyNode, prefix: str, is_last: bool, depth: int = 0) -> List[str]:
         """Format a single node in Maven tree style."""
         lines = []
 
         # Connector
-        if node.depth > 0:
+        if depth > 0:
             connector = "\\- " if is_last else "+- "
             lines.append(f"[INFO] {prefix}{connector}{node.package.full_name}")
         else:
@@ -86,23 +85,27 @@ class OutputFormatter:
         for i, child in enumerate(node.children):
             is_last_child = (i == len(node.children) - 1)
             child_prefix = prefix + ("   " if is_last else "|  ")
-            lines.extend(OutputFormatter._format_maven_node(child, child_prefix, is_last_child))
+            lines.extend(OutputFormatter._format_maven_node(child, child_prefix, is_last_child, depth + 1))
 
         return lines
 
     @staticmethod
     def format_as_sbom(
         packages: Collection[Package],
-        dependency_trees: List[DependencyNode]
+        dependency_trees: List[DependencyNode],
+        command_line: str = None
     ) -> str:
         """Generate a CycloneDX SBOM in JSON format."""
+        from . import __version__
+
         bom = Bom()
 
         # Set serial number - just use UUID, the library will format it
         bom.serial_number = uuid4()
 
         # Create metadata with tool information as a component (like Java version)
-        tool_purl = PackageURL.from_string("pkg:maven/com.contrastsecurity/deptrast@3.0.1")
+        # Use GitHub-based purl since deptrast is open source on GitHub
+        tool_purl = PackageURL.from_string(f"pkg:github/planetlevel/deptrast@{__version__}")
 
         # Create external reference for VCS
         vcs_ref = ExternalReference(
@@ -112,12 +115,12 @@ class OutputFormatter:
 
         tool_component = Component(
             name="deptrast",
-            version="3.0.1",
+            version=__version__,
             type=ComponentType.APPLICATION,
             group="com.contrastsecurity",
             publisher="Contrast Security",
             purl=tool_purl,
-            bom_ref="pkg:maven/com.contrastsecurity/deptrast@3.0.1",
+            bom_ref=f"pkg:github/planetlevel/deptrast@{__version__}",
             external_references=[vcs_ref]
         )
 
@@ -155,6 +158,9 @@ class OutputFormatter:
             depends_on = [OutputFormatter._build_purl(dep) for dep in direct_deps if dep in packages]
 
             # Always include dependsOn (even if empty) to match Java
+            # Sort dependsOn array for consistent ordering
+            depends_on.sort()
+
             dep_entry = {
                 "ref": purl,
                 "dependsOn": depends_on
@@ -168,7 +174,7 @@ class OutputFormatter:
         # Add dependencies to SBOM
         sbom['dependencies'] = dependencies
 
-        # Reorder component fields to match Java output: type, bom-ref, group, name, version, purl
+        # Reorder component fields to match Java output: type, bom-ref, group, name, version, scope, purl
         reordered_components = []
         for comp in sbom.get('components', []):
             ordered_comp = {
@@ -177,6 +183,7 @@ class OutputFormatter:
                 'group': comp.get('group'),
                 'name': comp.get('name'),
                 'version': comp.get('version'),
+                'scope': comp.get('scope'),
                 'purl': comp.get('purl')
             }
             # Remove None values
@@ -206,6 +213,15 @@ class OutputFormatter:
                 ordered_tool = {k: v for k, v in ordered_tool.items() if v is not None}
                 reordered_tool_comps.append(ordered_tool)
             metadata['tools']['components'] = reordered_tool_comps
+
+        # Add commandLine property if provided
+        if command_line:
+            if 'properties' not in metadata:
+                metadata['properties'] = []
+            metadata['properties'].append({
+                'name': 'commandLine',
+                'value': command_line
+            })
 
         # Fix timestamp format to match Java (UTC with Z suffix, no microseconds)
         if 'timestamp' in metadata:
@@ -322,11 +338,49 @@ class OutputFormatter:
 
         pkg = node.package
         children = [child.package for child in node.children]
-        dependency_map[pkg] = children
+
+        # Deduplicate children list (defensive - shouldn't be needed but handles edge cases)
+        seen = set()
+        unique_children = []
+        for child in children:
+            child_key = child.full_name
+            if child_key not in seen:
+                seen.add(child_key)
+                unique_children.append(child)
+
+        # Only overwrite if we don't already have a better entry
+        # (one with children beats one without)
+        if pkg not in dependency_map or len(unique_children) > 0:
+            dependency_map[pkg] = unique_children
 
         # Recurse into children
         for child in node.children:
             OutputFormatter._collect_dependencies_from_tree(child, dependency_map)
+
+    @staticmethod
+    def _maven_scope_to_cyclonedx(maven_scope: str) -> ComponentScope:
+        """
+        Map Maven scope to CycloneDX ComponentScope.
+
+        Maven scopes:
+          compile, runtime -> REQUIRED (needed at runtime)
+          test, provided, system -> EXCLUDED (not needed at runtime)
+          optional -> OPTIONAL (optional at runtime)
+        """
+        if not maven_scope:
+            maven_scope = "compile"  # Default Maven scope
+
+        scope_lower = maven_scope.lower()
+
+        if scope_lower == "optional":
+            return ComponentScope.OPTIONAL
+        elif scope_lower in ("test", "provided", "system"):
+            return ComponentScope.EXCLUDED
+        elif scope_lower in ("compile", "runtime"):
+            return ComponentScope.REQUIRED
+        else:
+            # Default to REQUIRED for unknown scopes
+            return ComponentScope.REQUIRED
 
     @staticmethod
     def _package_to_component(pkg: Package) -> Component:
@@ -351,6 +405,11 @@ class OutputFormatter:
             purl=purl_obj,
             bom_ref=purl_str
         )
+
+        # Map Maven scope to CycloneDX scope
+        if pkg.system.lower() == 'maven':
+            cdx_scope = OutputFormatter._maven_scope_to_cyclonedx(pkg.scope)
+            component.scope = cdx_scope
 
         return component
 

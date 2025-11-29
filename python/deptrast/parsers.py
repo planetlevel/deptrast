@@ -100,61 +100,126 @@ class FileParser:
         return Package(system=system, name=name, version=version)
 
     @staticmethod
-    def parse_pom_file(file_path: str) -> Tuple[List[Package], Dict[str, str], Dict[str, Set[str]]]:
+    def _should_include_scope(dep_scope: str, scope_filter: str) -> bool:
         """
-        Parse a Maven pom.xml file.
+        Determine if a dependency scope should be included based on the filter.
+        Follows Maven scope semantics.
+        """
+        if scope_filter == 'all':
+            return True
+
+        dep_scope_lower = dep_scope.lower() if dep_scope else 'compile'
+        scope_filter_lower = scope_filter.lower()
+
+        if scope_filter_lower == dep_scope_lower:
+            return True
+
+        # Runtime scope includes both compile and runtime
+        if scope_filter_lower == 'runtime' and dep_scope_lower in ('compile', 'runtime'):
+            return True
+
+        return False
+
+    @staticmethod
+    def parse_pom_file(file_path: str, scope_filter: str = 'all') -> Tuple[List[Package], Dict[str, str], Dict[str, Set[str]]]:
+        """
+        Parse a Maven pom.xml file using pymaven for full parent POM resolution.
+
+        Args:
+            file_path: Path to the pom.xml file
+            scope_filter: Maven scope to include (runtime, compile, provided, test, or all)
 
         Returns:
             Tuple of (packages, dependency_management, exclusions)
         """
+        from .pymaven.client import MavenClient
+        from .pymaven.pom import Pom
+
+        # Parse POM metadata to get coordinate
         tree = ET.parse(file_path)
         root = tree.getroot()
-
-        # Maven namespace
         ns = {'m': 'http://maven.apache.org/POM/4.0.0'}
 
-        # Extract properties
-        properties = FileParser._extract_properties(root, ns, file_path)
+        # Extract basic coordinates from POM
+        group_id_elem = root.find('m:groupId', ns)
+        artifact_id_elem = root.find('m:artifactId', ns)
+        version_elem = root.find('m:version', ns)
 
-        # Extract dependency management
-        dep_mgmt = FileParser._extract_dependency_management(root, ns, properties)
+        # If not found directly, try parent
+        if group_id_elem is None:
+            parent_elem = root.find('m:parent', ns)
+            if parent_elem is not None:
+                group_id_elem = parent_elem.find('m:groupId', ns)
+        if version_elem is None:
+            parent_elem = root.find('m:parent', ns)
+            if parent_elem is not None:
+                version_elem = parent_elem.find('m:version', ns)
 
-        # Extract dependencies
+        group_id = group_id_elem.text if group_id_elem is not None else 'unknown'
+        artifact_id = artifact_id_elem.text if artifact_id_elem is not None else 'unknown'
+        version = version_elem.text if version_elem is not None else '1.0'
+
+        coordinate = f"{group_id}:{artifact_id}:{version}"
+
+        # Use pymaven to parse with parent resolution
+        client = MavenClient('https://repo1.maven.org/maven2/')
+        pom = Pom.parse(coordinate, file_path, client=client)
+
+        # Extract dependency management with property substitution
+        dep_mgmt = {}
+        for (dep_group, dep_artifact), (dep_version, scope, optional) in pom.dependency_management.items():
+            key = f"{dep_group}:{dep_artifact}"
+            # Apply property substitution to versions from parent
+            version_str = str(dep_version)
+            version_str = pom._replace_properties(version_str, pom.properties)
+            dep_mgmt[key] = version_str
+
+        # Extract dependencies (exclude test scope, include only required, exclude imports/parent/relocations)
         packages = []
         exclusions: Dict[str, Set[str]] = {}
 
-        deps_elements = root.findall('.//m:dependencies/m:dependency', ns)
-        for dep in deps_elements:
-            # Skip test scope
-            scope = dep.find('m:scope', ns)
-            if scope is not None and scope.text == 'test':
+        for scope, deps in pom.dependencies.items():
+            # Skip import (BOMs) and relocation
+            if scope in ('import', 'relocation'):
                 continue
 
+            # Apply scope filtering
+            if not FileParser._should_include_scope(scope, scope_filter):
+                continue
+
+            for dep, required in deps:
+                # Determine effective scope: "optional" if not required, otherwise use Maven scope
+                effective_scope = "optional" if not required else scope
+
+                dep_group, dep_artifact, dep_version = dep
+
+                # Skip parent POM (it's included in compile scope by pymaven)
+                # Parent has "-parent" suffix typically
+                if (dep_group == group_id and dep_artifact == artifact_id) or \
+                   (hasattr(pom.parent, 'group_id') and dep_group == pom.parent.group_id and dep_artifact == pom.parent.artifact_id):
+                    continue
+
+                # Handle VersionRange objects
+                if hasattr(dep_version, 'version'):
+                    version_str = str(dep_version.version)
+                else:
+                    version_str = str(dep_version)
+
+                name = f"{dep_group}:{dep_artifact}"
+                packages.append(Package(system='maven', name=name, version=version_str, scope=effective_scope))
+
+        # TODO: Extract exclusions from POM XML (pymaven doesn't expose them directly)
+        # For now, falling back to simple XML parsing for exclusions
+        deps_elements = root.findall('.//m:dependencies/m:dependency', ns)
+        for dep in deps_elements:
             group_id_elem = dep.find('m:groupId', ns)
             artifact_id_elem = dep.find('m:artifactId', ns)
-            version_elem = dep.find('m:version', ns)
 
             if group_id_elem is None or artifact_id_elem is None:
                 continue
 
-            group_id = FileParser._resolve_property(group_id_elem.text, properties)
-            artifact_id = FileParser._resolve_property(artifact_id_elem.text, properties)
+            name = f"{group_id_elem.text}:{artifact_id_elem.text}"
 
-            # Resolve version
-            if version_elem is not None:
-                version = FileParser._resolve_property(version_elem.text, properties)
-            else:
-                # Check dependency management
-                dep_key = f"{group_id}:{artifact_id}"
-                version = dep_mgmt.get(dep_key)
-                if not version:
-                    logger.warning(f"No version found for {dep_key}, skipping")
-                    continue
-
-            name = f"{group_id}:{artifact_id}"
-            packages.append(Package(system='maven', name=name, version=version))
-
-            # Extract exclusions
             exclusions_elem = dep.find('m:exclusions', ns)
             if exclusions_elem is not None:
                 excluded = set()
@@ -166,7 +231,7 @@ class FileParser:
                 if excluded:
                     exclusions[name] = excluded
 
-        logger.info(f"Parsed {len(packages)} packages from POM file")
+        logger.info(f"Parsed {len(packages)} packages from POM file using pymaven")
         return packages, dep_mgmt, exclusions
 
     @staticmethod

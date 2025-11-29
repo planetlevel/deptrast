@@ -35,9 +35,12 @@ def handle_create(args):
     """Handle the 'create' subcommand."""
     input_file = args.input
     output_file = args.output
-    scope = args.scope if hasattr(args, 'scope') else 'compile'
+    scope = args.scope if hasattr(args, 'scope') else 'all'
     resolution_strategy = args.resolution_strategy if hasattr(args, 'resolution_strategy') else 'maven'
     include_optional = args.include_optional if hasattr(args, 'include_optional') else False
+
+    # Capture command line for SBOM metadata
+    command_line = ' '.join(sys.argv[1:])  # Skip script name
 
     # Setup logging
     setup_logging(args.verbose, args.loglevel)
@@ -108,8 +111,20 @@ def handle_create(args):
         dependency_trees = parse_dependency_graph_from_sbom(original_sbom_content, packages)
         all_tracked_packages = packages
         logger.info(f"Using existing dependency graph with {len(dependency_trees)} root packages")
+    elif detected_format == 'flat':
+        # For flat runtime lists, don't resolve - these are actual runtime dependencies
+        logger.info("Input is a flat runtime list - skipping dependency resolution")
+        logger.info("Using packages as-is from runtime (no resolution applied)")
+
+        with DependencyGraphBuilder() as graph_builder:
+            # Build minimal dependency tree structure (no resolution)
+            dependency_trees = graph_builder.build_dependency_trees(packages)
+            all_tracked_packages = packages
+
+        logger.info(f"Identified {len(packages)} packages from runtime")
+        logger.info(f"Using {len(all_tracked_packages)} packages for output")
     else:
-        # Build dependency trees from scratch
+        # Build dependency trees from scratch (for POM, requirements.txt, etc)
         logger.info(f"Analyzing dependencies for {len(packages)} packages...")
 
         with DependencyGraphBuilder() as graph_builder:
@@ -123,7 +138,7 @@ def handle_create(args):
                 graph_builder.set_exclusions(exclusions)
                 logger.info(f"Applied {len(exclusions)} exclusion rules")
 
-            # Set resolution strategy
+            # Set resolution strategy (only for build files that need resolution)
             graph_builder.set_resolution_strategy(resolution_strategy)
             logger.info(f"Using {resolution_strategy} resolution strategy")
 
@@ -140,7 +155,7 @@ def handle_create(args):
         elif args.output_format == 'roots':
             # SBOM with only root packages
             root_packages = [node.package for node in dependency_trees]
-            output = OutputFormatter.format_as_sbom(root_packages, dependency_trees)
+            output = OutputFormatter.format_as_sbom(root_packages, dependency_trees, command_line)
         elif args.output_format == 'tree':
             if args.tree_format == 'maven':
                 output = OutputFormatter.format_as_maven_tree(args.project_name, dependency_trees)
@@ -152,7 +167,7 @@ def handle_create(args):
                     original_sbom_content, all_tracked_packages, dependency_trees
                 )
             else:
-                output = OutputFormatter.format_as_sbom(all_tracked_packages, dependency_trees)
+                output = OutputFormatter.format_as_sbom(all_tracked_packages, dependency_trees, command_line)
     except Exception as e:
         logger.error(f"Error generating output: {e}")
         print(f"Error generating output: {e}", file=sys.stderr)
@@ -315,37 +330,36 @@ def main():
     subparsers = parser.add_subparsers(dest='command', help='Subcommands')
 
     # Create command
-    create_parser = subparsers.add_parser('create', help='Create SBOM or other formats from source files')
-    create_parser.add_argument('input', help='Input file path')
-    create_parser.add_argument('output', help='Output file path (use - for stdout)')
-    create_parser.add_argument('--input', dest='input_type', default='smart',
-                               choices=['roots', 'list', 'smart'],
-                               help='Input type (default: auto-detected)')
-    create_parser.add_argument('--output', dest='output_format', default='sbom',
-                               choices=['sbom', 'roots', 'tree', 'list'],
-                               help='Output format (default: sbom)')
-    create_parser.add_argument('--format', dest='tree_format', default='tree',
-                               choices=['tree', 'maven'],
-                               help='Tree visualization format (default: tree)')
+    create_parser = subparsers.add_parser('create', help='Generate SBOM from source')
+    create_parser.add_argument('input', help='Input file (pom.xml, build.gradle, package-lock.json, or flat list)')
+    create_parser.add_argument('output', nargs='?', default='-',
+                               help='Output file (default: stdout, use - for stdout)')
+    create_parser.add_argument('--scope', default='all',
+                               choices=['compile', 'runtime', 'test', 'provided', 'all'],
+                               help='Include dependencies (compile, runtime, test, provided, all). Default: all')
+    create_parser.add_argument('--format', dest='output_format', default='sbom',
+                               choices=['sbom', 'tree', 'list', 'roots'],
+                               help='Output format (sbom, tree, list, roots). Default: sbom')
+    create_parser.add_argument('--tree-style', dest='tree_format', default='unicode',
+                               choices=['unicode', 'ascii', 'maven'],
+                               help='Tree visualization style (unicode, ascii, maven). Default: unicode')
+    create_parser.add_argument('--strategy', dest='resolution_strategy', default='maven',
+                               choices=['maven', 'highest'],
+                               help='Version resolution (maven, highest). Default: maven')
+    create_parser.add_argument('--include-optional', action='store_true',
+                               help='Include optional dependencies')
     create_parser.add_argument('--project-name', default='project',
                                help='Project name for tree output')
-    create_parser.add_argument('--scope', default='compile',
-                               choices=['runtime', 'compile', 'provided', 'test', 'all'],
-                               help='Maven dependency scope to include (default: compile)')
-    create_parser.add_argument('--resolution-strategy', default='maven',
-                               choices=['maven', 'highest'],
-                               help='Version resolution strategy: maven (nearest-wins, default) or highest')
-    create_parser.add_argument('--include-optional', action='store_true',
-                               help='Include optional/provided dependencies from POM (default: exclude)')
     create_parser.add_argument('--use-existing-deps', action='store_true',
                                help='Use existing dependency graph from SBOM (fast mode)')
-    create_parser.add_argument('--rebuild-deps', action='store_false', dest='use_existing_deps',
-                               help='Rebuild dependency graph from scratch (default)')
     create_parser.add_argument('-v', '--verbose', action='store_true',
-                               help='Verbose logging')
+                               help='Verbose output')
     create_parser.add_argument('--loglevel',
                                choices=['TRACE', 'DEBUG', 'INFO', 'WARN', 'ERROR'],
                                help='Set log level')
+    create_parser.add_argument('--input', dest='input_type', default='smart',
+                               choices=['roots', 'list', 'smart'],
+                               help=argparse.SUPPRESS)  # Hidden for simplicity
     create_parser.set_defaults(func=handle_create, use_existing_deps=False)
 
     # Enrich command
@@ -359,12 +373,12 @@ def main():
     # Print command
     print_parser = subparsers.add_parser('print', help='Display SBOM in different formats')
     print_parser.add_argument('input', help='Input SBOM file')
-    print_parser.add_argument('--output', dest='output_format', default='tree',
+    print_parser.add_argument('--format', dest='output_format', default='tree',
                               choices=['tree', 'list', 'roots'],
-                              help='Output format (default: tree)')
-    print_parser.add_argument('--format', dest='tree_format', default='tree',
-                              choices=['tree', 'maven'],
-                              help='Tree visualization format (default: tree)')
+                              help='Output format (tree, list, roots). Default: tree')
+    print_parser.add_argument('--tree-style', dest='tree_format', default='unicode',
+                              choices=['unicode', 'ascii', 'maven'],
+                              help='Tree visualization style (unicode, ascii, maven). Default: unicode')
     print_parser.add_argument('--project-name', default='project',
                               help='Project name for tree output')
     print_parser.add_argument('--use-existing-deps', action='store_true', default=True,

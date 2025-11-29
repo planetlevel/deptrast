@@ -5,7 +5,7 @@
 
     <groupId>com.contrastsecurity</groupId>
     <artifactId>deptrast</artifactId>
-    <version>3.0.1</version>
+    <version>3.1.0</version>
     <name>deptrast</name>
     <description>The ultimate dependency tree converter, enhancer, and streamliner - converts between SBOM, pom.xml, gradle, requirements.txt and enriches dependency graphs</description>
     <url>https://github.com/planetlevel/deptrast</url>
@@ -72,6 +72,13 @@
             <groupId>org.cyclonedx</groupId>
             <artifactId>cyclonedx-core-java</artifactId>
             <version>11.0.1</version>
+        </dependency>
+
+        <!-- Picocli for CLI -->
+        <dependency>
+            <groupId>info.picocli</groupId>
+            <artifactId>picocli</artifactId>
+            <version>4.7.6</version>
         </dependency>
 
         <!-- Testing -->

@@ -83,11 +83,11 @@ public class MavenDependencyTreeFormatter {
      */
     private static String formatMavenPackage(Package pkg) {
         String system = pkg.getSystem().toLowerCase();
-        String scope = "compile";
-        
+        String scope = pkg.getScope();  // Use actual scope from Package
+
         // Extract group and artifact IDs from name for Maven packages
         String name = pkg.getName();
-        
+
         if ("maven".equals(system)) {
             String[] parts = name.split(":");
             if (parts.length >= 2) {

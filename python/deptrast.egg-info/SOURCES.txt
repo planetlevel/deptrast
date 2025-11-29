@@ -13,3 +13,11 @@ deptrast.egg-info/dependency_links.txt
 deptrast.egg-info/entry_points.txt
 deptrast.egg-info/requires.txt
 deptrast.egg-info/top_level.txt
+deptrast/pymaven/__init__.py
+deptrast/pymaven/artifact.py
+deptrast/pymaven/client.py
+deptrast/pymaven/constants.py
+deptrast/pymaven/errors.py
+deptrast/pymaven/pom.py
+deptrast/pymaven/utils.py
+deptrast/pymaven/versioning.py

@@ -1,10 +1,10 @@
 {
   "bomFormat" : "CycloneDX",
   "specVersion" : "1.6",
-  "serialNumber" : "urn:uuid:7115bb49-e60b-437a-8ad2-3ca9c7aad85d",
+  "serialNumber" : "urn:uuid:09d51b96-433e-4884-a17e-370092c08b5d",
   "version" : 1,
   "metadata" : {
-    "timestamp" : "2025-11-29T21:34:00Z",
+    "timestamp" : "2025-11-29T21:33:48Z",
     "tools" : {
       "components" : [
         {
@@ -32,7 +32,7 @@
     "properties" : [
       {
         "name" : "commandLine",
-        "value" : "create src/test/resources/petclinic-contrast-runtime-list.txt x.sbom"
+        "value" : "deptrast create src/test/resources/petclinic-contrast-runtime-list.txt y.sbom"
       }
     ]
   },

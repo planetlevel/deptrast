@@ -316,9 +316,11 @@ public class FileParser {
                         }
 
                         String name = groupId + ":" + artifactId;
-                        Package pkg = new Package("maven", name, version);
+                        // Use "optional" scope if optional=true, otherwise use the Maven scope
+                        String effectiveScope = "true".equalsIgnoreCase(optional) ? "optional" : scope;
+                        Package pkg = new Package("maven", name, version, effectiveScope);
                         packages.add(pkg);
-                        logger.info("Added package from pom.xml: {}", pkg.getFullName());
+                        logger.info("Added package from pom.xml: {} (scope: {})", pkg.getFullName(), effectiveScope);
 
                         // Store exclusions for this package if any
                         if (!depExclusions.isEmpty()) {
@@ -898,6 +900,45 @@ public class FileParser {
                     String groupId = getElementText(element, "groupId");
                     String artifactId = getElementText(element, "artifactId");
                     String version = getElementText(element, "version");
+                    String scope = getElementText(element, "scope");
+                    String type = getElementText(element, "type");
+
+                    // Handle BOM imports (scope=import, type=pom)
+                    if ("import".equalsIgnoreCase(scope) && "pom".equalsIgnoreCase(type)) {
+                        if (groupId != null && artifactId != null && version != null) {
+                            // Resolve version property if needed
+                            if (version.contains("${")) {
+                                String resolvedVersion = resolveProperty(version, properties);
+                                if (resolvedVersion != null && !resolvedVersion.contains("${")) {
+                                    version = resolvedVersion;
+                                } else {
+                                    logger.debug("Could not resolve version property {} for BOM import {}:{}", version, groupId, artifactId);
+                                    continue;
+                                }
+                            }
+
+                            logger.info("Importing BOM: {}:{}:{}", groupId, artifactId, version);
+
+                            // Download and parse the imported BOM
+                            try {
+                                DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+                                DocumentBuilder builder = factory.newDocumentBuilder();
+                                Document bomDoc = downloadPomFromMavenCentral(groupId, artifactId, version, builder);
+
+                                if (bomDoc != null) {
+                                    // Recursively parse the imported BOM's dependencyManagement
+                                    Map<String, String> importedVersions = parseDependencyManagement(bomDoc, properties);
+                                    managedVersions.putAll(importedVersions);
+                                    logger.info("Imported {} managed versions from BOM {}:{}", importedVersions.size(), groupId, artifactId);
+                                } else {
+                                    logger.warn("Failed to download BOM: {}:{}:{}", groupId, artifactId, version);
+                                }
+                            } catch (Exception e) {
+                                logger.warn("Error importing BOM {}:{}:{}: {}", groupId, artifactId, version, e.getMessage());
+                            }
+                        }
+                        continue; // Don't add the BOM import itself to managedVersions
+                    }
 
                     if (groupId != null && artifactId != null && version != null) {
                         // Resolve property references

@@ -219,7 +219,7 @@ public class DependencyGraphBuilder implements AutoCloseable {
         // Apply the reconciled version if we found one
         if (reconciledVersion != null) {
             logger.info("Reconciling {} from {} to {}", pkg.getName(), currentVersion, reconciledVersion);
-            Package reconciledPkg = new Package(pkg.getSystem(), pkg.getName(), reconciledVersion);
+            Package reconciledPkg = new Package(pkg.getSystem(), pkg.getName(), reconciledVersion, pkg.getScope());
             node.setPackage(reconciledPkg);
 
             // IMPORTANT: Fetch the dependency tree for the NEW version
@@ -581,7 +581,7 @@ public class DependencyGraphBuilder implements AutoCloseable {
             logger.debug("Updating {} from {} to {} (nearest-wins)",
                 baseKey, pkg.getVersion(), winner.version);
 
-            Package updatedPkg = new Package(pkg.getSystem(), pkg.getName(), winner.version);
+            Package updatedPkg = new Package(pkg.getSystem(), pkg.getName(), winner.version, pkg.getScope());
             node.setPackage(updatedPkg);
 
             // IMPORTANT: Fetch the correct dependency tree for the new version
