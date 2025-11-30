@@ -337,7 +337,7 @@ def main():
     create_parser.add_argument('--scope', default='all',
                                choices=['compile', 'runtime', 'test', 'provided', 'all'],
                                help='Include dependencies (compile, runtime, test, provided, all). Default: all')
-    create_parser.add_argument('--format', dest='output_format', default='sbom',
+    create_parser.add_argument('--output', dest='output_format', default='sbom',
                                choices=['sbom', 'tree', 'list', 'roots'],
                                help='Output format (sbom, tree, list, roots). Default: sbom')
     create_parser.add_argument('--tree-style', dest='tree_format', default='unicode',
@@ -373,7 +373,7 @@ def main():
     # Print command
     print_parser = subparsers.add_parser('print', help='Display SBOM in different formats')
     print_parser.add_argument('input', help='Input SBOM file')
-    print_parser.add_argument('--format', dest='output_format', default='tree',
+    print_parser.add_argument('--output', dest='output_format', default='tree',
                               choices=['tree', 'list', 'roots'],
                               help='Output format (tree, list, roots). Default: tree')
     print_parser.add_argument('--tree-style', dest='tree_format', default='unicode',
