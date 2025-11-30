@@ -36,7 +36,6 @@ def handle_create(args):
     input_file = args.input
     output_file = args.output
     scope = args.scope if hasattr(args, 'scope') else 'all'
-    resolution_strategy = args.resolution_strategy if hasattr(args, 'resolution_strategy') else 'maven'
     include_optional = args.include_optional if hasattr(args, 'include_optional') else False
 
     # Capture command line for SBOM metadata
@@ -59,6 +58,15 @@ def handle_create(args):
 
     logger.info(f"Input: {input_file} (format={detected_format}, type={input_type})")
     logger.info(f"Output: {output_file} (format={args.output_format})")
+
+    # Auto-determine resolution strategy based on input type if not explicitly set
+    if not hasattr(args, 'resolution_strategy') or args.resolution_strategy == 'maven':
+        if input_type == 'roots':
+            resolution_strategy = 'maven'  # POMs/declared roots: use Maven nearest-wins
+        else:
+            resolution_strategy = 'highest'  # Runtime lists: trust observed versions
+    else:
+        resolution_strategy = args.resolution_strategy  # User explicitly set it
 
     # Parse input file
     packages: List[Package] = []

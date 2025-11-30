@@ -219,6 +219,15 @@ public class DependencyTreeGenerator {
             inputType = getSmartInputType(detectedFormat);
         }
 
+        // Auto-determine resolution strategy based on input type if set to default
+        if ("maven".equals(resolutionStrategy)) {
+            if ("roots".equals(inputType)) {
+                resolutionStrategy = "maven";  // POMs/declared roots: use Maven nearest-wins
+            } else {
+                resolutionStrategy = "highest";  // Runtime lists: trust observed versions
+            }
+        }
+
         // Set logging level based on verbose flag
         if (verbose) {
             setLoggingLevel(Level.INFO);

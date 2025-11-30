@@ -495,12 +495,12 @@ class DependencyGraphBuilder:
                 continue
             visited.add(node_id)
 
-            # First occurrence wins (or nearer occurrence)
+            # First occurrence wins (or nearer occurrence, or higher version at same depth)
             if base_key not in first_occurrence:
                 first_occurrence[base_key] = (pkg.version, depth)
                 logger.debug(f"First occurrence: {base_key} at depth {depth} with version {pkg.version}")
             else:
-                # Check if this occurrence is nearer
+                # Check if this occurrence is nearer or higher version at same depth
                 existing_version, existing_depth = first_occurrence[base_key]
                 if depth < existing_depth:
                     # Nearer occurrence - update the winning version
@@ -509,6 +509,14 @@ class DependencyGraphBuilder:
                         f"replaces depth {existing_depth} (v{existing_version})"
                     )
                     first_occurrence[base_key] = (pkg.version, depth)
+                elif depth == existing_depth:
+                    # Same depth - pick highest version as tie-breaker (Maven behavior)
+                    if self._compare_versions(pkg.version, existing_version) > 0:
+                        logger.info(
+                            f"Same depth tie-breaker for {base_key}: depth {depth}: "
+                            f"v{pkg.version} replaces v{existing_version} (higher version)"
+                        )
+                        first_occurrence[base_key] = (pkg.version, depth)
 
             # Add children to queue
             for child in node.children:
