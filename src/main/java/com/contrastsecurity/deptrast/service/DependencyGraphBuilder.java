@@ -535,9 +535,11 @@ public class DependencyGraphBuilder implements AutoCloseable {
 
             Package pkg = node.getPackage();
             String baseKey = pkg.getSystem().toLowerCase() + ":" + pkg.getName();
-            String nodeId = baseKey + ":" + pkg.getVersion() + ":" + depth;
+            String nodeId = baseKey + ":" + pkg.getVersion();
 
             // Prevent infinite loops in cyclic dependencies
+            // Note: We don't include depth in visited check because the same package
+            // should only be processed once, regardless of how many paths lead to it
             if (visited.contains(nodeId)) {
                 continue;
             }

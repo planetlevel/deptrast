@@ -498,9 +498,11 @@ class DependencyGraphBuilder:
 
             pkg = node.package
             base_key = f"{pkg.system.lower()}:{pkg.name}"
-            node_id = f"{base_key}:{pkg.version}:{depth}"
+            node_id = f"{base_key}:{pkg.version}"
 
             # Prevent infinite loops in cyclic dependencies
+            # Note: We don't include depth in visited check because the same package
+            # should only be processed once, regardless of how many paths lead to it
             if node_id in visited:
                 continue
             visited.add(node_id)
