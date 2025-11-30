@@ -162,7 +162,7 @@ Lines starting with `#` are treated as comments and ignored.
 
 #### Maven pom.xml
 Standard Maven pom.xml files. Deptrast extracts dependencies from `<dependencies>` blocks with smart handling:
-- **Test-scoped dependencies** - Automatically skipped
+- **Scoped dependencies** - Automatically mapped to CycloneDX scopes
 - **Property variables** - Resolved from `<properties>` section (e.g., `${spring.version}`)
 - **Parent POM properties** - Recursively loads properties from parent POMs via `<relativePath>`
 - **Nested properties** - Supports properties that reference other properties
@@ -186,7 +186,7 @@ numpy~=1.23.0
 ```
 
 #### CycloneDX SBOM
-CycloneDX SBOM JSON files (v1.x). Deptrast extracts components via purl (Package URL) parsing.
+CycloneDX SBOM JSON files (v1.6). Deptrast extracts components via purl (Package URL) parsing.
 
 ### Examples
 
@@ -316,14 +316,5 @@ deptrast create libraries.txt - --loglevel=DEBUG
 mvn clean package
 ```
 
-This will create an executable JAR file as `target/deptrast-x.x.x.jar`.
-
-## Testing
-
-Run the comprehensive test suite:
-
-```bash
-mvn test
-```
-
+This will create and test an executable JAR file as `target/deptrast-x.x.x.jar`.
 
