@@ -373,15 +373,25 @@ class DependencyGraphBuilder:
                 child, input_package_names, input_packages_appearing_as_children, tree_root_name
             )
 
-    def _collect_all_package_names(self, node: DependencyNode, package_names: Set[str]) -> None:
+    def _collect_all_package_names(self, node: DependencyNode, package_names: Set[str], visited: Optional[Set[str]] = None) -> None:
         """Recursively collect all package names from a dependency tree."""
         if not node:
             return
 
-        package_names.add(node.package.full_name)
+        if visited is None:
+            visited = set()
+
+        package_name = node.package.full_name
+
+        # Prevent infinite loops in cyclic dependencies
+        if package_name in visited:
+            return
+        visited.add(package_name)
+
+        package_names.add(package_name)
 
         for child in node.children:
-            self._collect_all_package_names(child, package_names)
+            self._collect_all_package_names(child, package_names, visited)
 
     def get_all_reconciled_packages(self) -> Collection[Package]:
         """

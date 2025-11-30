@@ -282,15 +282,30 @@ public class DependencyGraphBuilder implements AutoCloseable {
      * @param packageNames Set to add package names to
      */
     private void collectAllPackageNames(DependencyNode node, Set<String> packageNames) {
+        collectAllPackageNames(node, packageNames, new HashSet<>());
+    }
+
+    /**
+     * Recursively collect all package names from a dependency tree with cycle detection
+     */
+    private void collectAllPackageNames(DependencyNode node, Set<String> packageNames, Set<String> visited) {
         if (node == null) {
             return;
         }
 
-        packageNames.add(node.getPackage().getFullName());
+        String packageName = node.getPackage().getFullName();
+
+        // Prevent infinite loops in cyclic dependencies
+        if (visited.contains(packageName)) {
+            return;
+        }
+        visited.add(packageName);
+
+        packageNames.add(packageName);
 
         // Recurse into children
         for (DependencyNode child : node.getChildren()) {
-            collectAllPackageNames(child, packageNames);
+            collectAllPackageNames(child, packageNames, visited);
         }
     }
 
