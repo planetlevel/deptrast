@@ -4,11 +4,11 @@
 
 **The ultimate dependency tree converter, enhancer, and streamliner**
 
-Deptrast will take whatever dependency information you have, from just about any source, and make it into what you need.  Make an SBOM anytime, you don't have to run a build!  Live your life.
+Deptrast will take whatever dependency information you have, from just about any source, and make it into what you need.  Make an SBOM anytime without having to rely on getting a build system to actually work!  Live your life.
 
 - [x] pom.xml -> Full ASCII Tree with all transitive dependencies
 - [x] SBOM with only root dependencies and no dependency graph -> Fully awesome SBOM
-- [x] Random list of jar files -> SBOM
+- [x] Random list of jar files -> Fully awesome SBOM
 - [x] requirements.txt -> Maven-style text output
 - [x] List of components from runtime analysis with no dependency graph -> Fully awesome SBOM
 - [x] Etc...
