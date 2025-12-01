@@ -2,6 +2,8 @@
 
 import json
 import logging
+import os
+import requests
 import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -10,6 +12,271 @@ from typing import List, Dict, Set, Tuple, Optional
 from .models import Package
 
 logger = logging.getLogger(__name__)
+
+
+
+# Helper functions for POM parsing (ported from Java)
+MAVEN_CENTRAL_URL = "https://repo1.maven.org/maven2"
+
+
+def get_element_text(parent: ET.Element, tag_name: str, ns: Dict[str, str]) -> Optional[str]:
+    """Get text content of a child element."""
+    elem = parent.find(f'm:{tag_name}', ns)
+    if elem is not None and elem.text:
+        return elem.text.strip()
+    return None
+
+
+def resolve_property(value: str, properties: Dict[str, str], max_iterations: int = 10) -> Optional[str]:
+    """
+    Resolve ${property} references in a string with nesting support.
+    Returns None if unresolvable.
+    """
+    if not value or '${' not in value:
+        return value
+
+    resolved = value
+    iterations = 0
+
+    while '${' in resolved and iterations < max_iterations:
+        start_idx = resolved.find('${')
+        end_idx = resolved.find('}', start_idx)
+
+        if start_idx == -1 or end_idx == -1:
+            break
+
+        prop_name = resolved[start_idx + 2:end_idx]
+        prop_value = properties.get(prop_name)
+
+        if prop_value is None:
+            return None
+
+        resolved = resolved[:start_idx] + prop_value + resolved[end_idx + 1:]
+        iterations += 1
+
+    if '${' in resolved:
+        return None
+
+    return resolved
+
+
+def parse_properties(root: ET.Element, ns: Dict[str, str]) -> Dict[str, str]:
+    """Parse all properties from <properties> section."""
+    properties = {}
+
+    props_elem = root.find('m:properties', ns)
+    if props_elem is not None:
+        for prop in props_elem:
+            # Remove namespace from tag
+            tag = prop.tag.split('}')[-1] if '}' in prop.tag else prop.tag
+            if prop.text:
+                properties[tag] = prop.text.strip()
+
+    return properties
+
+
+def download_pom_from_maven_central(group_id: str, artifact_id: str, version: str) -> Optional[ET.Element]:
+    """Download a POM file from Maven Central and return parsed root element."""
+    try:
+        group_path = group_id.replace('.', '/')
+        url = f"{MAVEN_CENTRAL_URL}/{group_path}/{artifact_id}/{version}/{artifact_id}-{version}.pom"
+
+        logger.info(f"Downloading parent POM from Maven Central: {group_id}:{artifact_id}:{version}")
+        logger.debug(f"URL: {url}")
+
+        response = requests.get(url, timeout=30)
+        if not response.ok:
+            logger.warn(f"Failed to download parent POM {group_id}:{artifact_id}:{version}: HTTP {response.status_code}")
+            return None
+
+        root = ET.fromstring(response.content)
+        logger.info(f"Successfully downloaded and parsed parent POM {group_id}:{artifact_id}:{version}")
+        return root
+
+    except Exception as e:
+        logger.warn(f"Error downloading parent POM {group_id}:{artifact_id}:{version}: {e}")
+        return None
+
+
+def parse_parent_pom_data(root: ET.Element, current_file_path: str, ns: Dict[str, str]) -> Tuple[Dict[str, str], List[ET.Element]]:
+    """
+    Recursively parse parent POM hierarchy.
+    Returns (properties_dict, list_of_pom_roots) where list is ordered oldest-first.
+    """
+    properties = {}
+    pom_hierarchy = []
+
+    # Look for <parent> element
+    parent_elem = root.find('m:parent', ns)
+    if parent_elem is None:
+        return properties, pom_hierarchy
+
+    # Get parent coordinates
+    parent_group_id = get_element_text(parent_elem, 'groupId', ns)
+    parent_artifact_id = get_element_text(parent_elem, 'artifactId', ns)
+    parent_version = get_element_text(parent_elem, 'version', ns)
+    relative_path = get_element_text(parent_elem, 'relativePath', ns) or '../pom.xml'
+
+    parent_root = None
+    parent_doc_path = None
+
+    # Check if current file is from Maven Central (synthetic path)
+    is_from_maven_central = current_file_path.startswith("maven-central:")
+
+    if is_from_maven_central:
+        # Parent of Maven Central POM - download directly
+        logger.info(f"Parent of Maven Central POM {parent_group_id}:{parent_artifact_id}:{parent_version}, downloading")
+        if parent_group_id and parent_artifact_id and parent_version:
+            parent_root = download_pom_from_maven_central(parent_group_id, parent_artifact_id, parent_version)
+            if parent_root:
+                parent_doc_path = f"maven-central:{parent_group_id}:{parent_artifact_id}:{parent_version}"
+    else:
+        # Try local filesystem first
+        current_path = Path(current_file_path).resolve().parent
+        parent_path = (current_path / relative_path).resolve()
+
+        if parent_path.exists():
+            try:
+                parent_tree = ET.parse(parent_path)
+                candidate_root = parent_tree.getroot()
+
+                # Verify coordinates match
+                cand_group = get_element_text(candidate_root, 'groupId', ns)
+                cand_artifact = get_element_text(candidate_root, 'artifactId', ns)
+
+                if parent_group_id == cand_group and parent_artifact_id == cand_artifact:
+                    logger.info(f"Found parent POM at: {parent_path}")
+                    parent_root = candidate_root
+                    parent_doc_path = str(parent_path)
+                else:
+                    logger.info(f"Local POM at {parent_path} has different coordinates, will try Maven Central")
+            except Exception as e:
+                logger.debug(f"Error reading local parent POM: {e}")
+
+        # Try Maven Central if not found locally
+        if parent_root is None and parent_group_id and parent_artifact_id and parent_version:
+            parent_root = download_pom_from_maven_central(parent_group_id, parent_artifact_id, parent_version)
+            if parent_root:
+                parent_doc_path = f"maven-central:{parent_group_id}:{parent_artifact_id}:{parent_version}"
+
+    if parent_root is None:
+        logger.warn(f"Could not resolve parent POM {parent_group_id}:{parent_artifact_id}:{parent_version}")
+        return properties, pom_hierarchy
+
+    # Recursively get grandparent data first
+    grandparent_props, grandparent_hierarchy = parse_parent_pom_data(parent_root, parent_doc_path, ns)
+    properties.update(grandparent_props)
+    pom_hierarchy.extend(grandparent_hierarchy)
+
+    # Then get parent's own properties (override grandparent)
+    parent_own_properties = parse_properties(parent_root, ns)
+    properties.update(parent_own_properties)
+
+    # Store this POM for later dependencyManagement re-evaluation
+    pom_hierarchy.append(parent_root)
+
+    return properties, pom_hierarchy
+
+
+def parse_dependency_management(root: ET.Element, properties: Dict[str, str], ns: Dict[str, str]) -> Dict[str, str]:
+    """Parse <dependencyManagement> section including BOM imports."""
+    managed_versions = {}
+
+    mgmt_elem = root.find('m:dependencyManagement', ns)
+    if mgmt_elem is None:
+        return managed_versions
+
+    deps_elem = mgmt_elem.find('m:dependencies', ns)
+    if deps_elem is None:
+        return managed_versions
+
+    for dep in deps_elem.findall('m:dependency', ns):
+        group_id = get_element_text(dep, 'groupId', ns)
+        artifact_id = get_element_text(dep, 'artifactId', ns)
+        version = get_element_text(dep, 'version', ns)
+        scope = get_element_text(dep, 'scope', ns)
+        dep_type = get_element_text(dep, 'type', ns)
+
+        # Handle BOM imports (scope=import, type=pom)
+        if scope == 'import' and dep_type == 'pom':
+            if group_id and artifact_id and version:
+                # Resolve version if needed
+                if version and '${' in version:
+                    resolved_version = resolve_property(version, properties)
+                    if resolved_version and '${' not in resolved_version:
+                        version = resolved_version
+                    else:
+                        logger.debug(f"Could not resolve version {version} for BOM import {group_id}:{artifact_id}")
+                        continue
+
+                logger.info(f"Importing BOM: {group_id}:{artifact_id}:{version}")
+
+                # Download and parse the imported BOM
+                bom_root = download_pom_from_maven_central(group_id, artifact_id, version)
+                if bom_root:
+                    # Recursively parse BOM's dependencyManagement
+                    imported_versions = parse_dependency_management(bom_root, properties, ns)
+                    managed_versions.update(imported_versions)
+                    logger.info(f"Imported {len(imported_versions)} managed versions from BOM {group_id}:{artifact_id}")
+                else:
+                    logger.warn(f"Failed to download BOM: {group_id}:{artifact_id}:{version}")
+
+            continue  # Don't add BOM import itself to managed_versions
+
+        if group_id and artifact_id and version:
+            # Resolve property references
+            if version and '${' in version:
+                resolved_version = resolve_property(version, properties)
+                if resolved_version and '${' not in resolved_version:
+                    version = resolved_version
+                else:
+                    logger.debug(f"Could not resolve version {version} for {group_id}:{artifact_id}")
+                    continue
+
+            key = f"{group_id}:{artifact_id}"
+            managed_versions[key] = version
+
+    logger.info(f"Parsed {len(managed_versions)} managed dependency versions from dependencyManagement")
+    return managed_versions
+
+
+def parse_exclusions(dep_elem: ET.Element, ns: Dict[str, str]) -> Set[str]:
+    """Parse <exclusions> from a dependency element."""
+    exclusions = set()
+
+    exclusions_elem = dep_elem.find('m:exclusions', ns)
+    if exclusions_elem is None:
+        return exclusions
+
+    for exclusion in exclusions_elem.findall('m:exclusion', ns):
+        ex_group = get_element_text(exclusion, 'groupId', ns)
+        ex_artifact = get_element_text(exclusion, 'artifactId', ns)
+
+        if ex_group and ex_artifact:
+            exclusions.add(f"{ex_group}:{ex_artifact}")
+            logger.debug(f"Found exclusion: {ex_group}:{ex_artifact}")
+
+    return exclusions
+
+
+def should_include_scope(dep_scope: str, scope_filter: str) -> bool:
+    """Check if a dependency scope should be included based on filter."""
+    if scope_filter == 'all':
+        return True
+
+    dep_scope_lower = dep_scope.lower() if dep_scope else 'compile'
+    scope_filter_lower = scope_filter.lower()
+
+    if scope_filter_lower == dep_scope_lower:
+        return True
+
+    # Runtime filter includes both compile and runtime
+    if scope_filter_lower == 'runtime' and dep_scope_lower in ('compile', 'runtime'):
+        return True
+
+    return False
+
+
 
 
 class FileParser:
@@ -100,139 +367,191 @@ class FileParser:
         return Package(system=system, name=name, version=version)
 
     @staticmethod
-    def _should_include_scope(dep_scope: str, scope_filter: str) -> bool:
+    def _resolve_parent_properties(file_path: str) -> Dict[str, str]:
         """
-        Determine if a dependency scope should be included based on the filter.
-        Follows Maven scope semantics.
+        Recursively load parent POMs from local filesystem and collect properties.
+        This allows resolving ${revision} and other placeholders before calling pymaven.
         """
-        if scope_filter == 'all':
-            return True
+        properties = {}
+        current_path = Path(file_path).resolve()
 
-        dep_scope_lower = dep_scope.lower() if dep_scope else 'compile'
-        scope_filter_lower = scope_filter.lower()
+        try:
+            tree = ET.parse(current_path)
+            root = tree.getroot()
+            ns = {'m': 'http://maven.apache.org/POM/4.0.0'}
 
-        if scope_filter_lower == dep_scope_lower:
-            return True
+            # Check if this POM has a parent
+            parent_elem = root.find('m:parent', ns)
+            if parent_elem is not None:
+                # Get relativePath (defaults to ../pom.xml)
+                relative_path_elem = parent_elem.find('m:relativePath', ns)
+                relative_path = relative_path_elem.text if relative_path_elem is not None else '../pom.xml'
 
-        # Runtime scope includes both compile and runtime
-        if scope_filter_lower == 'runtime' and dep_scope_lower in ('compile', 'runtime'):
-            return True
+                # Resolve parent path
+                parent_path = (current_path.parent / relative_path).resolve()
 
-        return False
+                if parent_path.exists():
+                    # Recursively get grandparent properties first
+                    properties.update(FileParser._resolve_parent_properties(str(parent_path)))
+
+                    # Then load this parent's properties (override grandparent)
+                    parent_tree = ET.parse(parent_path)
+                    parent_root = parent_tree.getroot()
+                    props_elem = parent_root.find('m:properties', ns)
+                    if props_elem is not None:
+                        for prop in props_elem:
+                            # Remove namespace from tag
+                            tag = prop.tag.split('}')[-1] if '}' in prop.tag else prop.tag
+                            if prop.text:
+                                properties[tag] = prop.text
+
+            # Finally load this POM's own properties (override parent)
+            props_elem = root.find('m:properties', ns)
+            if props_elem is not None:
+                for prop in props_elem:
+                    tag = prop.tag.split('}')[-1] if '}' in prop.tag else prop.tag
+                    if prop.text:
+                        properties[tag] = prop.text
+
+        except Exception as e:
+            logger.debug(f"Could not load parent properties: {e}")
+
+        return properties
 
     @staticmethod
-    def parse_pom_file(file_path: str, scope_filter: str = 'all') -> Tuple[List[Package], Dict[str, str], Dict[str, Set[str]]]:
+    def parse_pom_file(file_path: str, scope_filter: str = 'all', include_optional: bool = False) -> Tuple[List, Dict[str, str], Dict[str, Set[str]]]:
         """
-        Parse a Maven pom.xml file using pymaven for full parent POM resolution.
-
+        Parse a Maven pom.xml file using pure XML parsing (no pymaven).
+        Based on Java FileParser logic.
+    
         Args:
             file_path: Path to the pom.xml file
             scope_filter: Maven scope to include (runtime, compile, provided, test, or all)
-
+            include_optional: Whether to include optional/provided dependencies
+    
         Returns:
             Tuple of (packages, dependency_management, exclusions)
         """
-        from .pymaven.client import MavenClient
-        from .pymaven.pom import Pom
-
-        # Parse POM metadata to get coordinate
-        tree = ET.parse(file_path)
-        root = tree.getroot()
-        ns = {'m': 'http://maven.apache.org/POM/4.0.0'}
-
-        # Extract basic coordinates from POM
-        group_id_elem = root.find('m:groupId', ns)
-        artifact_id_elem = root.find('m:artifactId', ns)
-        version_elem = root.find('m:version', ns)
-
-        # If not found directly, try parent
-        if group_id_elem is None:
-            parent_elem = root.find('m:parent', ns)
-            if parent_elem is not None:
-                group_id_elem = parent_elem.find('m:groupId', ns)
-        if version_elem is None:
-            parent_elem = root.find('m:parent', ns)
-            if parent_elem is not None:
-                version_elem = parent_elem.find('m:version', ns)
-
-        group_id = group_id_elem.text if group_id_elem is not None else 'unknown'
-        artifact_id = artifact_id_elem.text if artifact_id_elem is not None else 'unknown'
-        version = version_elem.text if version_elem is not None else '1.0'
-
-        coordinate = f"{group_id}:{artifact_id}:{version}"
-
-        # Use pymaven to parse with parent resolution
-        client = MavenClient('https://repo1.maven.org/maven2/')
-        pom = Pom.parse(coordinate, file_path, client=client)
-
-        # Extract dependency management with property substitution
-        dep_mgmt = {}
-        for (dep_group, dep_artifact), (dep_version, scope, optional) in pom.dependency_management.items():
-            key = f"{dep_group}:{dep_artifact}"
-            # Apply property substitution to versions from parent
-            version_str = str(dep_version)
-            version_str = pom._replace_properties(version_str, pom.properties)
-            dep_mgmt[key] = version_str
-
-        # Extract dependencies (exclude test scope, include only required, exclude imports/parent/relocations)
+          # Import here to avoid circular import
+    
         packages = []
-        exclusions: Dict[str, Set[str]] = {}
-
-        for scope, deps in pom.dependencies.items():
-            # Skip import (BOMs) and relocation
-            if scope in ('import', 'relocation'):
-                continue
-
-            # Apply scope filtering
-            if not FileParser._should_include_scope(scope, scope_filter):
-                continue
-
-            for dep, required in deps:
-                # Determine effective scope: "optional" if not required, otherwise use Maven scope
-                effective_scope = "optional" if not required else scope
-
-                dep_group, dep_artifact, dep_version = dep
-
-                # Skip parent POM (it's included in compile scope by pymaven)
-                # Parent has "-parent" suffix typically
-                if (dep_group == group_id and dep_artifact == artifact_id) or \
-                   (hasattr(pom.parent, 'group_id') and dep_group == pom.parent.group_id and dep_artifact == pom.parent.artifact_id):
+        dependency_management = {}
+        exclusions_map = {}
+        ns = {'m': 'http://maven.apache.org/POM/4.0.0'}
+    
+        try:
+            tree = ET.parse(file_path)
+            root = tree.getroot()
+    
+            # Load parent POM data (properties and hierarchy)
+            parent_properties, pom_hierarchy = parse_parent_pom_data(root, file_path, ns)
+    
+            logger.info(f"Loaded {len(parent_properties)} properties from parent POM hierarchy")
+    
+            # Parse properties from current POM (override parent)
+            current_properties = parse_properties(root, ns)
+            all_properties = {**parent_properties, **current_properties}
+            logger.info(f"Loaded {len(all_properties)} properties total ({len(current_properties)} from current pom.xml)")
+    
+            # Parse ALL dependencyManagement sections with FINAL merged properties
+            # Parse from parent hierarchy first (oldest first)
+            for pom_root in pom_hierarchy:
+                pom_dep_mgmt = parse_dependency_management(pom_root, all_properties, ns)
+                dependency_management.update(pom_dep_mgmt)
+    
+            # Parse dependency management from current POM (overrides parents)
+            current_dep_mgmt = parse_dependency_management(root, all_properties, ns)
+            dependency_management.update(current_dep_mgmt)
+    
+            logger.info(f"Total {len(dependency_management)} managed dependency versions")
+    
+            # Find root <dependencies> section (not from <dependencyManagement> or <build>)
+            # Look for <project><dependencies> directly
+            dependency_nodes = []
+            for child in root:
+                if child.tag.endswith('dependencies'):
+                    # This is a direct child of project - it's the root dependencies
+                    dependency_nodes = child.findall('m:dependency', ns)
+                    logger.info(f"Found root <dependencies> section with {len(dependency_nodes)} dependencies")
+                    break
+    
+            # If no root dependencies found, it's a parent POM
+            if not dependency_nodes:
+                logger.info("No root <dependencies> section found (parent POM)")
+    
+            # Parse dependencies
+            for dep in dependency_nodes:
+                # Get scope
+                scope = get_element_text(dep, 'scope', ns) or 'compile'
+    
+                logger.debug(f"Dependency {get_element_text(dep, 'groupId', ns)}:{get_element_text(dep, 'artifactId', ns)} has scope: {scope}")
+    
+                # Skip provided scope unless includeOptional
+                if not include_optional and scope == 'provided':
+                    logger.info(f"Skipping provided scope dependency: {get_element_text(dep, 'groupId', ns)}:{get_element_text(dep, 'artifactId', ns)}")
                     continue
+    
+                # Skip optional unless includeOptional
+                optional = get_element_text(dep, 'optional', ns)
+                if not include_optional and optional == 'true':
+                    logger.info(f"Skipping optional dependency: {get_element_text(dep, 'groupId', ns)}:{get_element_text(dep, 'artifactId', ns)}")
+                    continue
+    
+                # Apply scope filtering
+                if not should_include_scope(scope, scope_filter):
+                    logger.info(f"Skipping {scope} scope dependency: {get_element_text(dep, 'groupId', ns)}:{get_element_text(dep, 'artifactId', ns)} (filter: {scope_filter})")
+                    continue
+    
+                group_id = get_element_text(dep, 'groupId', ns)
+                artifact_id = get_element_text(dep, 'artifactId', ns)
+                version = get_element_text(dep, 'version', ns)
+    
+                # Parse exclusions for this dependency
+                dep_exclusions = parse_exclusions(dep, ns)
+    
+                if group_id and artifact_id:
+                    # If version not specified, get from dependency management
+                    if not version:
+                        key = f"{group_id}:{artifact_id}"
+                        version = dependency_management.get(key)
+                        if version:
+                            logger.info(f"Resolved version for {group_id}:{artifact_id} from dependencyManagement: {version}")
+                        else:
+                            logger.warn(f"Skipping dependency with no version: {group_id}:{artifact_id}")
+                            continue
+                    elif version and '${' in version:
+                        # Resolve property placeholder
+                        resolved_version = resolve_property(version, all_properties)
+                        if resolved_version and '${' not in resolved_version:
+                            version = resolved_version
+                            logger.info(f"Resolved property version for {group_id}:{artifact_id} to {version}")
+                        else:
+                            logger.warn(f"Skipping dependency with unresolvable version: {group_id}:{artifact_id}:{version}")
+                            continue
+    
+                    name = f"{group_id}:{artifact_id}"
+                    # Use "optional" scope if optional=true, otherwise use Maven scope
+                    effective_scope = "optional" if optional == 'true' else scope
+    
+                    pkg = Package(system='maven', name=name, version=version, scope=effective_scope)
+                    packages.append(pkg)
+                    pkg_name = f"{pkg.system}:{pkg.name}:{pkg.version}"
+                    logger.info(f"Added package from pom.xml: {pkg_name} (scope: {effective_scope})")
 
-                # Handle VersionRange objects
-                if hasattr(dep_version, 'version'):
-                    version_str = str(dep_version.version)
-                else:
-                    version_str = str(dep_version)
-
-                name = f"{dep_group}:{dep_artifact}"
-                packages.append(Package(system='maven', name=name, version=version_str, scope=effective_scope))
-
-        # TODO: Extract exclusions from POM XML (pymaven doesn't expose them directly)
-        # For now, falling back to simple XML parsing for exclusions
-        deps_elements = root.findall('.//m:dependencies/m:dependency', ns)
-        for dep in deps_elements:
-            group_id_elem = dep.find('m:groupId', ns)
-            artifact_id_elem = dep.find('m:artifactId', ns)
-
-            if group_id_elem is None or artifact_id_elem is None:
-                continue
-
-            name = f"{group_id_elem.text}:{artifact_id_elem.text}"
-
-            exclusions_elem = dep.find('m:exclusions', ns)
-            if exclusions_elem is not None:
-                excluded = set()
-                for exclusion in exclusions_elem.findall('m:exclusion', ns):
-                    ex_group = exclusion.find('m:groupId', ns)
-                    ex_artifact = exclusion.find('m:artifactId', ns)
-                    if ex_group is not None and ex_artifact is not None:
-                        excluded.add(f"{ex_group.text}:{ex_artifact.text}")
-                if excluded:
-                    exclusions[name] = excluded
-
-        logger.info(f"Parsed {len(packages)} packages from POM file using pymaven")
-        return packages, dep_mgmt, exclusions
+                    # Store exclusions
+                    if dep_exclusions:
+                        exclusions_map[name] = dep_exclusions
+                        logger.info(f"Package {name} has {len(dep_exclusions)} exclusions")
+    
+            logger.info(f"Parsed {len(packages)} packages from pom.xml")
+    
+        except Exception as e:
+            logger.error(f"Error parsing pom.xml file {file_path}: {e}")
+            import traceback
+            traceback.print_exc()
+    
+        return packages, dependency_management, exclusions_map
+    
 
     @staticmethod
     def _extract_properties(root, ns, pom_path: str) -> Dict[str, str]:

@@ -1,4 +1,4 @@
-"""Builds dependency graphs from package lists."""
+"""Builds dependency graphs from package lists using a two-phase approach."""
 
 import logging
 from typing import List, Dict, Set, Optional, Collection, Tuple
@@ -11,22 +11,44 @@ logger = logging.getLogger(__name__)
 
 
 class DependencyGraphBuilder:
-    """Builds complete dependency trees from a list of packages."""
+    """
+    Builds complete dependency trees from a list of packages using a two-phase approach:
+
+    Phase 1: Build raw dependency graph from deps.dev
+    - Fetch all package graphs from deps.dev API
+    - Build complete graph structure with ALL edges as returned by API
+    - No version resolution or filtering at this stage
+
+    Phase 2: Apply resolution and relink
+    - Determine winning versions based on resolution strategy (maven/highest)
+    - Relink edges to point to winning version nodes
+    - This "delinks" parts of the tree not selected by resolution
+    """
 
     def __init__(self):
         """Initialize the graph builder."""
         self.api_client = DepsDevClient()
-        self.complete_trees: Dict[str, DependencyNode] = {}
-        self.all_packages: Dict[str, Package] = {}
-        self.all_nodes: Dict[str, DependencyNode] = {}  # For graph node reuse across API calls
-        self.dependency_management: Dict[str, str] = {}
-        self.exclusions: Dict[str, Set[str]] = {}
+
+        # Phase 1: Raw graph data from deps.dev
+        self.all_packages: Dict[str, Package] = {}  # pkg_name -> Package
+        self.all_nodes: Dict[str, DependencyNode] = {}  # pkg_name -> Node (one per version)
+        self.raw_graphs: Dict[str, DependencyNode] = {}  # pkg_name -> root node of fetched graph
+        self.parent_map: Dict[str, Set[str]] = defaultdict(set)  # child_pkg_name -> Set[parent_pkg_names]
+
+        # Phase 2: Resolution results
+        self.root_nodes: List[DependencyNode] = []  # Root nodes after resolution
+
+        # Configuration
+        self.dependency_management: Dict[str, str] = {}  # name -> version
+        self.exclusions: Dict[str, Set[str]] = {}  # parent_name -> Set[excluded_names]
         self.resolution_strategy: str = "highest"  # maven or highest
 
     def set_dependency_management(self, management: Dict[str, str]) -> None:
         """Set dependency management versions."""
         self.dependency_management = management or {}
         logger.info(f"DependencyManagement set with {len(self.dependency_management)} entries")
+        # Build lookup map for dependency management (will be populated during graph building)
+        self._name_to_system: Dict[str, str] = {}  # name -> system (for managed packages)
 
     def set_exclusions(self, exclusions: Dict[str, Set[str]]) -> None:
         """Set dependency exclusions."""
@@ -40,130 +62,212 @@ class DependencyGraphBuilder:
 
     def build_dependency_trees(self, input_packages: List[Package]) -> List[DependencyNode]:
         """
-        Build dependency trees from input packages.
+        Build dependency trees from input packages - Phase 1 only (no reconciliation).
 
-        Algorithm:
-        1. Fetch complete dependency graph for each input package
-        2. Track which INPUT packages appear as dependencies in OTHER trees
-        3. Roots = input packages NOT appearing as dependencies
+        Returns root nodes with ALL discovered versions included.
         """
         logger.info(f"Building dependency trees for {len(input_packages)} packages")
 
-        # Step 1: Create set of input package names for quick lookup
         input_package_names = {pkg.full_name for pkg in input_packages}
-        logger.debug(f"Input packages: {input_package_names}")
 
-        # Step 2: Fetch complete dependency graph for each package
-        packages_already_in_trees: Set[str] = set()
+        # PHASE 1: Build raw dependency graph from deps.dev
+        logger.info("PHASE 1: Building raw dependency graph from deps.dev")
+        self._build_raw_graph(input_packages)
+
+        # PHASE 2: SKIPPED FOR NOW - just find root nodes
+        logger.info("PHASE 2: SKIPPED - no reconciliation, all versions included")
+
+        # STEP 3: Find which INPUT packages appear as dependencies in OTHER input packages' trees
+        input_packages_appearing_as_children = set()
+        for tree_root_name, tree in self.raw_graphs.items():
+            self._find_input_packages_in_tree(
+                tree, input_package_names,
+                input_packages_appearing_as_children,
+                tree_root_name, set()
+            )
+
+        # STEP 4: Roots = input packages that DON'T appear as children
+        root_package_names = input_package_names - input_packages_appearing_as_children
+
+        logger.info(f"Found {len(root_package_names)} root packages out of {len(input_packages)}")
+
+        # STEP 5: Return only the root trees
+        root_nodes = []
+        for root_name in root_package_names:
+            node = self.raw_graphs.get(root_name)
+            if node:
+                node.mark_as_root()
+                root_nodes.append(node)
+
+        # Store root nodes for later collection
+        self.root_nodes = root_nodes
+
+        logger.info(f"Total unique package versions: {len(self.all_nodes)}")
+        return root_nodes
+
+    def _get_base_key(self, pkg: Package) -> str:
+        """
+        Get base key for a package (system:name without version).
+        Used for grouping different versions of the same library.
+        """
+        return f"{pkg.system.lower()}:{pkg.name}"
+
+    def apply_conflict_resolution(self) -> None:
+        """
+        Phase 2: Apply conflict resolution to mark losing versions as excluded.
+
+        For each library with multiple versions:
+        1. Choose winner based on strategy (nearest-wins or highest)
+        2. Add links from loser's parents → winner
+        3. Mark losers as scope:excluded
+        4. Mark loser subtrees as excluded (unless other incoming links)
+        """
+        if not self.root_nodes:
+            logger.warning("No root nodes available for conflict resolution")
+            return
+
+        logger.info("=== PHASE 2: Applying conflict resolution ===")
+
+        # Step 1: Determine winning versions
+        if self.resolution_strategy == "maven":
+            winning_versions = self._determine_maven_winning_versions(self.root_nodes)
+        else:
+            # For "highest" strategy, we need to pass input packages
+            # Extract input packages from raw_graphs
+            input_packages = [self.all_packages[pkg_name] for pkg_name in self.raw_graphs.keys()]
+            winning_versions = self._determine_highest_winning_versions(input_packages)
+
+        logger.info(f"Determined {len(winning_versions)} winning versions")
+
+        # Step 2: Identify all losers (non-winning versions)
+        losers: Set[str] = set()
+        conflicts_found = 0
+
+        for node_name, node in self.all_nodes.items():
+            pkg = node.package
+            base_key = self._get_base_key(pkg)
+            winning_version = winning_versions.get(base_key)
+
+            if winning_version and pkg.version != winning_version:
+                losers.add(node_name)
+                conflicts_found += 1
+                logger.debug(f"Loser identified: {node_name} (winner: {base_key}:{winning_version})")
+
+        logger.info(f"Found {conflicts_found} losing versions out of {len(self.all_nodes)} total nodes")
+
+        # Step 3: Redirect edges from loser parents → winner
+        redirect_count = self._redirect_edges_to_winners(losers, winning_versions)
+        logger.info(f"Redirected {redirect_count} edges to winning versions")
+
+        # Step 4: Mark losers as excluded
+        for loser_name in losers:
+            loser_node = self.all_nodes[loser_name]
+            loser_pkg = loser_node.package
+
+            # Find the winning version for this loser
+            base_key = self._get_base_key(loser_pkg)
+            winning_version = winning_versions.get(base_key)
+
+            loser_pkg.scope = 'excluded'
+            loser_pkg.scope_reason = 'conflict-resolution-loser'
+            loser_pkg.winning_version = winning_version
+            logger.debug(f"Marked as excluded: {loser_name} (winner: {winning_version})")
+
+        # Step 5: Mark loser subtrees as excluded (unless other incoming links)
+        excluded_subtree_count = self._mark_loser_subtrees_excluded(losers)
+        logger.info(f"Marked {excluded_subtree_count} subtree nodes as excluded")
+
+        logger.info(f"=== Conflict resolution complete: {conflicts_found} losers, "
+                   f"{redirect_count} redirects, {excluded_subtree_count} subtree exclusions ===")
+
+        # Step 6: Propagate test/provided/system scopes to transitive dependencies
+        self._propagate_excluded_scopes()
+
+    def _build_raw_graph(self, input_packages: List[Package]) -> None:
+        """
+        Phase 1: Build raw dependency graph from deps.dev.
+        Fetches all package graphs and builds complete graph structure.
+
+        NOTE: The deps.dev :dependencies endpoint returns the FULL transitive dependency
+        graph in a single API call. We do NOT need to recursively fetch discovered packages!
+        We only fetch ONE graph per input package.
+        """
+        # Pre-populate all_packages with input packages to preserve their scopes
+        # This ensures when deps.dev returns the SELF node, we reuse the input package object
+        for pkg in input_packages:
+            if pkg.full_name not in self.all_packages:
+                self.all_packages[pkg.full_name] = pkg
+                logger.debug(f"Pre-registered input package: {pkg.full_name} (scope: {pkg.scope})")
+
+        packages_already_in_trees = set()
         skipped_count = 0
 
         for pkg in input_packages:
             pkg_name = pkg.full_name
 
-            # Skip if we already have a complete tree for this package
-            if pkg_name in self.complete_trees:
-                logger.debug(f"Skipping {pkg_name} - already have complete tree")
+            # Check if this package already appears in any fetched tree
+            if pkg_name in packages_already_in_trees:
+                logger.debug(f"Skipping {pkg_name} - already found in another dependency tree")
                 skipped_count += 1
                 continue
 
-            # Check if this package appears in any OTHER package's tree
-            # If so, we still need to fetch its tree for cloning purposes
-            found_in_other_tree = pkg_name in packages_already_in_trees
+            # Fetch graph from deps.dev (this returns the COMPLETE transitive tree!)
+            root_node = self._fetch_raw_dependency_graph(pkg)
+            if root_node:
+                self.raw_graphs[pkg_name] = root_node
 
-            tree = self._fetch_complete_dependency_tree(pkg, input_package_names)
-            if tree:
-                self.complete_trees[pkg_name] = tree
-
-                if found_in_other_tree:
-                    logger.debug(f"Package {pkg_name} found in another tree but fetched for cloning")
-                    skipped_count += 1  # Still count as optimization since we found it earlier
-
-                # Add all packages in this tree to the set to track what we've seen
-                self._collect_all_package_names(tree, packages_already_in_trees)
+                # Add all packages in this tree to the set to avoid redundant fetches
+                self._collect_all_package_names(root_node, packages_already_in_trees)
 
         if skipped_count > 0:
-            logger.info(
-                f"⚡ Optimization: Skipped {skipped_count} packages already found in other trees "
-                f"({skipped_count} fewer API calls)"
-            )
+            logger.info(f"⚡ Optimization: Skipped {skipped_count} packages already found in other trees ({skipped_count} fewer API calls)")
 
-        # Step 2.5/2.6: Version resolution strategy
-        if self.resolution_strategy == "maven":
-            # Maven nearest-wins: Use the version found nearest to the root in the dependency tree
-            logger.info("Applying Maven nearest-wins version resolution")
-            self._apply_nearest_wins_resolution(list(self.complete_trees.values()))
-        else:
-            # Default: Highest version reconciliation
-            observed_versions = {
-                f"{pkg.system}:{pkg.name}": pkg.version
-                for pkg in input_packages
-            }
+        logger.info(f"Phase 1 complete: Fetched {len(self.raw_graphs)} graphs, "
+                   f"total {len(self.all_nodes)} unique package versions")
 
-            for tree in self.complete_trees.values():
-                self._reconcile_tree_versions(tree, observed_versions, input_package_names)
-
-        # Step 3: Find which INPUT packages appear as dependencies in OTHER trees
-        input_packages_appearing_as_children: Set[str] = set()
-        for tree_root_name, tree in self.complete_trees.items():
-            self._find_input_packages_in_tree(
-                tree, input_package_names, input_packages_appearing_as_children, tree_root_name
-            )
-
-        # Step 4: Roots = input packages that DON'T appear as children
-        root_package_names = input_package_names - input_packages_appearing_as_children
-        logger.info(f"Found {len(root_package_names)} root packages out of {len(input_packages)}")
-
-        # Step 5: Return only the root trees
-        root_trees = []
-        for root_name in root_package_names:
-            tree = self.complete_trees.get(root_name)
-            if tree:
-                # DEBUG: Log hibernate-core root
-                if "hibernate-core" in root_name:
-                    logger.info(f"🔍 GERONIMO ROOT: Returning hibernate-core root (node id={id(tree)}, children={len(tree.children)})")
-                tree.mark_as_root()
-                root_trees.append(tree)
-
-        return root_trees
-
-    def _fetch_complete_dependency_tree(
-        self, package: Package, input_package_names: Set[str]
-    ) -> Optional[DependencyNode]:
-        """Fetch the complete dependency tree for a package."""
+    def _fetch_raw_dependency_graph(self, package: Package) -> Optional[DependencyNode]:
+        """
+        Fetch raw dependency graph from deps.dev for a package.
+        Returns root node with ALL edges as returned by API (no filtering).
+        """
         graph = self.api_client.get_dependency_graph(package)
 
         if not graph:
-            logger.warning(f"WARNING: Unknown component {package.full_name}. Treating as root dependency.")
+            logger.warning(f"WARNING: Unknown component {package.full_name}. Treating as leaf node.")
 
-            # CRITICAL: Check if we already have this node from another package's graph
-            # If we do, return the existing node (which may have children populated)
-            # Don't create a new empty node that would lose the children!
+            # Check if we already have this node from another graph
             if package.full_name in self.all_nodes:
-                logger.debug(f"Package {package.full_name} returned 404 but already exists in all_nodes with children - reusing")
+                logger.debug(f"Package {package.full_name} returned 404 but exists in graph - reusing")
                 return self.all_nodes[package.full_name]
 
-            # Only create new empty node if we've never seen this package before
-            return DependencyNode(package=package)
+            # Create leaf node and add to all_nodes
+            node = DependencyNode(package=package)
+            self.all_nodes[package.full_name] = node
+            self.all_packages[package.full_name] = package
+            logger.debug(f"Created and registered leaf node for {package.full_name}")
+            return node
 
-        return self._parse_full_dependency_graph(graph, package, input_package_names)
+        return self._parse_dependency_graph(graph, package)
 
-    def _parse_full_dependency_graph(
-        self, graph: Dict, root_package: Package, input_package_names: Set[str]
-    ) -> Optional[DependencyNode]:
-        """Parse the complete dependency graph from deps.dev response."""
+    def _parse_dependency_graph(self, graph: Dict, root_package: Package) -> Optional[DependencyNode]:
+        """
+        Parse dependency graph from deps.dev response.
+        Builds complete graph structure with ALL edges (no filtering).
+        """
         nodes = graph.get("nodes", [])
         edges = graph.get("edges", [])
 
-        if not nodes or not edges:
+        if not nodes:
+            # No nodes at all - create leaf node
             return DependencyNode(package=root_package)
 
-        # Build map: node index -> Package
-        # Also build ONE DependencyNode per unique package (graph, not tree!)
-        node_map: Dict[int, Package] = {}
-        node_graph_map: Dict[int, DependencyNode] = {}
+        # If we have nodes but no edges, continue processing
+        # (leaf packages have 1 SELF node and 0 edges)
+
+        # Build node map: index -> DependencyNode
+        node_map: Dict[int, DependencyNode] = {}
         self_node_index = -1
 
-        # Process all nodes
         for i, node in enumerate(nodes):
             version_key = node.get("versionKey", {})
             system = version_key.get("system", "")
@@ -171,28 +275,25 @@ class DependencyGraphBuilder:
             version = version_key.get("version", "")
             relation = node.get("relation", "")
 
-            # Check if we already have this package (deduplication)
+            # Create or reuse package
             full_name = f"{system.lower()}:{name}:{version}"
-            pkg = self.all_packages.get(full_name)
+            if full_name not in self.all_packages:
+                self.all_packages[full_name] = Package(system=system, name=name, version=version)
+            pkg = self.all_packages[full_name]
 
-            if not pkg:
-                pkg = Package(system=system, name=name, version=version)
-                self.all_packages[full_name] = pkg
+            # Track name -> system mapping for dependency management lookup
+            if name in self.dependency_management and name not in self._name_to_system:
+                self._name_to_system[name] = system.lower()
 
-            node_map[i] = pkg
-
-            # Reuse existing DependencyNode if we've already created one for this package
-            # Use the class-level all_nodes map to share nodes across ALL API calls
+            # Create or reuse node
             if full_name not in self.all_nodes:
                 self.all_nodes[full_name] = DependencyNode(package=pkg)
+            node_map[i] = self.all_nodes[full_name]
 
-            node_graph_map[i] = self.all_nodes[full_name]
-
-            # Find the SELF node
             if relation == "SELF":
                 self_node_index = i
 
-        # Build adjacency list from edges
+        # Build adjacency from edges
         adjacency: Dict[int, List[int]] = defaultdict(list)
         for edge in edges:
             from_node = edge.get("fromNode")
@@ -200,294 +301,69 @@ class DependencyGraphBuilder:
             if from_node is not None and to_node is not None:
                 adjacency[from_node].append(to_node)
 
-        # DEBUG: Log if we're processing hibernate-core
-        for node in node_graph_map.values():
-            if "hibernate-core" in node.package.name:
-                logger.info(f"🔍 GERONIMO: Processing hibernate-core@{node.package.version} in {root_package.full_name} graph")
-
-        # CRITICAL FIX: Clear children for nodes that appear in this API response
-        # BUT: Don't clear children for nodes that were already fetched as complete trees
-        # because deps.dev returns different (incomplete) subgraphs depending on context.
-        #
-        # Example: hibernate-validator fetched as root returns 6 direct dependencies.
-        # But when it appears in spring-boot-starter-thymeleaf's graph, it only has 3.
-        # If we clear and rebuild from the thymeleaf context, we lose 3 dependencies!
-        for node in node_graph_map.values():
-            pkg_name = node.package.full_name
-
-            # Skip clearing if this node was already fetched as a complete tree
-            # BUT: Need to check the EXACT version, not just the name
-            # Because hibernate-core@5.0.4.Final is a complete tree, but
-            # hibernate-core@5.0.12.Final appearing in entitymanager's graph is NOT
-            if pkg_name in self.complete_trees:
-                logger.debug(f"Preserving complete tree for {pkg_name} (not clearing children)")
-                logger.debug(f"🔍 GERONIMO DEBUG: Preserving {pkg_name} - {len(node.children)} children")
-                continue
-
-            if node.children:
-                logger.debug(f"Clearing {len(node.children)} existing children for {pkg_name}")
-                logger.debug(f"🔍 GERONIMO DEBUG: Clearing children for {pkg_name}")
-            node.children.clear()
-
-        # Build graph structure from SELF node
+        # Build graph from SELF node
+        # Note: _build_graph_from_adjacency will only add children if the node doesn't already have them
         if self_node_index != -1:
-            self._build_tree_from_adjacency(
-                node_graph_map, adjacency, self_node_index, set()
-            )
-            self_node = node_graph_map[self_node_index]
-            logger.debug(f"Built tree for {self_node.package.full_name} with {len(self_node.children)} children")
-            return self_node
+            self._build_graph_from_adjacency(node_map, adjacency, self_node_index, set())
+            return node_map[self_node_index]
 
         return DependencyNode(package=root_package)
 
-    def _build_tree_from_adjacency(
+    def _build_graph_from_adjacency(
         self,
-        node_graph_map: Dict[int, DependencyNode],
+        node_map: Dict[int, DependencyNode],
         adjacency: Dict[int, List[int]],
-        current_node: int,
+        current_index: int,
         visited: Set[int]
     ) -> None:
-        """Recursively build graph structure from adjacency list."""
-        # Prevent cycles
-        if current_node in visited:
+        """
+        Build graph structure from adjacency list.
+        ALWAYS populate children from this graph - merge all edges.
+        """
+        if current_index in visited:
             return
-        visited.add(current_node)
+        visited.add(current_index)
 
-        current_graph_node = node_graph_map.get(current_node)
-        if not current_graph_node:
+        current_node = node_map.get(current_index)
+        if not current_node:
             return
 
-        # Get parent package for exclusion checks
-        parent_pkg = current_graph_node.package
+        # Get parent exclusions
+        parent_pkg = current_node.package
         parent_exclusions = self.exclusions.get(parent_pkg.name, set())
 
-        children = adjacency.get(current_node, [])
+        # Add all children from this graph
+        children = adjacency.get(current_index, [])
         for child_index in children:
-            child_node = node_graph_map[child_index]
+            child_node = node_map[child_index]
             child_pkg = child_node.package
 
-            # Check if excluded
+            # Check if this child is excluded by the parent
             if self._is_excluded(child_pkg, parent_exclusions):
                 logger.debug(f"Excluding dependency {child_pkg.name} from parent {parent_pkg.name}")
-                continue
+                continue  # Skip this child
 
-            # DEBUG: Log if adding edge to hibernate-core
-            if "hibernate-core" in parent_pkg.name:
-                logger.info(f"🔍 GERONIMO: Adding edge hibernate-core@{parent_pkg.version} -> {child_pkg.name}@{child_pkg.version}")
+            # Add child if not already present
+            if child_node not in current_node.children:
+                current_node.add_child(child_node)
 
-            # Just add reference to existing node - NO cloning needed!
-            current_graph_node.add_child(child_node)
+            # Track parent-child relationship
+            self.parent_map[child_node.package.full_name].add(current_node.package.full_name)
 
-            # Recursively build this child's edges
-            self._build_tree_from_adjacency(
-                node_graph_map, adjacency, child_index, visited.copy()
-            )
+            # Recursively build subtree
+            self._build_graph_from_adjacency(node_map, adjacency, child_index, visited.copy())
 
-    def _is_excluded(self, package: Package, parent_exclusions: Set[str]) -> bool:
-        """Check if a package should be excluded."""
-        if not parent_exclusions:
-            return False
-        return package.name in parent_exclusions
-
-    def _reconcile_tree_versions(
-        self,
-        node: DependencyNode,
-        observed_versions: Dict[str, str],
-        input_package_names: Set[str]
-    ) -> None:
+    def _determine_maven_winning_versions(self, roots: List[DependencyNode]) -> Dict[str, str]:
         """
-        Reconcile versions in the dependency tree with actual runtime versions.
-        Matches Java's algorithm: fetch new version's tree and replace children.
+        Phase 2: Determine winning versions using Maven nearest-wins strategy.
+        Returns map of package_base_key -> winning_version.
         """
-        if not node:
-            return
+        logger.info("Determining winning versions using Maven nearest-wins")
 
-        pkg = node.package
-        base_key = f"{pkg.system}:{pkg.name}"
-        current_version = pkg.version
-        reconciled_version = None
-
-        # Priority 1: Check dependency management
-        if pkg.name in self.dependency_management:
-            managed_version = self.dependency_management[pkg.name]
-            if managed_version != current_version:
-                reconciled_version = managed_version
-                logger.debug(
-                    f"Applying managed version for {pkg.name}: {current_version} -> {managed_version}"
-                )
-
-        # Priority 2: Check observed versions
-        if reconciled_version is None and base_key in observed_versions:
-            observed_version = observed_versions[base_key]
-            if observed_version != current_version:
-                reconciled_version = observed_version
-                logger.debug(
-                    f"Applying observed version for {base_key}: {current_version} -> {observed_version}"
-                )
-
-        # Apply reconciled version
-        if reconciled_version:
-            logger.info(f"Reconciling {pkg.name} from {current_version} to {reconciled_version}")
-            reconciled_pkg = Package(system=pkg.system, name=pkg.name, version=reconciled_version, scope=pkg.scope)
-            node.package = reconciled_pkg
-
-            # IMPORTANT: Fetch the dependency tree for the NEW version
-            # This ensures we get the correct dependencies for the reconciled version
-            logger.debug(f"Fetching dependencies for reconciled version {reconciled_pkg.full_name}")
-            new_tree = self._fetch_complete_dependency_tree(reconciled_pkg, input_package_names)
-
-            if new_tree and new_tree.children:
-                # Replace the children with the new version's dependencies
-                node.children.clear()
-                for new_child in new_tree.children:
-                    node.add_child(new_child)
-                    # Recursively reconcile the new subtree
-                    self._reconcile_tree_versions(new_child, observed_versions, input_package_names)
-                logger.debug(f"Replaced {len(new_tree.children)} children for reconciled {reconciled_pkg.full_name}")
-                return  # Don't recurse into old children - we already processed new ones
-
-        # Recurse into children
-        for child in node.children:
-            self._reconcile_tree_versions(child, observed_versions, input_package_names)
-
-    def _find_input_packages_in_tree(
-        self,
-        node: DependencyNode,
-        input_package_names: Set[str],
-        input_packages_appearing_as_children: Set[str],
-        tree_root_name: str
-    ) -> None:
-        """Recursively find which input packages appear in this tree."""
-        if not node:
-            return
-
-        node_name = node.package.full_name
-
-        # If this node is an input package (and not the tree root), mark it
-        if node_name in input_package_names and node_name != tree_root_name:
-            input_packages_appearing_as_children.add(node_name)
-
-        # Recurse into children
-        for child in node.children:
-            self._find_input_packages_in_tree(
-                child, input_package_names, input_packages_appearing_as_children, tree_root_name
-            )
-
-    def _collect_all_package_names(self, node: DependencyNode, package_names: Set[str], visited: Optional[Set[str]] = None) -> None:
-        """Recursively collect all package names from a dependency tree."""
-        if not node:
-            return
-
-        if visited is None:
-            visited = set()
-
-        package_name = node.package.full_name
-
-        # Prevent infinite loops in cyclic dependencies
-        if package_name in visited:
-            return
-        visited.add(package_name)
-
-        package_names.add(package_name)
-
-        for child in node.children:
-            self._collect_all_package_names(child, package_names, visited)
-
-    def get_all_reconciled_packages(self) -> Collection[Package]:
-        """
-        Get all packages from the reconciled dependency trees.
-
-        When multiple versions exist, keeps the managed version or highest version.
-        """
-        package_map: Dict[str, Package] = {}
-
-        for tree in self.complete_trees.values():
-            self._collect_packages_from_tree(tree, package_map)
-
-        return package_map.values()
-
-    def _collect_packages_from_tree(
-        self, node: DependencyNode, package_map: Dict[str, Package]
-    ) -> None:
-        """Recursively collect packages from tree, keeping highest/managed version."""
-        if not node:
-            return
-
-        pkg = node.package
-        base_key = f"{pkg.system}:{pkg.name}"
-
-        existing = package_map.get(base_key)
-        if not existing:
-            package_map[base_key] = pkg
-        else:
-            # Check for managed version
-            managed_version = self.dependency_management.get(pkg.name)
-
-            if managed_version:
-                if pkg.version == managed_version:
-                    package_map[base_key] = pkg
-                    logger.debug(
-                        f"Replaced {base_key} version {existing.version} with managed version {pkg.version}"
-                    )
-                elif existing.version == managed_version:
-                    pass  # Keep existing
-                elif self._compare_versions(pkg.version, existing.version) > 0:
-                    package_map[base_key] = pkg
-                    logger.debug(
-                        f"Replaced {base_key} version {existing.version} with higher version {pkg.version}"
-                    )
-            else:
-                # No managed version - use higher
-                if self._compare_versions(pkg.version, existing.version) > 0:
-                    package_map[base_key] = pkg
-                    logger.debug(
-                        f"Replaced {base_key} version {existing.version} with higher version {pkg.version}"
-                    )
-
-        for child in node.children:
-            self._collect_packages_from_tree(child, package_map)
-
-    def _compare_versions(self, v1: str, v2: str) -> int:
-        """Simple version comparison. Returns >0 if v1 > v2, <0 if v1 < v2, 0 if equal."""
-        if v1 == v2:
-            return 0
-
-        # Split by dots and dashes
-        import re
-        parts1 = re.split(r'[.\-]', v1)
-        parts2 = re.split(r'[.\-]', v2)
-
-        min_length = min(len(parts1), len(parts2))
-        for i in range(min_length):
-            part1 = parts1[i]
-            part2 = parts2[i]
-
-            # Try to parse as integers
-            try:
-                num1 = int(part1)
-                num2 = int(part2)
-                if num1 != num2:
-                    return num1 - num2
-            except ValueError:
-                # Lexicographic comparison
-                if part1 != part2:
-                    return 1 if part1 > part2 else -1
-
-        # Longer version is considered higher
-        return len(parts1) - len(parts2)
-
-    def _apply_nearest_wins_resolution(self, roots: List[DependencyNode]) -> None:
-        """
-        Apply Maven's nearest-wins resolution algorithm.
-        Uses BFS to find the nearest occurrence of each package and updates all nodes to use that version.
-        """
-        logger.info("Applying Maven nearest-wins version resolution")
-
-        # Track: package base name -> (version, depth)
+        # BFS to find nearest occurrence of each package
         first_occurrence: Dict[str, Tuple[str, int]] = {}
-
-        # BFS traversal to find first occurrence of each package
         queue = deque()
+
         for root in roots:
             queue.append((root, 0))
 
@@ -497,92 +373,525 @@ class DependencyGraphBuilder:
             node, depth = queue.popleft()
 
             pkg = node.package
-            base_key = f"{pkg.system.lower()}:{pkg.name}"
+            base_key = self._get_base_key(pkg)
             node_id = f"{base_key}:{pkg.version}"
 
-            # Prevent infinite loops in cyclic dependencies
-            # Note: We don't include depth in visited check because the same package
-            # should only be processed once, regardless of how many paths lead to it
             if node_id in visited:
                 continue
             visited.add(node_id)
 
-            # First occurrence wins (or nearer occurrence, or higher version at same depth)
+            # Track first/nearest occurrence
             if base_key not in first_occurrence:
                 first_occurrence[base_key] = (pkg.version, depth)
-                logger.debug(f"First occurrence: {base_key} at depth {depth} with version {pkg.version}")
+                logger.debug(f"First occurrence: {base_key} v{pkg.version} at depth {depth}")
             else:
-                # Check if this occurrence is nearer or higher version at same depth
                 existing_version, existing_depth = first_occurrence[base_key]
                 if depth < existing_depth:
-                    # Nearer occurrence - update the winning version
-                    logger.info(
-                        f"Found nearer occurrence of {base_key}: depth {depth} (v{pkg.version}) "
-                        f"replaces depth {existing_depth} (v{existing_version})"
-                    )
+                    logger.info(f"Nearer occurrence: {base_key} v{pkg.version} at depth {depth} "
+                              f"replaces v{existing_version} at depth {existing_depth}")
                     first_occurrence[base_key] = (pkg.version, depth)
-                elif depth == existing_depth:
-                    # Same depth - pick highest version as tie-breaker (Maven behavior)
-                    if self._compare_versions(pkg.version, existing_version) > 0:
-                        logger.info(
-                            f"Same depth tie-breaker for {base_key}: depth {depth}: "
-                            f"v{pkg.version} replaces v{existing_version} (higher version)"
-                        )
-                        first_occurrence[base_key] = (pkg.version, depth)
+                elif depth == existing_depth and self._compare_versions(pkg.version, existing_version) > 0:
+                    logger.info(f"Tie-breaker: {base_key} at depth {depth}: "
+                              f"v{pkg.version} replaces v{existing_version} (higher)")
+                    first_occurrence[base_key] = (pkg.version, depth)
 
-            # Add children to queue
+            # Queue children
             for child in node.children:
                 queue.append((child, depth + 1))
 
-        # Second pass: Update all nodes to use the winning version
-        for root in roots:
-            self._update_versions_to_nearest_wins(root, first_occurrence, set())
+        # Return just version map
+        return {base_key: version for base_key, (version, _) in first_occurrence.items()}
 
-        logger.info(f"Applied nearest-wins resolution to {len(first_occurrence)} packages")
+    def _determine_highest_winning_versions(self, input_packages: List[Package]) -> Dict[str, str]:
+        """
+        Phase 2: Determine winning versions using highest version strategy.
+        Priority: 1) dependency management, 2) input package version, 3) highest seen.
+        Returns map of package_base_key -> winning_version.
+        """
+        logger.info("Determining winning versions using highest version strategy")
 
-    def _update_versions_to_nearest_wins(
-        self, node: DependencyNode, winning_versions: Dict[str, Tuple[str, int]], visited: Set[str]
+        winning_versions: Dict[str, str] = {}
+
+        # Priority 1: Dependency management (O(m) using pre-built lookup)
+        for name, version in self.dependency_management.items():
+            system = self._name_to_system.get(name)
+            if system:
+                base_key = f"{system}:{name}"
+                winning_versions[base_key] = version
+                logger.debug(f"Managed version: {base_key} -> {version}")
+
+        # Priority 2: Input package versions (only if successfully fetched)
+        for pkg in input_packages:
+            pkg_name = pkg.full_name
+            # Only use input version if we successfully fetched its graph
+            if pkg_name not in self.raw_graphs:
+                logger.debug(f"Skipping input version for {pkg_name} (not in raw_graphs)")
+                continue
+
+            base_key = f"{pkg.system}:{pkg.name}"
+            if base_key not in winning_versions:
+                winning_versions[base_key] = pkg.version
+                logger.debug(f"Input version: {base_key} -> {pkg.version}")
+
+        # Priority 3: Highest version seen IN FETCHED GRAPHS
+        # Only consider versions that actually exist in all_nodes (successfully fetched)
+        for node_name, node in self.all_nodes.items():
+            pkg = node.package
+            base_key = self._get_base_key(pkg)
+
+            if base_key in winning_versions:
+                # Already have a winner from higher priority - check if this is higher
+                if self._compare_versions(pkg.version, winning_versions[base_key]) > 0:
+                    logger.debug(f"Higher version: {base_key} {winning_versions[base_key]} -> {pkg.version}")
+                    winning_versions[base_key] = pkg.version
+            else:
+                # First time seeing this package
+                winning_versions[base_key] = pkg.version
+
+        return winning_versions
+
+    def _relink_to_winning_versions(self, winning_versions: Dict[str, str]) -> None:
+        """
+        Phase 2: Relink all edges to point to winning version nodes.
+        Simple strategy: iterate through each node's children, if a child needs reconciliation
+        to a different version, fetch that version and replace the child.
+        """
+        logger.info("Relinking edges to winning versions")
+
+        relinked_count = 0
+
+        # Visit all nodes and reconcile their children to point to winning versions
+        for node in self.all_nodes.values():
+            new_children = []
+
+            for child in node.children:
+                child_pkg = child.package
+                base_key = f"{child_pkg.system.lower()}:{child_pkg.name}"
+
+                # Check exclusions
+                parent_exclusions = self.exclusions.get(node.package.name, set())
+                if self._is_excluded(child_pkg, parent_exclusions):
+                    logger.debug(f"Excluding {child_pkg.name} from parent {node.package.name}")
+                    continue
+
+                # Get winning version
+                winning_version = winning_versions.get(base_key)
+                if not winning_version:
+                    logger.warning(f"No winning version for {base_key}, keeping current {child_pkg.version}")
+                    new_children.append(child)
+                    continue
+
+                # If child already points to winning version, keep it
+                if child_pkg.version == winning_version:
+                    new_children.append(child)
+                    continue
+
+                # Need to replace this child with the winning version
+                logger.info(f"Reconciling child {child_pkg.name} from {child_pkg.version} to {winning_version}")
+
+                # Look up the winning version node (should already exist from Phase 1)
+                winning_node_name = f"{child_pkg.system.lower()}:{child_pkg.name}:{winning_version}"
+                winning_node = self.all_nodes.get(winning_node_name)
+
+                if winning_node:
+                    new_children.append(winning_node)
+                    relinked_count += 1
+                else:
+                    logger.warning(f"Winning version {winning_node_name} not found in all_nodes, keeping {child_pkg.version}")
+                    new_children.append(child)
+
+            node.children = new_children
+
+        logger.info(f"Relinked {relinked_count} edges to winning versions")
+
+    def _mark_excluded_nodes(self, replaced_node_names: Set[str]) -> int:
+        """
+        Mark replaced nodes as scope='excluded'.
+        Only mark children as excluded if they are ONLY reachable from excluded nodes.
+        Returns count of packages marked as excluded.
+        """
+        # First, find all packages that are reachable from non-replaced (winning) nodes
+        reachable_from_winners = set()
+        for node in self.all_nodes.values():
+            if node.package.full_name not in replaced_node_names:
+                self._collect_reachable_packages(node, reachable_from_winners)
+
+        logger.debug(f"Found {len(reachable_from_winners)} packages reachable from winning versions")
+
+        # Now mark replaced nodes and their children (but skip if reachable from winners)
+        excluded_count = 0
+        visited = set()
+
+        for node_name in replaced_node_names:
+            node = self.all_nodes.get(node_name)
+            if node:
+                excluded_count += self._mark_excluded_recursive(node, visited, reachable_from_winners)
+
+        return excluded_count
+
+    def _collect_reachable_packages(self, node: DependencyNode, reachable: Set[str], visited: Optional[Set[str]] = None) -> None:
+        """Collect all packages reachable from this node."""
+        if visited is None:
+            visited = set()
+
+        if node.package.full_name in visited:
+            return
+
+        visited.add(node.package.full_name)
+        reachable.add(node.package.full_name)
+
+        for child in node.children:
+            self._collect_reachable_packages(child, reachable, visited)
+
+    def _mark_excluded_recursive(self, node: DependencyNode, visited: Set[str], reachable_from_winners: Set[str]) -> int:
+        """
+        Recursively mark a node and its children as scope='excluded'.
+        Skip marking if the package is reachable from winning versions.
+        Returns count of packages marked.
+        """
+        # Prevent infinite loops in case of cycles
+        if node.package.full_name in visited:
+            return 0
+
+        visited.add(node.package.full_name)
+        count = 0
+
+        # Only mark as excluded if NOT reachable from winning versions
+        if node.package.full_name not in reachable_from_winners:
+            if node.package.scope != 'excluded':
+                logger.debug(f"Marking {node.package.full_name} as excluded (not reachable from winners)")
+                node.package.scope = 'excluded'
+                count = 1
+
+            # Recursively mark children (they'll also check reachability)
+            for child in node.children:
+                count += self._mark_excluded_recursive(child, visited, reachable_from_winners)
+
+        return count
+
+    def _find_root_nodes(self, input_packages: List[Package], input_package_names: Set[str]) -> List[DependencyNode]:
+        """
+        Find root nodes: input packages that don't appear as dependencies in other trees.
+        """
+        # Find which input packages appear as children
+        input_packages_appearing_as_children: Set[str] = set()
+
+        for root_name, root in self.raw_graphs.items():
+            self._find_input_packages_in_tree(root, input_package_names,
+                                             input_packages_appearing_as_children, root_name, set())
+
+        # Roots are input packages NOT appearing as children
+        root_package_names = input_package_names - input_packages_appearing_as_children
+
+        root_nodes = []
+        for root_name in root_package_names:
+            node = self.all_nodes.get(root_name)
+            if node:
+                node.mark_as_root()
+                root_nodes.append(node)
+
+        return root_nodes
+
+    def _find_input_packages_in_tree(
+        self,
+        node: DependencyNode,
+        input_package_names: Set[str],
+        input_packages_appearing_as_children: Set[str],
+        tree_root_name: str,
+        visited: Set[str]
     ) -> None:
-        """Recursively update versions based on nearest-wins resolution."""
+        """Recursively find which input packages appear in this tree."""
+        if not node:
+            return
+
+        node_name = node.package.full_name
+
+        # Prevent cycles (relinking can create cycles)
+        if node_name in visited:
+            return
+        visited.add(node_name)
+
+        if node_name in input_package_names and node_name != tree_root_name:
+            input_packages_appearing_as_children.add(node_name)
+
+        for child in node.children:
+            self._find_input_packages_in_tree(child, input_package_names,
+                                            input_packages_appearing_as_children, tree_root_name, visited)
+
+    def _collect_all_package_names(self, node: DependencyNode, package_names: Set[str],
+                                   visited: Optional[Set[str]] = None) -> None:
+        """Recursively collect all package names from a dependency tree."""
+        if not node:
+            return
+
+        if visited is None:
+            visited = set()
+
+        package_name = node.package.full_name
+
+        if package_name in visited:
+            return
+        visited.add(package_name)
+
+        package_names.add(package_name)
+
+        for child in node.children:
+            self._collect_all_package_names(child, package_names, visited)
+
+    def _is_excluded(self, package: Package, parent_exclusions: Set[str]) -> bool:
+        """Check if a package should be excluded."""
+        if not parent_exclusions:
+            return False
+        return package.name in parent_exclusions
+
+    def _redirect_edges_to_winners(self, losers: Set[str], winning_versions: Dict[str, str]) -> int:
+        """
+        Redirect edges from loser parents to winning versions.
+        For each loser, find all parents and add edges parent → winner.
+        Returns count of redirected edges.
+        """
+        redirect_count = 0
+
+        for loser_name in losers:
+            loser_node = self.all_nodes.get(loser_name)
+            if not loser_node:
+                continue
+
+            # Get loser's package info
+            loser_pkg = loser_node.package
+            base_key = self._get_base_key(loser_pkg)
+            winning_version = winning_versions.get(base_key)
+
+            if not winning_version:
+                logger.warning(f"No winning version found for {base_key}")
+                continue
+
+            # Find winner node
+            winner_name = f"{base_key}:{winning_version}"
+            winner_node = self.all_nodes.get(winner_name)
+
+            if not winner_node:
+                logger.warning(f"Winner node not found: {winner_name}")
+                continue
+
+            # Get all parents of this loser
+            parent_names = self.parent_map.get(loser_name, set())
+
+            for parent_name in parent_names:
+                parent_node = self.all_nodes.get(parent_name)
+                if not parent_node:
+                    continue
+
+                # Add winner as child of parent (if not already present)
+                if winner_node not in parent_node.children:
+                    parent_node.add_child(winner_node)
+                    # Update parent_map for the winner
+                    self.parent_map[winner_name].add(parent_name)
+                    redirect_count += 1
+                    logger.debug(f"Redirected: {parent_name} → {winner_name} (was {loser_name})")
+
+        return redirect_count
+
+    def _mark_loser_subtrees_excluded(self, losers: Set[str]) -> int:
+        """
+        Mark nodes in loser subtrees as excluded, UNLESS they have other incoming links
+        from non-excluded nodes.
+        Returns count of nodes marked as excluded.
+        """
+        excluded_count = 0
+        visited = set()
+
+        for loser_name in losers:
+            loser_node = self.all_nodes.get(loser_name)
+            if not loser_node:
+                continue
+
+            # Recursively mark children (if they don't have other incoming links)
+            excluded_count += self._mark_subtree_excluded_recursive(
+                loser_node, visited, losers
+            )
+
+        return excluded_count
+
+    def _mark_subtree_excluded_recursive(
+        self, node: DependencyNode, visited: Set[str], excluded_parents: Set[str]
+    ) -> int:
+        """
+        Recursively mark children as excluded if ALL their parents are excluded.
+        """
+        count = 0
+
+        for child in node.children:
+            child_name = child.package.full_name
+
+            if child_name in visited:
+                continue
+            visited.add(child_name)
+
+            # Skip if already excluded
+            if child.package.scope == 'excluded':
+                continue
+
+            # Check if child has ANY non-excluded parents
+            child_parents = self.parent_map.get(child_name, set())
+            has_non_excluded_parent = any(
+                parent_name not in excluded_parents
+                for parent_name in child_parents
+            )
+
+            if not has_non_excluded_parent:
+                # All parents are excluded, so mark this child as excluded too
+                child.package.scope = 'excluded'
+                child.package.scope_reason = 'conflict-resolution-subtree'
+                count += 1
+                logger.debug(f"Marked subtree node as excluded: {child_name}")
+
+                # Recursively mark its children
+                # Add this child to excluded_parents for recursive call
+                new_excluded = excluded_parents | {child_name}
+                count += self._mark_subtree_excluded_recursive(child, visited, new_excluded)
+
+        return count
+
+    def _compare_versions(self, v1: str, v2: str) -> int:
+        """Simple version comparison. Returns >0 if v1 > v2, <0 if v1 < v2, 0 if equal."""
+        if v1 == v2:
+            return 0
+
+        import re
+        parts1 = re.split(r'[.\-]', v1)
+        parts2 = re.split(r'[.\-]', v2)
+
+        min_length = min(len(parts1), len(parts2))
+        for i in range(min_length):
+            part1 = parts1[i]
+            part2 = parts2[i]
+
+            try:
+                num1 = int(part1)
+                num2 = int(part2)
+                if num1 != num2:
+                    return num1 - num2
+            except ValueError:
+                if part1 != part2:
+                    return 1 if part1 > part2 else -1
+
+        return len(parts1) - len(parts2)
+
+    def _propagate_excluded_scopes(self) -> None:
+        """
+        Propagate test/provided/system scopes to transitive dependencies.
+
+        Maven scope propagation rules:
+        - Test, provided, and system scopes propagate to all transitive dependencies
+        - Required scope (compile/runtime) overrides test scope if a package is reachable through both paths
+
+        This ensures test libraries and their dependencies are properly excluded from runtime SBOMs.
+        """
+        if not self.root_nodes:
+            logger.warning("No root nodes available for scope propagation")
+            return
+
+        logger.info("=== Propagating Maven scopes to transitive dependencies ===")
+
+        # Track which packages are reachable from each scope type
+        test_reachable: Set[str] = set()      # Reachable from test/provided/system roots
+        required_reachable: Set[str] = set()  # Reachable from compile/runtime/None roots
+
+        # Walk dependency tree from each root to build reachability sets
+        for root in self.root_nodes:
+            root_scope = root.package.scope or 'required'
+
+            # Determine if this root is test-scoped or required-scoped
+            if root_scope in ('test', 'provided', 'system', 'excluded'):
+                # Track all packages reachable from test-scoped roots
+                self._collect_reachable_packages_by_scope(root, test_reachable)
+                logger.debug(f"Root {root.package.full_name} has scope '{root_scope}' - marking transitives as test-reachable")
+            else:
+                # Track all packages reachable from required-scoped roots
+                self._collect_reachable_packages_by_scope(root, required_reachable)
+                logger.debug(f"Root {root.package.full_name} has scope '{root_scope}' - marking transitives as required-reachable")
+
+        # Apply scope propagation with override rule
+        propagated_count = 0
+        for pkg_name in test_reachable:
+            # Skip if also reachable from required path (required overrides test)
+            if pkg_name in required_reachable:
+                logger.debug(f"Package {pkg_name} reachable from both test and required paths - keeping as required")
+                continue
+
+            # Mark as excluded since only reachable from test/provided/system paths
+            node = self.all_nodes.get(pkg_name)
+            if node and node.package.scope not in ('excluded',):
+                old_scope = node.package.scope
+                node.package.scope = 'excluded'
+                node.package.scope_reason = 'test-dependency'
+                propagated_count += 1
+                logger.debug(f"Propagated test scope to {pkg_name} (was '{old_scope}')")
+
+        logger.info(f"Scope propagation complete: {propagated_count} packages marked as test dependencies")
+        logger.info(f"Reachability stats: {len(test_reachable)} test-reachable, {len(required_reachable)} required-reachable")
+
+    def _collect_reachable_packages_by_scope(
+        self, node: DependencyNode, reachable: Set[str], visited: Optional[Set[str]] = None
+    ) -> None:
+        """
+        Collect all packages reachable from this node.
+        Used for scope propagation to track test vs required reachability.
+        """
+        if visited is None:
+            visited = set()
+
+        pkg_name = node.package.full_name
+        if pkg_name in visited:
+            return
+
+        visited.add(pkg_name)
+        reachable.add(pkg_name)
+
+        # Recursively collect children
+        for child in node.children:
+            self._collect_reachable_packages_by_scope(child, reachable, visited)
+
+    def get_all_reconciled_packages(self) -> Collection[Package]:
+        """
+        Get all packages from the resolved dependency trees.
+        Returns ALL packages including non-winning versions that were discovered.
+        This matches Java behavior - all versions are included in the SBOM.
+        """
+        # Return all packages from all_nodes (includes both winning and non-winning versions)
+        packages = [node.package for node in self.all_nodes.values()]
+
+        logger.info(f"get_all_reconciled_packages: returning {len(packages)} packages (all versions)")
+
+        return packages
+
+    def _collect_packages_from_tree(
+        self, node: DependencyNode, package_map: Dict[str, Package],
+        visited: Optional[Set[str]] = None
+    ) -> None:
+        """Recursively collect packages from tree."""
+        if not node:
+            return
+
+        if visited is None:
+            visited = set()
+
         pkg = node.package
-        base_key = f"{pkg.system.lower()}:{pkg.name}"
+        base_key = f"{pkg.system}:{pkg.name}"
         node_id = f"{base_key}:{pkg.version}"
 
-        # Prevent infinite loops in cyclic dependencies
+        # Prevent cycles
         if node_id in visited:
             return
         visited.add(node_id)
 
-        if base_key in winning_versions:
-            winner_version, _ = winning_versions[base_key]
-            if winner_version != pkg.version:
-                logger.debug(f"Updating {base_key} from {pkg.version} to {winner_version} (nearest-wins)")
+        # Just add if not present (after resolution, should all be winning versions)
+        if base_key not in package_map:
+            package_map[base_key] = pkg
 
-                updated_pkg = Package(pkg.system, pkg.name, winner_version, pkg.scope)
-                node.package = updated_pkg
-
-                # IMPORTANT: Fetch the correct dependency tree for the new version
-                logger.debug(f"Fetching dependencies for reconciled version {updated_pkg.full_name}")
-                winner_tree = self._fetch_complete_dependency_tree(updated_pkg, set())
-
-                if winner_tree and winner_tree.children:
-                    node.children.clear()
-                    for child in winner_tree.children:
-                        node.add_child(child)
-                        self._update_versions_to_nearest_wins(child, winning_versions, set(visited))
-                    logger.debug(
-                        f"Replaced {len(winner_tree.children)} children for nearest-wins {updated_pkg.full_name}"
-                    )
-                else:
-                    logger.debug(f"No new dependencies found for nearest-wins {updated_pkg.full_name}")
-            else:
-                # Version is already correct, just recurse
-                for child in node.children:
-                    self._update_versions_to_nearest_wins(child, winning_versions, set(visited))
-        else:
-            # No winning version found (shouldn't happen), just recurse
-            for child in node.children:
-                self._update_versions_to_nearest_wins(child, winning_versions, set(visited))
+        for child in node.children:
+            self._collect_packages_from_tree(child, package_map, visited)
 
     def close(self):
         """Close resources."""

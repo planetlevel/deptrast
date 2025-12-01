@@ -298,15 +298,21 @@ public class DependencyTreeGenerator {
 
             logger.info("Using existing dependency graph with {} root packages", rootCount);
         } else if ("flat".equals(detectedFormat)) {
-            // For flat runtime lists, don't resolve - these are actual runtime dependencies
-            logger.info("Input is a flat runtime list - skipping dependency resolution");
-            logger.info("Using packages as-is from runtime (no resolution applied)");
+            // For flat runtime lists, build dependency graph and apply conflict resolution
+            logger.info("Input is a flat runtime list - building dependency graph");
 
             graphBuilder = new DependencyGraphBuilder();
-            // Build minimal dependency tree structure (no resolution)
+
+            // PHASE 1: Build raw dependency graph
             dependencyTree = graphBuilder.buildDependencyTrees(allPackages);
-            allTrackedPackages = allPackages;
-            rootCount = allPackages.size();
+
+            // PHASE 2: Apply conflict resolution
+            logger.info("Using {} resolution strategy", resolutionStrategy);
+            graphBuilder.applyConflictResolution(resolutionStrategy);
+
+            // Get reconciled packages from the dependency tree
+            allTrackedPackages = graphBuilder.getAllReconciledPackages();
+            rootCount = dependencyTree.size();
         } else {
             // Build dependency trees from scratch using API (for POM, requirements.txt, etc)
             logger.info("Analyzing dependencies for {} packages...", allPackages.size());
@@ -325,11 +331,12 @@ public class DependencyTreeGenerator {
                 logger.info("Applied {} exclusion rules to graph builder", exclusions.size());
             }
 
-            // Set resolution strategy (only for build files that need resolution)
-            graphBuilder.setResolutionStrategy(resolutionStrategy);
-            logger.info("Using {} resolution strategy", resolutionStrategy);
-
+            // PHASE 1: Build raw dependency graph
             dependencyTree = graphBuilder.buildDependencyTrees(allPackages);
+
+            // PHASE 2: Apply conflict resolution
+            logger.info("Using {} resolution strategy", resolutionStrategy);
+            graphBuilder.applyConflictResolution(resolutionStrategy);
 
             // Get reconciled packages from the dependency tree (with managed versions applied)
             allTrackedPackages = graphBuilder.getAllReconciledPackages();
@@ -533,6 +540,7 @@ public class DependencyTreeGenerator {
             case "test":
             case "provided":
             case "system":
+            case "excluded":  // Conflict resolution exclusions
                 return Component.Scope.EXCLUDED;
             case "compile":
             case "runtime":
@@ -1366,6 +1374,18 @@ public class DependencyTreeGenerator {
                 if ("maven".equalsIgnoreCase(pkg.getSystem())) {
                     Component.Scope cdxScope = mavenScopeToCycloneDxScope(pkg.getScope());
                     component.setScope(cdxScope);
+                }
+
+                // Add conflict resolution tags if present
+                if (pkg.getScopeReason() != null || pkg.getWinningVersion() != null) {
+                    List<String> tagList = new ArrayList<>();
+                    if (pkg.getScopeReason() != null) {
+                        tagList.add("scope:" + pkg.getScopeReason());
+                    }
+                    if (pkg.getWinningVersion() != null) {
+                        tagList.add("winner:" + pkg.getWinningVersion());
+                    }
+                    component.setTags(new org.cyclonedx.model.component.Tags(tagList));
                 }
 
                 components.add(component);

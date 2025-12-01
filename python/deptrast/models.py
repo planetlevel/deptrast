@@ -11,7 +11,9 @@ class Package:
     system: str  # maven, npm, pypi
     name: str
     version: str
-    scope: str = "compile"  # Maven scope: compile, runtime, test, provided, system, optional
+    scope: str = "compile"  # Maven scope: compile, runtime, test, provided, system, optional, excluded
+    scope_reason: Optional[str] = None  # Reason for scope assignment (e.g., "conflict-resolution", "not-observed-at-runtime")
+    winning_version: Optional[str] = None  # If this is a losing version, what version won?
 
     def __post_init__(self):
         """Normalize system to lowercase."""
@@ -62,9 +64,28 @@ class DependencyNode:
         """Mark this node as a root dependency."""
         self.is_root = True
 
-    def get_tree_representation(self, prefix: str = "", is_last: bool = True, depth: int = 0) -> str:
+    def get_tree_representation(self, prefix: str = "", is_last: bool = True, depth: int = 0, visited: set = None) -> str:
         """Generate a tree visualization string (depth computed on-the-fly)."""
+        if visited is None:
+            visited = set()
+
         lines = []
+
+        # Check for cycles
+        node_id = self.package.full_name
+        if node_id in visited:
+            # Root indicator
+            root_marker = "🔴 " if self.is_root else ""
+
+            # Show cycle marker
+            connector = "└── " if is_last else "├── "
+            if depth == 0:
+                lines.append(f"{root_marker}{node_id} (cycle)")
+            else:
+                lines.append(f"{prefix}{connector}{root_marker}{node_id} (cycle)")
+            return "\n".join(lines)
+
+        visited.add(node_id)
 
         # Root indicator
         root_marker = "🔴 " if self.is_root else ""
@@ -83,7 +104,7 @@ class DependencyNode:
                 child_prefix = ""
             else:
                 child_prefix = prefix + ("    " if is_last else "│   ")
-            lines.append(child.get_tree_representation(child_prefix, is_last_child, depth + 1))
+            lines.append(child.get_tree_representation(child_prefix, is_last_child, depth + 1, visited))
 
         return "\n".join(lines)
 

@@ -2,6 +2,7 @@
 
 import logging
 from typing import Optional, Dict, Any
+from urllib.parse import quote
 
 import requests
 
@@ -33,12 +34,15 @@ class DepsDevClient:
         Returns:
             JSON response containing nodes and edges, or None if request fails
         """
+        # URL-encode the package name to handle special characters like ':'
+        encoded_name = quote(package.name, safe='')
         url = (
-            f"{self.BASE_URL}/{package.system}/packages/{package.name}"
+            f"{self.BASE_URL}/{package.system}/packages/{encoded_name}"
             f"/versions/{package.version}:dependencies"
         )
 
         logger.debug(f"Fetching dependency graph for {package.full_name}")
+        logger.debug(f"  URL: {url}")
 
         try:
             response = self.session.get(url, timeout=30)

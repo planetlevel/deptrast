@@ -3,15 +3,18 @@ package com.contrastsecurity.deptrast.model;
 import java.util.Objects;
 
 /**
- * Represents a software package (immutable value object)
+ * Represents a software package
  *
  * Dependency relationships are tracked in the DependencyNode tree structure.
+ * Scope and metadata are mutable to support conflict resolution marking.
  */
 public class Package {
     private final String name;
     private final String system;
     private final String version;
-    private final String scope;  // Maven scope: compile, runtime, test, provided, system
+    private String scope;  // Maven scope: compile, runtime, test, provided, system, optional, excluded
+    private String scopeReason;  // Reason for scope assignment (e.g., "conflict-resolution-loser", "not-observed-at-runtime")
+    private String winningVersion;  // If this is a losing version, what version won?
 
     public Package(String system, String name, String version) {
         this(system, name, version, "compile");  // Default to compile scope
@@ -22,6 +25,8 @@ public class Package {
         this.name = name;
         this.version = version;
         this.scope = scope != null ? scope : "compile";
+        this.scopeReason = null;
+        this.winningVersion = null;
     }
 
     public String getName() {
@@ -38,6 +43,26 @@ public class Package {
 
     public String getScope() {
         return scope;
+    }
+
+    public void setScope(String scope) {
+        this.scope = scope;
+    }
+
+    public String getScopeReason() {
+        return scopeReason;
+    }
+
+    public void setScopeReason(String scopeReason) {
+        this.scopeReason = scopeReason;
+    }
+
+    public String getWinningVersion() {
+        return winningVersion;
+    }
+
+    public void setWinningVersion(String winningVersion) {
+        this.winningVersion = winningVersion;
     }
 
     public String getFullName() {

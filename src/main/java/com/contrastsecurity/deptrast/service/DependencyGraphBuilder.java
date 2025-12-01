@@ -27,15 +27,34 @@ public class DependencyGraphBuilder implements AutoCloseable {
     private final DepsDevClient apiClient;
     private final Map<String, DependencyNode> completeTrees; // pkg fullName -> its full tree
     private final Map<String, Package> allPackages; // fullName -> Package (for deduplication)
+    private final Map<String, DependencyNode> allNodes; // fullName -> DependencyNode (one per version)
+    private final Map<String, Set<String>> parentMap; // child fullName -> Set[parent fullNames]
     private Map<String, String> dependencyManagement; // groupId:artifactId -> version
     private Map<String, Set<String>> exclusions; // package name -> set of excluded "groupId:artifactId"
+    private List<DependencyNode> rootNodes; // Root nodes after resolution
+
+    /**
+     * Simple tuple helper class for BFS queue
+     */
+    private static class Tuple<A, B> {
+        final A first;
+        final B second;
+
+        Tuple(A first, B second) {
+            this.first = first;
+            this.second = second;
+        }
+    }
 
     public DependencyGraphBuilder() {
         this.apiClient = new DepsDevClient();
         this.completeTrees = new HashMap<>();
         this.allPackages = new HashMap<>();
+        this.allNodes = new HashMap<>();
+        this.parentMap = new HashMap<>();
         this.dependencyManagement = new HashMap<>();
         this.exclusions = new HashMap<>();
+        this.rootNodes = new ArrayList<>();
     }
 
     /**
@@ -62,13 +81,26 @@ public class DependencyGraphBuilder implements AutoCloseable {
     }
 
     /**
-     * Main algorithm:
-     * 1. Fetch complete dependency graph for each input package
+     * Build dependency trees - PHASE 1 ONLY (no reconciliation).
+     *
+     * Algorithm:
+     * 1. Fetch complete dependency graph for each input package from deps.dev
      * 2. Track which INPUT packages appear as dependencies in OTHER trees
      * 3. Roots = input packages NOT appearing as dependencies
+     *
+     * Returns all discovered package versions (no reconciliation applied).
      */
     public List<DependencyNode> buildDependencyTrees(List<Package> inputPackages) {
-        logger.info("Building dependency trees for {} packages using optimized algorithm", inputPackages.size());
+        logger.info("Building dependency trees for {} packages - PHASE 1 ONLY", inputPackages.size());
+
+        // STEP 0: Pre-populate allPackages with input packages to preserve their scopes
+        // This ensures when deps.dev returns the SELF node, we reuse the input package object
+        for (Package pkg : inputPackages) {
+            if (!allPackages.containsKey(pkg.getFullName())) {
+                allPackages.put(pkg.getFullName(), pkg);
+                logger.debug("Pre-registered input package: {} (scope: {})", pkg.getFullName(), pkg.getScope());
+            }
+        }
 
         // STEP 1: Create set of input package names for quick lookup
         Set<String> inputPackageNames = new HashSet<>();
@@ -106,19 +138,6 @@ public class DependencyGraphBuilder implements AutoCloseable {
                 skippedCount, skippedCount);
         }
 
-        // STEP 2.5: Version reconciliation - replace declared versions with actual runtime versions
-        // This handles Maven's dependency resolution where the runtime has a different version
-        // than what was declared in pom.xml files
-        Map<String, String> observedVersions = new HashMap<>();
-        for (Package pkg : inputPackages) {
-            String baseKey = pkg.getSystem().toLowerCase() + ":" + pkg.getName();
-            observedVersions.put(baseKey, pkg.getVersion());
-        }
-
-        for (DependencyNode tree : completeTrees.values()) {
-            reconcileTreeVersions(tree, observedVersions, inputPackageNames);
-        }
-
         // STEP 3: Find which INPUT packages appear as dependencies in OTHER input packages' trees
         Set<String> inputPackagesAppearingAsChildren = new HashSet<>();
         for (Map.Entry<String, DependencyNode> entry : completeTrees.entrySet()) {
@@ -145,78 +164,10 @@ public class DependencyGraphBuilder implements AutoCloseable {
             }
         }
 
+        // Store root nodes for conflict resolution
+        this.rootNodes = rootTrees;
+
         return rootTrees;
-    }
-
-    /**
-     * Reconcile versions in the dependency tree with actual runtime versions
-     * This handles cases where Maven resolved a different version than what was declared
-     * or when dependency management overrides versions
-     */
-    private void reconcileTreeVersions(
-            DependencyNode node,
-            Map<String, String> observedVersions,
-            Set<String> inputPackageNames) {
-
-        if (node == null) {
-            return;
-        }
-
-        Package pkg = node.getPackage();
-        String baseKey = pkg.getSystem().toLowerCase() + ":" + pkg.getName();
-        String currentVersion = pkg.getVersion();
-        String reconciledVersion = null;
-
-        // Priority 1: Check if this package is in our dependencyManagement (from POM)
-        // This handles property overrides like thymeleaf.version in petclinic
-        if (dependencyManagement.containsKey(pkg.getName())) {
-            String managedVersion = dependencyManagement.get(pkg.getName());
-            if (!managedVersion.equals(currentVersion)) {
-                reconciledVersion = managedVersion;
-                logger.debug("Applying managed version for {}: {} -> {}", pkg.getName(), currentVersion, managedVersion);
-            }
-        }
-
-        // Priority 2: If this package base name is in our observed versions, update it
-        // This handles actual runtime versions
-        if (reconciledVersion == null && observedVersions.containsKey(baseKey)) {
-            String observedVersion = observedVersions.get(baseKey);
-            if (!observedVersion.equals(currentVersion)) {
-                reconciledVersion = observedVersion;
-                logger.debug("Applying observed version for {}: {} -> {}", baseKey, currentVersion, observedVersion);
-            }
-        }
-
-        // Apply the reconciled version if we found one
-        if (reconciledVersion != null) {
-            logger.info("Reconciling {} from {} to {}", pkg.getName(), currentVersion, reconciledVersion);
-            Package reconciledPkg = new Package(pkg.getSystem(), pkg.getName(), reconciledVersion);
-            node.setPackage(reconciledPkg);
-
-            // IMPORTANT: Fetch the dependency tree for the NEW version
-            // This ensures we get the correct dependencies for the reconciled version
-            logger.debug("Fetching dependencies for reconciled version {}", reconciledPkg.getFullName());
-            DependencyNode newTree = fetchCompleteDependencyTree(reconciledPkg, inputPackageNames);
-
-            if (newTree != null && !newTree.getChildren().isEmpty()) {
-                // Replace the children with the new version's dependencies
-                node.getChildren().clear();
-                for (DependencyNode newChild : newTree.getChildren()) {
-                    node.addChild(newChild);
-                    // Recursively reconcile the new subtree
-                    reconcileTreeVersions(newChild, observedVersions, inputPackageNames);
-                }
-                logger.debug("Replaced {} children for reconciled {}", newTree.getChildren().size(), reconciledPkg.getFullName());
-                return; // Don't recurse into old children - we already processed new ones
-            } else {
-                logger.debug("No new dependencies found for reconciled {}", reconciledPkg.getFullName());
-            }
-        }
-
-        // Recurse into children (only if we didn't replace them above)
-        for (DependencyNode child : node.getChildren()) {
-            reconcileTreeVersions(child, observedVersions, inputPackageNames);
-        }
     }
 
     /**
@@ -275,14 +226,14 @@ public class DependencyGraphBuilder implements AutoCloseable {
 
             if (jsonObject == null) {
                 logger.warn("WARNING: Unknown component {}. Treating as root dependency.", pkg.getFullName());
-                return new DependencyNode(pkg, 0);
+                return new DependencyNode(pkg, false);
             }
 
             // Parse the FULL graph, not just direct children
             return parseFullDependencyGraph(jsonObject, pkg, inputPackageNames);
         } catch (IOException e) {
             logger.error("Error fetching dependencies for {}: {}", pkg.getFullName(), e.getMessage());
-            return new DependencyNode(pkg, 0);
+            return new DependencyNode(pkg, false);
         }
     }
 
@@ -295,7 +246,7 @@ public class DependencyGraphBuilder implements AutoCloseable {
         JsonArray edges = graph.getAsJsonArray("edges");
 
         if (nodes == null || edges == null) {
-            return new DependencyNode(rootPackage, 0);
+            return new DependencyNode(rootPackage, false);
         }
 
         // Build map: node index -> Package
@@ -322,8 +273,15 @@ public class DependencyGraphBuilder implements AutoCloseable {
                 allPackages.put(fullName, pkg);
             }
 
+            // Create or reuse DependencyNode (for graph sharing)
+            DependencyNode depNode = allNodes.get(fullName);
+            if (depNode == null) {
+                depNode = new DependencyNode(pkg, false);
+                allNodes.put(fullName, depNode);
+            }
+
             nodeMap.put(i, pkg);
-            nodeTreeMap.put(i, new DependencyNode(pkg, 0)); // Depth updated later
+            nodeTreeMap.put(i, depNode);
 
             // Find the SELF node
             if ("SELF".equals(relation)) {
@@ -350,11 +308,12 @@ public class DependencyGraphBuilder implements AutoCloseable {
             return nodeTreeMap.get(selfNodeIndex);
         }
 
-        return new DependencyNode(rootPackage, 0);
+        return new DependencyNode(rootPackage, false);
     }
 
     /**
      * Recursively build tree structure from adjacency list
+     * Tracks parent-child relationships and reuses nodes from allNodes
      */
     private void buildTreeFromAdjacency(
             Map<Integer, DependencyNode> nodeTreeMap,
@@ -380,60 +339,30 @@ public class DependencyGraphBuilder implements AutoCloseable {
 
         List<Integer> children = adjacency.getOrDefault(currentNode, Collections.emptyList());
         for (int childIndex : children) {
-            Package childPkg = nodeTreeMap.get(childIndex).getPackage();
-            if (childPkg != null) {
-                // Check if this child is excluded by the parent
-                if (isExcluded(childPkg, parentExclusions)) {
-                    logger.debug("Excluding dependency {} from parent {}", childPkg.getName(), parentPkg.getName());
-                    continue; // Skip this child
-                }
-
-                // Create new node with correct depth
-                DependencyNode newChildNode = new DependencyNode(childPkg, depth + 1);
-                currentTreeNode.addChild(newChildNode);
-
-                // Recursively build this child's subtree
-                buildChildSubtree(newChildNode, nodeTreeMap, adjacency, childIndex, depth + 1, new HashSet<>(visited));
+            DependencyNode childNode = nodeTreeMap.get(childIndex);
+            if (childNode == null) {
+                continue;
             }
-        }
-    }
 
-    /**
-     * Build subtree for a child node
-     */
-    private void buildChildSubtree(
-            DependencyNode parentNode,
-            Map<Integer, DependencyNode> nodeTreeMap,
-            Map<Integer, List<Integer>> adjacency,
-            int currentNodeIndex,
-            int depth,
-            Set<Integer> visited) {
+            Package childPkg = childNode.getPackage();
 
-        if (visited.contains(currentNodeIndex)) {
-            return;
-        }
-        visited.add(currentNodeIndex);
-
-        // Get the parent package to check exclusions
-        Package parentPkg = parentNode.getPackage();
-        Set<String> parentExclusions = exclusions.getOrDefault(parentPkg.getName(), Collections.emptySet());
-
-        List<Integer> children = adjacency.getOrDefault(currentNodeIndex, Collections.emptyList());
-        for (int childIndex : children) {
-            Package childPkg = nodeTreeMap.get(childIndex).getPackage();
-            if (childPkg != null) {
-                // Check if this child is excluded by the parent
-                if (isExcluded(childPkg, parentExclusions)) {
-                    logger.debug("Excluding dependency {} from parent {}", childPkg.getName(), parentPkg.getName());
-                    continue; // Skip this child
-                }
-
-                DependencyNode childNode = new DependencyNode(childPkg, depth + 1);
-                parentNode.addChild(childNode);
-
-                // Recurse
-                buildChildSubtree(childNode, nodeTreeMap, adjacency, childIndex, depth + 1, new HashSet<>(visited));
+            // Check if this child is excluded by the parent
+            if (isExcluded(childPkg, parentExclusions)) {
+                logger.debug("Excluding dependency {} from parent {}", childPkg.getName(), parentPkg.getName());
+                continue; // Skip this child
             }
+
+            // Add child if not already present (node reuse)
+            if (!currentTreeNode.getChildren().contains(childNode)) {
+                currentTreeNode.addChild(childNode);
+            }
+
+            // Track parent-child relationship
+            parentMap.computeIfAbsent(childPkg.getFullName(), k -> new HashSet<>())
+                     .add(parentPkg.getFullName());
+
+            // Recursively build this child's subtree
+            buildTreeFromAdjacency(nodeTreeMap, adjacency, childIndex, depth + 1, new HashSet<>(visited));
         }
     }
 
@@ -454,6 +383,17 @@ public class DependencyGraphBuilder implements AutoCloseable {
     }
 
     /**
+     * Get base key for a package (system:name without version).
+     * Used for grouping different versions of the same library.
+     *
+     * @param pkg the package
+     * @return base key in format "system:name"
+     */
+    private String getBaseKey(Package pkg) {
+        return pkg.getSystem().toLowerCase() + ":" + pkg.getName();
+    }
+
+    /**
      * Get all packages discovered
      */
     public Collection<Package> getAllPackages() {
@@ -461,20 +401,100 @@ public class DependencyGraphBuilder implements AutoCloseable {
     }
 
     /**
-     * Get all packages from the reconciled dependency trees
-     * This returns the actual Package objects with reconciled versions
-     * When multiple versions of the same package exist, keeps the managed version or highest version
+     * Get all packages from the dependency trees - PHASE 1 ONLY
+     * Returns ALL package versions discovered from deps.dev (no deduplication)
      *
-     * @return collection of all reconciled packages
+     * @return collection of all packages including all versions
      */
     public Collection<Package> getAllReconciledPackages() {
-        Map<String, Package> packageMap = new HashMap<>();
+        // PHASE 1: Return ALL packages from allPackages (includes all versions)
+        logger.info("getAllReconciledPackages: returning {} packages (all versions)", allPackages.size());
+        return allPackages.values();
+    }
 
-        for (DependencyNode tree : completeTrees.values()) {
-            collectPackagesFromTree(tree, packageMap);
+    /**
+     * Phase 2: Apply conflict resolution to mark losing versions as excluded.
+     *
+     * For each library with multiple versions:
+     * 1. Choose winner based on strategy (maven nearest-wins or highest)
+     * 2. Add links from loser's parents → winner
+     * 3. Mark losers as scope=excluded
+     * 4. Mark loser subtrees as excluded (unless other incoming links)
+     */
+    public void applyConflictResolution(String strategy) {
+        if (rootNodes == null || rootNodes.isEmpty()) {
+            logger.warn("No root nodes available for conflict resolution");
+            return;
         }
 
-        return packageMap.values();
+        logger.info("=== PHASE 2: Applying conflict resolution with strategy: {} ===", strategy);
+
+        // Step 1: Determine winning versions
+        Map<String, String> winningVersions;
+        if ("maven".equals(strategy)) {
+            winningVersions = determineMavenWinningVersions(rootNodes);
+        } else {
+            // Extract input packages from completeTrees
+            List<Package> inputPackages = new ArrayList<>();
+            for (String pkgName : completeTrees.keySet()) {
+                Package pkg = allPackages.get(pkgName);
+                if (pkg != null) {
+                    inputPackages.add(pkg);
+                }
+            }
+            winningVersions = determineHighestWinningVersions(inputPackages);
+        }
+
+        logger.info("Determined {} winning versions", winningVersions.size());
+
+        // Step 2: Identify all losers (non-winning versions)
+        Set<String> losers = new HashSet<>();
+        int conflictsFound = 0;
+
+        for (Map.Entry<String, DependencyNode> entry : allNodes.entrySet()) {
+            String nodeName = entry.getKey();
+            DependencyNode node = entry.getValue();
+            Package pkg = node.getPackage();
+            String baseKey = getBaseKey(pkg);
+            String winningVersion = winningVersions.get(baseKey);
+
+            if (winningVersion != null && !pkg.getVersion().equals(winningVersion)) {
+                losers.add(nodeName);
+                conflictsFound++;
+                logger.debug("Loser identified: {} (winner: {}:{})", nodeName, baseKey, winningVersion);
+            }
+        }
+
+        logger.info("Found {} losing versions out of {} total nodes", conflictsFound, allNodes.size());
+
+        // Step 3: Redirect edges from loser parents → winner
+        int redirectCount = redirectEdgesToWinners(losers, winningVersions);
+        logger.info("Redirected {} edges to winning versions", redirectCount);
+
+        // Step 4: Mark losers as excluded
+        for (String loserName : losers) {
+            DependencyNode loserNode = allNodes.get(loserName);
+            if (loserNode == null) continue;
+
+            Package loserPkg = loserNode.getPackage();
+            String baseKey = getBaseKey(loserPkg);
+            String winningVersion = winningVersions.get(baseKey);
+
+            loserPkg.setScope("excluded");
+            loserPkg.setScopeReason("conflict-resolution-loser");
+            loserPkg.setWinningVersion(winningVersion);
+            logger.debug("Marked as excluded: {} (winner: {})", loserName, winningVersion);
+        }
+
+        // Step 5: Mark loser subtrees as excluded (unless other incoming links)
+        int excludedSubtreeCount = markLoserSubtreesExcluded(losers);
+        logger.info("Marked {} subtree nodes as excluded", excludedSubtreeCount);
+
+        logger.info("=== Conflict resolution complete: {} losers, {} redirects, {} subtree exclusions ===",
+                conflictsFound, redirectCount, excludedSubtreeCount);
+
+        // Step 6: Propagate test/provided/system scopes to transitive dependencies
+        propagateExcludedScopes();
     }
 
     /**
@@ -532,6 +552,262 @@ public class DependencyGraphBuilder implements AutoCloseable {
     }
 
     /**
+     * Phase 2: Determine winning versions using Maven nearest-wins strategy.
+     * Returns map of package_base_key -> winning_version.
+     */
+    private Map<String, String> determineMavenWinningVersions(List<DependencyNode> roots) {
+        logger.info("Determining winning versions using Maven nearest-wins");
+
+        // BFS to find nearest occurrence of each package
+        Map<String, Tuple<String, Integer>> firstOccurrence = new HashMap<>();
+        Queue<Tuple<DependencyNode, Integer>> queue = new LinkedList<>();
+
+        for (DependencyNode root : roots) {
+            queue.add(new Tuple<>(root, 0));
+        }
+
+        Set<String> visited = new HashSet<>();
+
+        while (!queue.isEmpty()) {
+            Tuple<DependencyNode, Integer> current = queue.poll();
+            DependencyNode node = current.first;
+            int depth = current.second;
+
+            Package pkg = node.getPackage();
+            String baseKey = getBaseKey(pkg);
+            String nodeId = baseKey + ":" + pkg.getVersion();
+
+            if (visited.contains(nodeId)) {
+                continue;
+            }
+            visited.add(nodeId);
+
+            // Track first/nearest occurrence
+            if (!firstOccurrence.containsKey(baseKey)) {
+                firstOccurrence.put(baseKey, new Tuple<>(pkg.getVersion(), depth));
+                logger.debug("First occurrence: {} v{} at depth {}", baseKey, pkg.getVersion(), depth);
+            } else {
+                Tuple<String, Integer> existing = firstOccurrence.get(baseKey);
+                String existingVersion = existing.first;
+                int existingDepth = existing.second;
+
+                if (depth < existingDepth) {
+                    logger.info("Nearer occurrence: {} v{} at depth {} replaces v{} at depth {}",
+                            baseKey, pkg.getVersion(), depth, existingVersion, existingDepth);
+                    firstOccurrence.put(baseKey, new Tuple<>(pkg.getVersion(), depth));
+                } else if (depth == existingDepth && compareVersions(pkg.getVersion(), existingVersion) > 0) {
+                    logger.info("Tie-breaker: {} at depth {}: v{} replaces v{} (higher)",
+                            baseKey, depth, pkg.getVersion(), existingVersion);
+                    firstOccurrence.put(baseKey, new Tuple<>(pkg.getVersion(), depth));
+                }
+            }
+
+            // Queue children
+            for (DependencyNode child : node.getChildren()) {
+                queue.add(new Tuple<>(child, depth + 1));
+            }
+        }
+
+        // Return just version map
+        Map<String, String> result = new HashMap<>();
+        for (Map.Entry<String, Tuple<String, Integer>> entry : firstOccurrence.entrySet()) {
+            result.put(entry.getKey(), entry.getValue().first);
+        }
+        return result;
+    }
+
+    /**
+     * Phase 2: Determine winning versions using highest version strategy.
+     * Priority: 1) dependency management, 2) input package version, 3) highest seen.
+     * Returns map of package_base_key -> winning_version.
+     */
+    private Map<String, String> determineHighestWinningVersions(List<Package> inputPackages) {
+        logger.info("Determining winning versions using highest version strategy");
+
+        Map<String, String> winningVersions = new HashMap<>();
+
+        // Priority 1: Dependency management
+        for (Map.Entry<String, String> entry : dependencyManagement.entrySet()) {
+            String name = entry.getKey();
+            String version = entry.getValue();
+
+            // Find system for this name from allPackages
+            for (Package pkg : allPackages.values()) {
+                if (pkg.getName().equals(name)) {
+                    String baseKey = getBaseKey(pkg);
+                    winningVersions.put(baseKey, version);
+                    logger.debug("Managed version: {} -> {}", baseKey, version);
+                    break;
+                }
+            }
+        }
+
+        // Priority 2: Input package versions (only if successfully fetched)
+        for (Package pkg : inputPackages) {
+            String pkgName = pkg.getFullName();
+            // Only use input version if we successfully fetched its graph
+            if (!completeTrees.containsKey(pkgName)) {
+                logger.debug("Skipping input version for {} (not in completeTrees)", pkgName);
+                continue;
+            }
+
+            String baseKey = getBaseKey(pkg);
+            if (!winningVersions.containsKey(baseKey)) {
+                winningVersions.put(baseKey, pkg.getVersion());
+                logger.debug("Input version: {} -> {}", baseKey, pkg.getVersion());
+            }
+        }
+
+        // Priority 3: Highest version seen IN FETCHED GRAPHS
+        for (Map.Entry<String, DependencyNode> entry : allNodes.entrySet()) {
+            DependencyNode node = entry.getValue();
+            Package pkg = node.getPackage();
+            String baseKey = getBaseKey(pkg);
+
+            if (winningVersions.containsKey(baseKey)) {
+                // Already have a winner from higher priority - check if this is higher
+                if (compareVersions(pkg.getVersion(), winningVersions.get(baseKey)) > 0) {
+                    logger.debug("Higher version: {} {} -> {}", baseKey, winningVersions.get(baseKey), pkg.getVersion());
+                    winningVersions.put(baseKey, pkg.getVersion());
+                }
+            } else {
+                // First time seeing this package
+                winningVersions.put(baseKey, pkg.getVersion());
+            }
+        }
+
+        return winningVersions;
+    }
+
+    /**
+     * Redirect edges from loser parents to winning versions.
+     * For each loser, find all parents and add edges parent → winner.
+     * Returns count of redirected edges.
+     */
+    private int redirectEdgesToWinners(Set<String> losers, Map<String, String> winningVersions) {
+        int redirectCount = 0;
+
+        for (String loserName : losers) {
+            DependencyNode loserNode = allNodes.get(loserName);
+            if (loserNode == null) {
+                continue;
+            }
+
+            // Get loser's package info
+            Package loserPkg = loserNode.getPackage();
+            String baseKey = getBaseKey(loserPkg);
+            String winningVersion = winningVersions.get(baseKey);
+
+            if (winningVersion == null) {
+                logger.warn("No winning version found for {}", baseKey);
+                continue;
+            }
+
+            // Find winner node
+            String winnerName = baseKey + ":" + winningVersion;
+            DependencyNode winnerNode = allNodes.get(winnerName);
+
+            if (winnerNode == null) {
+                logger.warn("Winner node not found: {}", winnerName);
+                continue;
+            }
+
+            // Get all parents of this loser
+            Set<String> parentNames = parentMap.getOrDefault(loserName, Collections.emptySet());
+
+            for (String parentName : parentNames) {
+                DependencyNode parentNode = allNodes.get(parentName);
+                if (parentNode == null) {
+                    continue;
+                }
+
+                // Add winner as child of parent (if not already present)
+                if (!parentNode.getChildren().contains(winnerNode)) {
+                    parentNode.addChild(winnerNode);
+                    // Update parent_map for the winner
+                    parentMap.computeIfAbsent(winnerName, k -> new HashSet<>()).add(parentName);
+                    redirectCount++;
+                    logger.debug("Redirected: {} → {} (was {})", parentName, winnerName, loserName);
+                }
+            }
+        }
+
+        return redirectCount;
+    }
+
+    /**
+     * Mark nodes in loser subtrees as excluded, UNLESS they have other incoming links
+     * from non-excluded nodes.
+     * Returns count of nodes marked as excluded.
+     */
+    private int markLoserSubtreesExcluded(Set<String> losers) {
+        int excludedCount = 0;
+        Set<String> visited = new HashSet<>();
+
+        for (String loserName : losers) {
+            DependencyNode loserNode = allNodes.get(loserName);
+            if (loserNode == null) {
+                continue;
+            }
+
+            // Recursively mark children (if they don't have other incoming links)
+            excludedCount += markSubtreeExcludedRecursive(loserNode, visited, losers);
+        }
+
+        return excludedCount;
+    }
+
+    /**
+     * Recursively mark children as excluded if ALL their parents are excluded.
+     */
+    private int markSubtreeExcludedRecursive(
+            DependencyNode node,
+            Set<String> visited,
+            Set<String> excludedParents) {
+        int count = 0;
+
+        for (DependencyNode child : node.getChildren()) {
+            String childName = child.getPackage().getFullName();
+
+            if (visited.contains(childName)) {
+                continue;
+            }
+            visited.add(childName);
+
+            // Skip if already excluded
+            if ("excluded".equals(child.getPackage().getScope())) {
+                continue;
+            }
+
+            // Check if child has ANY non-excluded parents
+            Set<String> childParents = parentMap.getOrDefault(childName, Collections.emptySet());
+            boolean hasNonExcludedParent = false;
+            for (String parentName : childParents) {
+                if (!excludedParents.contains(parentName)) {
+                    hasNonExcludedParent = true;
+                    break;
+                }
+            }
+
+            if (!hasNonExcludedParent) {
+                // All parents are excluded, so mark this child as excluded too
+                child.getPackage().setScope("excluded");
+                child.getPackage().setScopeReason("conflict-resolution-subtree");
+                count++;
+                logger.debug("Marked subtree node as excluded: {}", childName);
+
+                // Recursively mark its children
+                // Add this child to excludedParents for recursive call
+                Set<String> newExcluded = new HashSet<>(excludedParents);
+                newExcluded.add(childName);
+                count += markSubtreeExcludedRecursive(child, visited, newExcluded);
+            }
+        }
+
+        return count;
+    }
+
+    /**
      * Simple version comparison - returns positive if v1 > v2, negative if v1 < v2, 0 if equal
      * This is a simplified comparison that works for most semantic versions
      */
@@ -579,6 +855,97 @@ public class DependencyGraphBuilder implements AutoCloseable {
             return Integer.parseInt(s);
         } catch (NumberFormatException e) {
             return null;
+        }
+    }
+
+    /**
+     * Propagate test/provided/system scopes to transitive dependencies.
+     *
+     * Maven scope propagation rules:
+     * - Test, provided, and system scopes propagate to all transitive dependencies
+     * - Required scope (compile/runtime) overrides test scope if a package is reachable through both paths
+     *
+     * This ensures test libraries and their dependencies are properly excluded from runtime SBOMs.
+     */
+    private void propagateExcludedScopes() {
+        if (rootNodes == null || rootNodes.isEmpty()) {
+            logger.warn("No root nodes available for scope propagation");
+            return;
+        }
+
+        logger.info("=== Propagating Maven scopes to transitive dependencies ===");
+
+        // Track which packages are reachable from each scope type
+        Set<String> testReachable = new HashSet<>();       // Reachable from test/provided/system roots
+        Set<String> requiredReachable = new HashSet<>();   // Reachable from compile/runtime/None roots
+
+        // Walk dependency tree from each root to build reachability sets
+        for (DependencyNode root : rootNodes) {
+            String rootScope = root.getPackage().getScope();
+            if (rootScope == null) {
+                rootScope = "required";
+            }
+
+            // Determine if this root is test-scoped or required-scoped
+            if (rootScope.equals("test") || rootScope.equals("provided") ||
+                rootScope.equals("system") || rootScope.equals("excluded")) {
+                // Track all packages reachable from test-scoped roots
+                collectReachablePackagesByScope(root, testReachable, new HashSet<>());
+                logger.debug("Root {} has scope '{}' - marking transitives as test-reachable",
+                    root.getPackage().getFullName(), rootScope);
+            } else {
+                // Track all packages reachable from required-scoped roots
+                collectReachablePackagesByScope(root, requiredReachable, new HashSet<>());
+                logger.debug("Root {} has scope '{}' - marking transitives as required-reachable",
+                    root.getPackage().getFullName(), rootScope);
+            }
+        }
+
+        // Apply scope propagation with override rule
+        int propagatedCount = 0;
+        for (String pkgName : testReachable) {
+            // Skip if also reachable from required path (required overrides test)
+            if (requiredReachable.contains(pkgName)) {
+                logger.debug("Package {} reachable from both test and required paths - keeping as required", pkgName);
+                continue;
+            }
+
+            // Mark as excluded since only reachable from test/provided/system paths
+            DependencyNode node = allNodes.get(pkgName);
+            if (node != null && !node.getPackage().getScope().equals("excluded")) {
+                String oldScope = node.getPackage().getScope();
+                node.getPackage().setScope("excluded");
+                node.getPackage().setScopeReason("test-dependency");
+                propagatedCount++;
+                logger.debug("Propagated test scope to {} (was '{}')", pkgName, oldScope);
+            }
+        }
+
+        logger.info("Scope propagation complete: {} packages marked as test dependencies", propagatedCount);
+        logger.info("Reachability stats: {} test-reachable, {} required-reachable",
+            testReachable.size(), requiredReachable.size());
+    }
+
+    /**
+     * Collect all packages reachable from this node.
+     * Used for scope propagation to track test vs required reachability.
+     */
+    private void collectReachablePackagesByScope(DependencyNode node, Set<String> reachable, Set<String> visited) {
+        if (node == null) {
+            return;
+        }
+
+        String pkgName = node.getPackage().getFullName();
+        if (visited.contains(pkgName)) {
+            return;
+        }
+
+        visited.add(pkgName);
+        reachable.add(pkgName);
+
+        // Recursively collect children
+        for (DependencyNode child : node.getChildren()) {
+            collectReachablePackagesByScope(child, reachable, visited);
         }
     }
 

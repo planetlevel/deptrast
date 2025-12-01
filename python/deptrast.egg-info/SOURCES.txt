@@ -13,6 +13,11 @@ deptrast.egg-info/dependency_links.txt
 deptrast.egg-info/entry_points.txt
 deptrast.egg-info/requires.txt
 deptrast.egg-info/top_level.txt
+deptrast/commands/__init__.py
+deptrast/commands/compare.py
+deptrast/commands/graph.py
+deptrast/commands/stats.py
+deptrast/commands/validate.py
 deptrast/pymaven/__init__.py
 deptrast/pymaven/artifact.py
 deptrast/pymaven/client.py

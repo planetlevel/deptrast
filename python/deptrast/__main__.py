@@ -12,6 +12,9 @@ from .models import Package, DependencyNode
 from .parsers import FileParser
 from .graph_builder import DependencyGraphBuilder
 from .formatters import OutputFormatter
+from .commands.compare import compare_sboms
+from .commands.stats import show_stats
+from .commands.validate import validate_sbom
 
 logger = logging.getLogger(__name__)
 
@@ -120,17 +123,49 @@ def handle_create(args):
         all_tracked_packages = packages
         logger.info(f"Using existing dependency graph with {len(dependency_trees)} root packages")
     elif detected_format == 'flat':
-        # For flat runtime lists, don't resolve - these are actual runtime dependencies
-        logger.info("Input is a flat runtime list - skipping dependency resolution")
-        logger.info("Using packages as-is from runtime (no resolution applied)")
+        # For flat runtime lists, build full dependency tree but mark scope
+        logger.info("Input is a flat runtime list - building full dependency tree")
+        logger.info("Packages not in runtime list will be marked as optional")
+
+        # Track input package names (without versions - just system:name)
+        input_package_keys = {f"{pkg.system}:{pkg.name}" for pkg in packages}
 
         with DependencyGraphBuilder() as graph_builder:
-            # Build minimal dependency tree structure (no resolution)
-            dependency_trees = graph_builder.build_dependency_trees(packages)
-            all_tracked_packages = packages
+            # Set resolution strategy
+            graph_builder.set_resolution_strategy(resolution_strategy)
 
-        logger.info(f"Identified {len(packages)} packages from runtime")
-        logger.info(f"Using {len(all_tracked_packages)} packages for output")
+            # Build full dependency tree (fetches transitive dependencies)
+            dependency_trees = graph_builder.build_dependency_trees(packages)
+
+            # Apply conflict resolution
+            graph_builder.apply_conflict_resolution()
+
+            all_tracked_packages = list(graph_builder.get_all_reconciled_packages())
+
+            # Mark packages not in input as optional (but preserve existing excluded from conflict resolution)
+            required_count = 0
+            optional_count = 0
+            excluded_from_conflict = 0
+            for pkg in all_tracked_packages:
+                if pkg.scope == 'excluded':
+                    # Don't overwrite excluded packages from conflict resolution
+                    excluded_from_conflict += 1
+                    continue
+
+                pkg_key = f"{pkg.system}:{pkg.name}"
+                if pkg_key in input_package_keys:
+                    pkg.scope = "required"  # Observed at runtime
+                    pkg.scope_reason = "observed-at-runtime"
+                    required_count += 1
+                else:
+                    pkg.scope = "optional"  # Transitive dependency not observed at runtime
+                    pkg.scope_reason = "not-observed-at-runtime"
+                    optional_count += 1
+
+        logger.info(f"Identified {len(packages)} packages from runtime (marked as required)")
+        logger.info(f"Excluded {excluded_from_conflict} packages from conflict resolution (losing versions)")
+        logger.info(f"Marked {optional_count} transitive dependencies as optional (not observed at runtime)")
+        logger.info(f"Total: {required_count} required + {optional_count} optional + {excluded_from_conflict} excluded = {len(all_tracked_packages)} packages")
     else:
         # Build dependency trees from scratch (for POM, requirements.txt, etc)
         logger.info(f"Analyzing dependencies for {len(packages)} packages...")
@@ -151,6 +186,10 @@ def handle_create(args):
             logger.info(f"Using {resolution_strategy} resolution strategy")
 
             dependency_trees = graph_builder.build_dependency_trees(packages)
+
+            # Apply conflict resolution
+            graph_builder.apply_conflict_resolution()
+
             all_tracked_packages = list(graph_builder.get_all_reconciled_packages())
 
         logger.info(f"Identified {len(dependency_trees)} root packages")
@@ -231,6 +270,48 @@ def handle_print(args):
         use_existing_deps=args.use_existing_deps
     )
     return handle_create(create_args)
+
+
+def handle_compare(args):
+    """Handle the 'compare' subcommand."""
+    setup_logging(args.verbose if hasattr(args, 'verbose') else False,
+                  args.loglevel if hasattr(args, 'loglevel') else None)
+
+    try:
+        compare_sboms(args.sbom1, args.sbom2)
+        return 0
+    except Exception as e:
+        logger.error(f"Error comparing SBOMs: {e}")
+        print(f"Error comparing SBOMs: {e}", file=sys.stderr)
+        return 1
+
+
+def handle_stats(args):
+    """Handle the 'stats' subcommand."""
+    setup_logging(args.verbose if hasattr(args, 'verbose') else False,
+                  args.loglevel if hasattr(args, 'loglevel') else None)
+
+    try:
+        show_stats(args.input)
+        return 0
+    except Exception as e:
+        logger.error(f"Error showing stats: {e}")
+        print(f"Error showing stats: {e}", file=sys.stderr)
+        return 1
+
+
+def handle_validate(args):
+    """Handle the 'validate' subcommand."""
+    setup_logging(args.verbose if hasattr(args, 'verbose') else False,
+                  args.loglevel if hasattr(args, 'loglevel') else None)
+
+    try:
+        validate_sbom(args.input)
+        return 0
+    except Exception as e:
+        logger.error(f"Error validating SBOM: {e}")
+        print(f"Error validating SBOM: {e}", file=sys.stderr)
+        return 1
 
 
 def parse_dependency_graph_from_sbom(sbom_content: str, packages: List[Package]) -> List[DependencyNode]:
@@ -396,6 +477,28 @@ def main():
     print_parser.add_argument('-v', '--verbose', action='store_true', help='Verbose logging')
     print_parser.add_argument('--loglevel', choices=['TRACE', 'DEBUG', 'INFO', 'WARN', 'ERROR'])
     print_parser.set_defaults(func=handle_print)
+
+    # Compare command
+    compare_parser = subparsers.add_parser('compare', help='Compare two SBOMs')
+    compare_parser.add_argument('sbom1', help='First SBOM file')
+    compare_parser.add_argument('sbom2', help='Second SBOM file')
+    compare_parser.add_argument('-v', '--verbose', action='store_true', help='Verbose logging')
+    compare_parser.add_argument('--loglevel', choices=['TRACE', 'DEBUG', 'INFO', 'WARN', 'ERROR'])
+    compare_parser.set_defaults(func=handle_compare)
+
+    # Stats command
+    stats_parser = subparsers.add_parser('stats', help='Show statistics about SBOM')
+    stats_parser.add_argument('input', help='Input SBOM file')
+    stats_parser.add_argument('-v', '--verbose', action='store_true', help='Verbose logging')
+    stats_parser.add_argument('--loglevel', choices=['TRACE', 'DEBUG', 'INFO', 'WARN', 'ERROR'])
+    stats_parser.set_defaults(func=handle_stats)
+
+    # Validate command
+    validate_parser = subparsers.add_parser('validate', help='Validate SBOM structure')
+    validate_parser.add_argument('input', help='Input SBOM file')
+    validate_parser.add_argument('-v', '--verbose', action='store_true', help='Verbose logging')
+    validate_parser.add_argument('--loglevel', choices=['TRACE', 'DEBUG', 'INFO', 'WARN', 'ERROR'])
+    validate_parser.set_defaults(func=handle_validate)
 
     # Parse arguments
     args = parser.parse_args()

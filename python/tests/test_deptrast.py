@@ -76,20 +76,21 @@ class DeptrastTest(unittest.TestCase):
             stats = self._validate_sbom(output_file)
 
             # Verify specific expected values (from petclinic-contrast-runtime-list.txt)
-            # This file has 129 components (flat runtime lists are not resolved - they represent actual runtime state)
-            self.assertEqual(129, stats["component_count"],
-                           "Expected 129 components from petclinic-contrast-runtime-list.txt")
+            # This file has 129 runtime packages + 33 transitive dependencies = 162 total
+            # Packages in input file are marked scope="required", transitives are scope="optional"
+            self.assertEqual(162, stats["component_count"],
+                           "Expected 162 components from petclinic-contrast-runtime-list.txt")
 
             # All components should have PURLs
-            self.assertEqual(129, stats["components_with_purl"],
+            self.assertEqual(162, stats["components_with_purl"],
                            "All components should have PURLs")
 
             # All components should have bom-refs
-            self.assertEqual(129, stats["components_with_bom_ref"],
+            self.assertEqual(162, stats["components_with_bom_ref"],
                            "All components should have bom-refs")
 
             # Should have dependency relationships
-            self.assertEqual(129, stats["dependency_count"],
+            self.assertEqual(162, stats["dependency_count"],
                            "Should have dependency entries for all components")
 
         finally:
@@ -109,10 +110,10 @@ class DeptrastTest(unittest.TestCase):
             # Load and validate
             stats = self._validate_sbom(output_file)
 
-            self.assertEqual(129, stats["component_count"], "Should have 129 components")
-            self.assertEqual(129, stats["components_with_purl"], "All components should have PURLs")
-            self.assertEqual(129, stats["components_with_bom_ref"], "All components should have bom-refs")
-            self.assertEqual(129, stats["dependency_count"], "Should have 129 dependency entries")
+            self.assertEqual(162, stats["component_count"], "Should have 162 components")
+            self.assertEqual(162, stats["components_with_purl"], "All components should have PURLs")
+            self.assertEqual(162, stats["components_with_bom_ref"], "All components should have bom-refs")
+            self.assertEqual(162, stats["dependency_count"], "Should have 162 dependency entries")
 
         finally:
             if os.path.exists(output_file):
@@ -663,7 +664,10 @@ class DeptrastTest(unittest.TestCase):
                        str(self.flat_file), java_output]
             java_result = subprocess.run(java_cmd, capture_output=True, text=True,
                                         cwd=self.project_root)
-            self.assertEqual(java_result.returncode, 0)
+            if java_result.returncode != 0:
+                print(f"\nJava stderr: {java_result.stderr}")
+                print(f"Java stdout: {java_result.stdout}")
+            self.assertEqual(java_result.returncode, 0, f"deptrast failed: {java_result.stderr}")
 
             # Load both outputs
             with open(py_output) as f:

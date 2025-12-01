@@ -64,15 +64,32 @@ class OutputFormatter:
         """Format as Maven dependency:tree output."""
         lines = [f"[INFO] {project_name}"]
 
+        visited = set()
         for tree in dependency_trees:
-            lines.extend(OutputFormatter._format_maven_node(tree, "", True, depth=0))
+            lines.extend(OutputFormatter._format_maven_node(tree, "", True, depth=0, visited=visited))
 
         return '\n'.join(lines) + '\n'
 
     @staticmethod
-    def _format_maven_node(node: DependencyNode, prefix: str, is_last: bool, depth: int = 0) -> List[str]:
+    def _format_maven_node(node: DependencyNode, prefix: str, is_last: bool, depth: int = 0, visited: set = None) -> List[str]:
         """Format a single node in Maven tree style."""
+        if visited is None:
+            visited = set()
+
         lines = []
+
+        # Check for cycles
+        node_id = node.package.full_name
+        if node_id in visited:
+            # Just show the node without recursing
+            if depth > 0:
+                connector = "\\- " if is_last else "+- "
+                lines.append(f"[INFO] {prefix}{connector}{node_id} (cycle)")
+            else:
+                lines.append(f"[INFO] +- {node_id} (cycle)")
+            return lines
+
+        visited.add(node_id)
 
         # Connector
         if depth > 0:
@@ -85,7 +102,7 @@ class OutputFormatter:
         for i, child in enumerate(node.children):
             is_last_child = (i == len(node.children) - 1)
             child_prefix = prefix + ("   " if is_last else "|  ")
-            lines.extend(OutputFormatter._format_maven_node(child, child_prefix, is_last_child, depth + 1))
+            lines.extend(OutputFormatter._format_maven_node(child, child_prefix, is_last_child, depth + 1, visited))
 
         return lines
 
@@ -174,7 +191,7 @@ class OutputFormatter:
         # Add dependencies to SBOM
         sbom['dependencies'] = dependencies
 
-        # Reorder component fields to match Java output: type, bom-ref, group, name, version, scope, purl
+        # Reorder component fields to match Java output: type, bom-ref, group, name, version, scope, purl, tags
         reordered_components = []
         for comp in sbom.get('components', []):
             ordered_comp = {
@@ -184,7 +201,8 @@ class OutputFormatter:
                 'name': comp.get('name'),
                 'version': comp.get('version'),
                 'scope': comp.get('scope'),
-                'purl': comp.get('purl')
+                'purl': comp.get('purl'),
+                'tags': comp.get('tags')
             }
             # Remove None values
             ordered_comp = {k: v for k, v in ordered_comp.items() if v is not None}
@@ -321,20 +339,28 @@ class OutputFormatter:
     def _build_dependency_map(trees: List[DependencyNode]) -> Dict[Package, List[Package]]:
         """Build a map of Package -> direct dependencies from the tree structure."""
         dependency_map: Dict[Package, List[Package]] = {}
+        visited = set()
 
         for tree in trees:
-            OutputFormatter._collect_dependencies_from_tree(tree, dependency_map)
+            OutputFormatter._collect_dependencies_from_tree(tree, dependency_map, visited)
 
         return dependency_map
 
     @staticmethod
     def _collect_dependencies_from_tree(
         node: DependencyNode,
-        dependency_map: Dict[Package, List[Package]]
+        dependency_map: Dict[Package, List[Package]],
+        visited: set
     ) -> None:
         """Recursively collect dependency relationships from tree."""
         if not node:
             return
+
+        # Check for cycles
+        node_id = node.package.full_name
+        if node_id in visited:
+            return
+        visited.add(node_id)
 
         pkg = node.package
         children = [child.package for child in node.children]
@@ -355,7 +381,7 @@ class OutputFormatter:
 
         # Recurse into children
         for child in node.children:
-            OutputFormatter._collect_dependencies_from_tree(child, dependency_map)
+            OutputFormatter._collect_dependencies_from_tree(child, dependency_map, visited)
 
     @staticmethod
     def _maven_scope_to_cyclonedx(maven_scope: str) -> ComponentScope:
@@ -363,8 +389,8 @@ class OutputFormatter:
         Map Maven scope to CycloneDX ComponentScope.
 
         Maven scopes:
-          compile, runtime -> REQUIRED (needed at runtime)
-          test, provided, system -> EXCLUDED (not needed at runtime)
+          compile, runtime, required -> REQUIRED (needed at runtime)
+          test, provided, system, excluded -> EXCLUDED (not needed at runtime)
           optional -> OPTIONAL (optional at runtime)
         """
         if not maven_scope:
@@ -374,9 +400,9 @@ class OutputFormatter:
 
         if scope_lower == "optional":
             return ComponentScope.OPTIONAL
-        elif scope_lower in ("test", "provided", "system"):
+        elif scope_lower in ("test", "provided", "system", "excluded"):
             return ComponentScope.EXCLUDED
-        elif scope_lower in ("compile", "runtime"):
+        elif scope_lower in ("compile", "runtime", "required"):
             return ComponentScope.REQUIRED
         else:
             # Default to REQUIRED for unknown scopes
@@ -397,17 +423,25 @@ class OutputFormatter:
         purl_str = OutputFormatter._build_purl(pkg)
         purl_obj = PackageURL.from_string(purl_str)
 
+        # Build tags list to indicate scope reason and winning version
+        tags = []
+        if pkg.scope_reason:
+            tags.append(f"scope:{pkg.scope_reason}")
+        if pkg.winning_version:
+            tags.append(f"winner:{pkg.winning_version}")
+
         component = Component(
             name=name,
             version=pkg.version,
             type=ComponentType.LIBRARY,
             group=group,
             purl=purl_obj,
-            bom_ref=purl_str
+            bom_ref=purl_str,
+            tags=tags if tags else None
         )
 
-        # Map Maven scope to CycloneDX scope
-        if pkg.system.lower() == 'maven':
+        # Map package scope to CycloneDX scope (applies to all package types)
+        if pkg.scope:
             cdx_scope = OutputFormatter._maven_scope_to_cyclonedx(pkg.scope)
             component.scope = cdx_scope
 
