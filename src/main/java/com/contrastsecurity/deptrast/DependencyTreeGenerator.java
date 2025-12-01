@@ -846,14 +846,59 @@ public class DependencyTreeGenerator {
         if (!versionDiffs.isEmpty()) {
             System.out.println();
             System.out.println("Version differences:");
-            versionDiffs.entrySet().stream()
-                .limit(10)
-                .forEach(entry -> {
-                    String[] purls = entry.getValue();
-                    System.out.println("  - " + entry.getKey());
-                    System.out.println("    " + sbom1Path + ": " + purls[0].substring(purls[0].lastIndexOf('@') + 1));
-                    System.out.println("    " + sbom2Path + ": " + purls[1].substring(purls[1].lastIndexOf('@') + 1));
-                });
+
+            // Extract just the filenames for cleaner headers
+            String sbom1Name = new java.io.File(sbom1Path).getName();
+            String sbom2Name = new java.io.File(sbom2Path).getName();
+
+            // Prepare sorted list (limit to 10 rows for display)
+            List<Map.Entry<String, String[]>> sortedDiffs = versionDiffs.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .collect(Collectors.toList());
+            int displayCount = Math.min(10, sortedDiffs.size());
+
+            // Calculate column widths
+            int maxNameLen = sortedDiffs.stream()
+                .limit(displayCount)
+                .map(Map.Entry::getKey)
+                .mapToInt(String::length)
+                .max()
+                .orElse(0);
+            maxNameLen = Math.max(maxNameLen, "Library".length());
+
+            int maxV1Len = sortedDiffs.stream()
+                .limit(displayCount)
+                .map(entry -> entry.getValue()[0].substring(entry.getValue()[0].lastIndexOf('@') + 1))
+                .mapToInt(String::length)
+                .max()
+                .orElse(0);
+            maxV1Len = Math.max(maxV1Len, "SBOM 1".length());
+
+            int maxV2Len = sortedDiffs.stream()
+                .limit(displayCount)
+                .map(entry -> entry.getValue()[1].substring(entry.getValue()[1].lastIndexOf('@') + 1))
+                .mapToInt(String::length)
+                .max()
+                .orElse(0);
+            maxV2Len = Math.max(maxV2Len, "SBOM 2".length());
+
+            // Print header
+            String headerFormat = "  %-" + maxNameLen + "s  %-" + maxV1Len + "s  %-" + maxV2Len + "s";
+            System.out.println(String.format(headerFormat, "Library", "SBOM 1", "SBOM 2"));
+
+            // Print separator
+            String separator = "  " + "-".repeat(maxNameLen) + "  " + "-".repeat(maxV1Len) + "  " + "-".repeat(maxV2Len);
+            System.out.println(separator);
+
+            // Print rows
+            for (int i = 0; i < displayCount; i++) {
+                Map.Entry<String, String[]> entry = sortedDiffs.get(i);
+                String packageName = entry.getKey();
+                String version1 = entry.getValue()[0].substring(entry.getValue()[0].lastIndexOf('@') + 1);
+                String version2 = entry.getValue()[1].substring(entry.getValue()[1].lastIndexOf('@') + 1);
+                System.out.println(String.format(headerFormat, packageName, version1, version2));
+            }
+
             if (versionDiffs.size() > 10) {
                 System.out.println("  ... and " + (versionDiffs.size() - 10) + " more");
             }

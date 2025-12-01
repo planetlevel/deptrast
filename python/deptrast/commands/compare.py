@@ -117,14 +117,36 @@ def compare_sboms(sbom1_path: str, sbom2_path: str, scope_filter: str = None) ->
     if version_diffs:
         print()
         print("Version differences:")
+
+        # Extract just the filenames for cleaner headers
+        import os
+        sbom1_name = os.path.basename(sbom1_path)
+        sbom2_name = os.path.basename(sbom2_path)
+
+        # Prepare table data (limit to 10 rows for display)
         sorted_diffs = sorted(version_diffs.items())
+        display_count = min(10, len(sorted_diffs))
+
+        # Calculate column widths
+        max_name_len = max(len(package_name) for package_name, _ in sorted_diffs[:display_count])
+        max_name_len = max(max_name_len, len("Library"))
+        max_v1_len = max(len(version1) for _, (version1, _) in sorted_diffs[:display_count])
+        max_v1_len = max(max_v1_len, len(sbom1_name))
+        max_v2_len = max(len(version2) for _, (_, version2) in sorted_diffs[:display_count])
+        max_v2_len = max(max_v2_len, len(sbom2_name))
+
+        # Print header
+        header = f"  {'Library':<{max_name_len}}  {'SBOM 1':<{max_v1_len}}  {'SBOM 2':<{max_v2_len}}"
+        print(header)
+        separator = f"  {'-' * max_name_len}  {'-' * max_v1_len}  {'-' * max_v2_len}"
+        print(separator)
+
+        # Print rows
         for i, (package_name, (version1, version2)) in enumerate(sorted_diffs):
             if i >= 10:
                 print(f"  ... and {len(version_diffs) - 10} more")
                 break
-            print(f"  - {package_name}")
-            print(f"    {sbom1_path}: {version1}")
-            print(f"    {sbom2_path}: {version2}")
+            print(f"  {package_name:<{max_name_len}}  {version1:<{max_v1_len}}  {version2:<{max_v2_len}}")
 
     if only_in1:
         print()
