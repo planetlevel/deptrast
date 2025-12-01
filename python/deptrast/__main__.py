@@ -278,7 +278,8 @@ def handle_compare(args):
                   args.loglevel if hasattr(args, 'loglevel') else None)
 
     try:
-        compare_sboms(args.sbom1, args.sbom2)
+        scope_filter = args.scope if hasattr(args, 'scope') else None
+        compare_sboms(args.sbom1, args.sbom2, scope_filter)
         return 0
     except Exception as e:
         logger.error(f"Error comparing SBOMs: {e}")
@@ -292,7 +293,8 @@ def handle_stats(args):
                   args.loglevel if hasattr(args, 'loglevel') else None)
 
     try:
-        show_stats(args.input)
+        scope_filter = args.scope if hasattr(args, 'scope') else None
+        show_stats(args.input, scope_filter)
         return 0
     except Exception as e:
         logger.error(f"Error showing stats: {e}")
@@ -482,6 +484,8 @@ def main():
     compare_parser = subparsers.add_parser('compare', help='Compare two SBOMs')
     compare_parser.add_argument('sbom1', help='First SBOM file')
     compare_parser.add_argument('sbom2', help='Second SBOM file')
+    compare_parser.add_argument('--scope', choices=['required', 'excluded', 'optional'],
+                                help='Filter comparison to components with specific scope')
     compare_parser.add_argument('-v', '--verbose', action='store_true', help='Verbose logging')
     compare_parser.add_argument('--loglevel', choices=['TRACE', 'DEBUG', 'INFO', 'WARN', 'ERROR'])
     compare_parser.set_defaults(func=handle_compare)
@@ -489,6 +493,8 @@ def main():
     # Stats command
     stats_parser = subparsers.add_parser('stats', help='Show statistics about SBOM')
     stats_parser.add_argument('input', help='Input SBOM file')
+    stats_parser.add_argument('--scope', choices=['required', 'excluded', 'optional'],
+                              help='Filter statistics to components with specific scope')
     stats_parser.add_argument('-v', '--verbose', action='store_true', help='Verbose logging')
     stats_parser.add_argument('--loglevel', choices=['TRACE', 'DEBUG', 'INFO', 'WARN', 'ERROR'])
     stats_parser.set_defaults(func=handle_stats)

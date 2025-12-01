@@ -490,21 +490,50 @@ public class DependencyTreeGenerator {
      */
     private static void handleStats(String[] args) throws Exception {
         if (args.length < 2) {
-            System.err.println("Usage: deptrast stats <input-sbom>");
+            System.err.println("Usage: deptrast stats <input-sbom> [--scope=<scope>]");
+            System.err.println();
+            System.err.println("Shows statistics about an SBOM file.");
+            System.err.println();
+            System.err.println("Options:");
+            System.err.println("  --scope=<scope>    Filter to specific scope (required, excluded, optional)");
             return;
         }
 
         String inputFilePath = args[1];
 
+        // Parse optional scope filter
+        String scopeFilter = null;
+        for (int i = 2; i < args.length; i++) {
+            if (args[i].startsWith("--scope=")) {
+                scopeFilter = args[i].substring(8).toLowerCase();
+            }
+        }
+
         // Parse SBOM
         List<Package> allPackages = FileParser.parseSbomFile(inputFilePath);
 
+        // Apply scope filter if specified
+        List<Package> packages = allPackages;
+        if (scopeFilter != null) {
+            final String filterScope = scopeFilter;
+            packages = allPackages.stream()
+                .filter(pkg -> {
+                    String pkgScope = pkg.getScope();
+                    if (pkgScope == null) pkgScope = "required";
+                    return pkgScope.equalsIgnoreCase(filterScope);
+                })
+                .collect(Collectors.toList());
+        }
+
         // Build dependency trees to get root count
         graphBuilder = new DependencyGraphBuilder();
-        List<DependencyNode> dependencyTree = graphBuilder.buildDependencyTrees(allPackages);
+        List<DependencyNode> dependencyTree = graphBuilder.buildDependencyTrees(packages);
         Collection<Package> allTrackedPackages = graphBuilder.getAllReconciledPackages();
 
         System.out.println("SBOM Statistics:");
+        if (scopeFilter != null) {
+            System.out.println("  Scope filter: " + scopeFilter);
+        }
         System.out.println("  Total Packages: " + allTrackedPackages.size());
         System.out.println("  Root Packages: " + dependencyTree.size());
         System.out.println("  Transitive Packages: " + (allTrackedPackages.size() - dependencyTree.size()));
@@ -702,17 +731,51 @@ public class DependencyTreeGenerator {
      */
     private static void handleCompare(String[] args) throws Exception {
         if (args.length < 3) {
-            System.err.println("Usage: deptrast compare <sbom1> <sbom2>");
+            System.err.println("Usage: deptrast compare <sbom1> <sbom2> [--scope=<scope>]");
             System.err.println();
             System.err.println("Compares two SBOMs and shows differences.");
+            System.err.println();
+            System.err.println("Options:");
+            System.err.println("  --scope=<scope>    Filter to specific scope (required, excluded, optional)");
             return;
         }
 
         String sbom1Path = args[1];
         String sbom2Path = args[2];
 
-        List<Package> packages1 = FileParser.parseSbomFile(sbom1Path);
-        List<Package> packages2 = FileParser.parseSbomFile(sbom2Path);
+        // Parse optional scope filter
+        String scopeFilter = null;
+        for (int i = 3; i < args.length; i++) {
+            if (args[i].startsWith("--scope=")) {
+                scopeFilter = args[i].substring(8).toLowerCase();
+            }
+        }
+
+        List<Package> allPackages1 = FileParser.parseSbomFile(sbom1Path);
+        List<Package> allPackages2 = FileParser.parseSbomFile(sbom2Path);
+
+        // Apply scope filter if specified
+        List<Package> packages1 = allPackages1;
+        List<Package> packages2 = allPackages2;
+
+        if (scopeFilter != null) {
+            final String filterScope = scopeFilter;
+            packages1 = allPackages1.stream()
+                .filter(pkg -> {
+                    String pkgScope = pkg.getScope();
+                    if (pkgScope == null) pkgScope = "required";
+                    return pkgScope.equalsIgnoreCase(filterScope);
+                })
+                .collect(Collectors.toList());
+
+            packages2 = allPackages2.stream()
+                .filter(pkg -> {
+                    String pkgScope = pkg.getScope();
+                    if (pkgScope == null) pkgScope = "required";
+                    return pkgScope.equalsIgnoreCase(filterScope);
+                })
+                .collect(Collectors.toList());
+        }
 
         // Build maps for comparison
         Map<String, String> purls1Map = packages1.stream()
@@ -769,6 +832,9 @@ public class DependencyTreeGenerator {
         onlyIn2.removeIf(purl -> processedNames.contains(getPackageNameFromPurl(purl)));
 
         System.out.println("SBOM Comparison:");
+        if (scopeFilter != null) {
+            System.out.println("  Scope filter: " + scopeFilter);
+        }
         System.out.println("  " + sbom1Path + ": " + packages1.size() + " components");
         System.out.println("  " + sbom2Path + ": " + packages2.size() + " components");
         System.out.println();

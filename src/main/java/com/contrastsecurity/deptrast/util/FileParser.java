@@ -173,6 +173,14 @@ public class FileParser {
                             // Parse purl format: pkg:maven/group/artifact@version
                             Package pkg = parsePurl(purl);
                             if (pkg != null) {
+                                // Read scope from SBOM component if present
+                                JsonElement scopeElement = component.get("scope");
+                                if (scopeElement != null && !scopeElement.isJsonNull()) {
+                                    String scope = scopeElement.getAsString();
+                                    pkg.setScope(scope);
+                                    logger.debug("Set scope {} for package {}", scope, pkg.getFullName());
+                                }
+
                                 packages.add(pkg);
                                 logger.info("Added package from SBOM: {}", pkg.getFullName());
                             }

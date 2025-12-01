@@ -24,14 +24,28 @@ def get_package_name_from_purl(purl: str) -> str:
     return normalized
 
 
-def parse_sbom_purls(sbom_path: str) -> List[str]:
-    """Parse SBO M and extract all purls."""
+def parse_sbom_purls(sbom_path: str, scope_filter: str = None) -> List[str]:
+    """Parse SBOM and extract purls, optionally filtering by scope.
+
+    Args:
+        sbom_path: Path to SBOM file
+        scope_filter: Optional scope to filter by (e.g., 'required', 'excluded', 'optional')
+
+    Returns:
+        List of normalized purls
+    """
     with open(sbom_path, 'r') as f:
         sbom = json.load(f)
 
     purls = []
     components = sbom.get('components', [])
     for component in components:
+        # Apply scope filter if specified
+        if scope_filter:
+            component_scope = component.get('scope', 'required')
+            if component_scope != scope_filter:
+                continue
+
         purl = component.get('purl')
         if purl:
             purls.append(normalize_purl(purl))
@@ -39,11 +53,17 @@ def parse_sbom_purls(sbom_path: str) -> List[str]:
     return purls
 
 
-def compare_sboms(sbom1_path: str, sbom2_path: str) -> None:
-    """Compare two SBOMs and show differences."""
+def compare_sboms(sbom1_path: str, sbom2_path: str, scope_filter: str = None) -> None:
+    """Compare two SBOMs and show differences.
+
+    Args:
+        sbom1_path: Path to first SBOM file
+        sbom2_path: Path to second SBOM file
+        scope_filter: Optional scope to filter by (e.g., 'required', 'excluded', 'optional')
+    """
     # Parse both SBOMs
-    purls1 = parse_sbom_purls(sbom1_path)
-    purls2 = parse_sbom_purls(sbom2_path)
+    purls1 = parse_sbom_purls(sbom1_path, scope_filter)
+    purls2 = parse_sbom_purls(sbom2_path, scope_filter)
 
     # Build package name -> full purl maps for version comparison
     package_names1: Dict[str, str] = {}
@@ -84,6 +104,8 @@ def compare_sboms(sbom1_path: str, sbom2_path: str) -> None:
 
     # Print results
     print("SBOM Comparison:")
+    if scope_filter:
+        print(f"  Scope filter: {scope_filter}")
     print(f"  {sbom1_path}: {len(purls1)} components")
     print(f"  {sbom2_path}: {len(purls2)} components")
     print()

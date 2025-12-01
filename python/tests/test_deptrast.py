@@ -76,21 +76,21 @@ class DeptrastTest(unittest.TestCase):
             stats = self._validate_sbom(output_file)
 
             # Verify specific expected values (from petclinic-contrast-runtime-list.txt)
-            # This file has 129 runtime packages + 33 transitive dependencies = 162 total
-            # Packages in input file are marked scope="required", transitives are scope="optional"
-            self.assertEqual(162, stats["component_count"],
-                           "Expected 162 components from petclinic-contrast-runtime-list.txt")
+            # New two-phase resolution includes conflict-resolution losers as excluded components
+            # 132 required + 29 excluded (conflict-resolution losers) = 161 total
+            self.assertEqual(161, stats["component_count"],
+                           "Expected 161 components from petclinic-contrast-runtime-list.txt")
 
             # All components should have PURLs
-            self.assertEqual(162, stats["components_with_purl"],
+            self.assertEqual(161, stats["components_with_purl"],
                            "All components should have PURLs")
 
             # All components should have bom-refs
-            self.assertEqual(162, stats["components_with_bom_ref"],
+            self.assertEqual(161, stats["components_with_bom_ref"],
                            "All components should have bom-refs")
 
             # Should have dependency relationships
-            self.assertEqual(162, stats["dependency_count"],
+            self.assertEqual(161, stats["dependency_count"],
                            "Should have dependency entries for all components")
 
         finally:
@@ -110,10 +110,12 @@ class DeptrastTest(unittest.TestCase):
             # Load and validate
             stats = self._validate_sbom(output_file)
 
-            self.assertEqual(162, stats["component_count"], "Should have 162 components")
-            self.assertEqual(162, stats["components_with_purl"], "All components should have PURLs")
-            self.assertEqual(162, stats["components_with_bom_ref"], "All components should have bom-refs")
-            self.assertEqual(162, stats["dependency_count"], "Should have 162 dependency entries")
+            # New two-phase resolution includes conflict-resolution losers as excluded components
+            # 132 required + 29 excluded (conflict-resolution losers) = 161 total
+            self.assertEqual(161, stats["component_count"], "Should have 161 components")
+            self.assertEqual(161, stats["components_with_purl"], "All components should have PURLs")
+            self.assertEqual(161, stats["components_with_bom_ref"], "All components should have bom-refs")
+            self.assertEqual(161, stats["dependency_count"], "Should have 161 dependency entries")
 
         finally:
             if os.path.exists(output_file):
