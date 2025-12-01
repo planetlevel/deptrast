@@ -39,6 +39,29 @@
             align-items: center;
         }
 
+        .scope-filters {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .scope-checkbox {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 13px;
+            color: #333;
+            cursor: pointer;
+        }
+
+        .scope-checkbox input[type="checkbox"] {
+            cursor: pointer;
+        }
+
+        .scope-checkbox span {
+            user-select: none;
+        }
+
         button, .file-label {
             background: #0078d4;
             color: white;
@@ -80,6 +103,30 @@
             flex-direction: column;
             background: white;
             position: relative;
+            margin-right: 60px;
+        }
+
+        .column.app-column {
+            min-width: 280px;
+            max-width: 280px;
+            background: #f8f9fa;
+        }
+
+        .column.app-column .node-item {
+            background: #e8f4f8;
+            border-left-color: #0078d4;
+            border-left-width: 4px;
+            font-size: 14px;
+            padding: 20px;
+        }
+
+        .column.app-column .node-name {
+            font-size: 16px;
+            color: #0078d4;
+        }
+
+        .column:last-child {
+            margin-right: 0;
         }
 
         .column-header {
@@ -89,12 +136,35 @@
             font-size: 13px;
             font-weight: 600;
             color: #666;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .column-title {
+            flex: 1;
+        }
+
+        .column-count {
+            font-size: 11px;
+            color: #999;
+            font-weight: normal;
+        }
+
+        .column-aggregate {
+            font-size: 12px;
+            color: #0078d4;
+            font-weight: 600;
+            margin-left: 10px;
         }
 
         .column-content {
             flex: 1;
             overflow-y: auto;
             padding: 8px 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
         }
 
         .node-item {
@@ -115,23 +185,92 @@
         }
 
         .node-item.highlighted {
+            background: #e3f2fd;
+            border-left-color: transparent;
+        }
+
+        .node-item.scope-optional {
+            background: #fff9e6;
+        }
+
+        .node-item.scope-optional:hover {
             background: #fff3cd;
+        }
+
+        .node-item.scope-optional.selected {
+            background: #ffe8a1;
             border-left-color: #ffc107;
+        }
+
+        .node-item.scope-excluded {
+            background: #ffe6e6;
+        }
+
+        .node-item.scope-excluded:hover {
+            background: #ffd6d6;
+        }
+
+        .node-item.scope-excluded.selected {
+            background: #ffb3b3;
+            border-left-color: #f44336;
+        }
+
+        .column.last-column .node-item {
+            background: #e3f2fd;
+        }
+
+        .column.last-column .node-item.selected {
+            background: #bbdefb;
+            border-left-color: #0078d4;
+        }
+
+        /* Scope colors should override last-column highlighting */
+        .column.last-column .node-item.scope-optional {
+            background: #fff9e6;
+        }
+
+        .column.last-column .node-item.scope-optional.selected {
+            background: #ffe8a1;
+            border-left-color: #ffc107;
+        }
+
+        .column.last-column .node-item.scope-excluded {
+            background: #ffe6e6;
+        }
+
+        .column.last-column .node-item.scope-excluded.selected {
+            background: #ffb3b3;
+            border-left-color: #f44336;
+        }
+
+        .node-group {
+            font-size: 11px;
+            color: #666;
+            margin-bottom: 2px;
+            word-wrap: break-word;
+            display: block;
         }
 
         .node-name {
             font-size: 13px;
             color: #333;
-            font-weight: 500;
+            font-weight: 600;
             margin-bottom: 4px;
             word-wrap: break-word;
+            display: block;
+        }
+
+        .node-version {
+            font-size: 11px;
+            color: #666;
+            font-weight: normal;
         }
 
         .node-meta {
             font-size: 11px;
             color: #666;
             display: flex;
-            justify-content: space-between;
+            justify-content: flex-end;
             align-items: center;
         }
 
@@ -141,6 +280,20 @@
             border-radius: 10px;
             font-size: 10px;
             font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .node-count::after {
+            content: '›';
+            font-size: 14px;
+            font-weight: bold;
+            color: #999;
+        }
+
+        .node-count.no-deps::after {
+            content: '';
         }
 
         .node-bar {
@@ -199,7 +352,6 @@
             padding: 12px;
             font-size: 11px;
             color: #666;
-            margin-top: 20px;
             max-height: 200px;
             overflow-y: auto;
         }
@@ -211,6 +363,44 @@
 
         .path-display .path-item:last-child {
             border-bottom: none;
+        }
+
+        #componentDetails {
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            padding: 12px;
+            font-size: 12px;
+        }
+
+        .detail-row {
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .detail-row:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        .detail-label {
+            font-size: 10px;
+            color: #999;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 4px;
+        }
+
+        .detail-value {
+            color: #333;
+            font-size: 12px;
+            word-break: break-all;
+        }
+
+        .detail-value strong {
+            color: #0078d4;
         }
 
         svg {
@@ -228,12 +418,14 @@
             stroke: #0078d4;
             stroke-width: 2;
             opacity: 0.3;
+            marker-end: url(#arrowhead);
         }
 
         .connector-line.active {
             stroke: #0078d4;
             opacity: 0.8;
             stroke-width: 2.5;
+            marker-end: url(#arrowhead-active);
         }
 
         .empty-state {
@@ -241,14 +433,6 @@
             color: #999;
         }
 
-        .version-badge {
-            background: #e8f4f8;
-            color: #0078d4;
-            padding: 2px 6px;
-            border-radius: 3px;
-            font-size: 10px;
-            font-weight: 600;
-        }
 
         ::-webkit-scrollbar {
             width: 8px;
@@ -276,6 +460,21 @@
             <label for="fileInput" class="file-label">Load SBOM</label>
             <input type="file" id="fileInput" accept=".json,.sbom">
             <button onclick="resetView()">Reset View</button>
+            <div class="scope-filters" id="scopeFilters" style="display: none; margin-left: 20px;">
+                <label style="font-size: 13px; color: #666; margin-right: 10px;">Scope:</label>
+                <label class="scope-checkbox">
+                    <input type="checkbox" id="scopeRequired" checked onchange="applyFilters()">
+                    <span>Required</span>
+                </label>
+                <label class="scope-checkbox">
+                    <input type="checkbox" id="scopeOptional" checked onchange="applyFilters()">
+                    <span>Optional</span>
+                </label>
+                <label class="scope-checkbox">
+                    <input type="checkbox" id="scopeExcluded" onchange="applyFilters()">
+                    <span>Excluded</span>
+                </label>
+            </div>
         </div>
     </div>
 
@@ -290,23 +489,30 @@
         </div>
 
         <div class="stats-panel" id="statsPanel" style="display: none;">
-            <h2>Statistics</h2>
-            <div class="stat-item">
-                <div class="stat-label">Total Components</div>
-                <div class="stat-value" id="totalComponents">0</div>
-            </div>
-            <div class="stat-item">
-                <div class="stat-label">Loaded Columns</div>
-                <div class="stat-value" id="columnCount">0</div>
-            </div>
-            <div class="stat-item">
-                <div class="stat-label">Selected Path</div>
-                <div class="stat-value" id="pathDepth">0</div>
+            <h2>Component Details</h2>
+            <div id="componentDetails">
+                <em>Click a component to see details</em>
             </div>
 
-            <h2 style="margin-top: 30px;">Current Path</h2>
-            <div class="path-display" id="pathDisplay">
-                <em>Click a dependency to see its path</em>
+            <h2 style="margin-top: 30px;">Paths to Component</h2>
+            <div class="path-display" id="pathsDisplay">
+                <em>Click a component to see all paths</em>
+            </div>
+
+            <h2 style="margin-top: 30px;">Dependency Tree Stats</h2>
+            <div id="treeStats" style="display: none;">
+                <div class="stat-item">
+                    <div class="stat-label">Direct Dependencies</div>
+                    <div class="stat-value" id="directDeps">0</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Total Transitive</div>
+                    <div class="stat-value" id="transitiveDeps">0</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Max Depth</div>
+                    <div class="stat-value" id="treeDepth">0</div>
+                </div>
             </div>
         </div>
     </div>
@@ -317,6 +523,12 @@
         let dependencyMap = new Map();
         let columns = [];
         let selectedPath = [];
+        let availableScopes = new Set();
+        let activeFilters = {
+            required: true,
+            optional: true,
+            excluded: false
+        };
 
         document.getElementById('fileInput').addEventListener('change', function(e) {
             const file = e.target.files[0];
@@ -341,26 +553,39 @@
             columns = [];
             selectedPath = [];
 
-            // Build component map
+            // Build component map and detect scopes
+            availableScopes.clear();
             if (sbom.components) {
                 sbom.components.forEach(comp => {
                     componentMap.set(comp.purl, comp);
+                    if (comp.scope) {
+                        availableScopes.add(comp.scope);
+                    }
                 });
             }
 
-            // Build dependency map
+            // Build dependency map and detect scopes in dependencies
             if (sbom.dependencies) {
                 sbom.dependencies.forEach(dep => {
                     dependencyMap.set(dep.ref, dep.dependsOn || []);
+                    if (dep.scope) {
+                        availableScopes.add(dep.scope);
+                    }
                 });
             }
+
+            // Always show scope filters when SBOM is loaded
+            const scopeFiltersDiv = document.getElementById('scopeFilters');
+            scopeFiltersDiv.style.display = 'flex';
 
             // Find root nodes (those not depended upon by others)
             const rootNodes = findRootNodes();
 
-            // Initialize first column with root nodes
-            initializeView(rootNodes);
-            updateStats();
+            // Filter root nodes by scope before initializing
+            const filteredRoots = filterNodesByScope(rootNodes);
+
+            // Initialize first column with filtered root nodes
+            initializeView(filteredRoots);
         }
 
         function findRootNodes() {
@@ -400,9 +625,77 @@
                 return;
             }
 
-            addColumn(nodes, 'Root Dependencies');
+            // Add Application column first
+            addApplicationColumn(nodes);
+
+            // Add Direct Dependencies column
+            addColumn(nodes);
+            updateLastColumnHighlight();
             document.getElementById('statsPanel').style.display = 'block';
-            updateStats();
+
+            // Draw connectors from Application to Direct Dependencies
+            drawConnectors();
+        }
+
+        function addApplicationColumn(directDeps) {
+            const container = document.getElementById('columnsContainer');
+
+            const column = document.createElement('div');
+            column.className = 'column app-column';
+
+            const header = document.createElement('div');
+            header.className = 'column-header';
+
+            const titleSpan = document.createElement('span');
+            titleSpan.className = 'column-title';
+            titleSpan.textContent = 'Application';
+
+            header.appendChild(titleSpan);
+
+            const content = document.createElement('div');
+            content.className = 'column-content';
+
+            // Calculate total stats
+            const totalDirect = directDeps.length;
+            let totalTransitive = new Set();
+            directDeps.forEach(purl => {
+                const transitive = collectAllTransitiveDeps(purl, new Set());
+                transitive.forEach(dep => totalTransitive.add(dep));
+            });
+
+            // Get app name from SBOM metadata
+            const appName = sbomData.metadata?.component?.name || 'Application';
+
+            const item = document.createElement('div');
+            item.className = 'node-item';
+
+            const nameDiv = document.createElement('div');
+            nameDiv.className = 'node-name';
+            nameDiv.innerHTML = `<strong>${appName}</strong>`;
+
+            const meta = document.createElement('div');
+            meta.className = 'node-meta';
+
+            const count = document.createElement('span');
+            count.className = 'node-count';
+            count.textContent = `${totalDirect}:${totalTransitive.size}`;
+
+            meta.appendChild(count);
+
+            item.appendChild(nameDiv);
+            item.appendChild(meta);
+
+            content.appendChild(item);
+            column.appendChild(header);
+            column.appendChild(content);
+            container.appendChild(column);
+
+            // Store application column reference
+            columns.push({
+                element: column,
+                nodes: ['__application__'],
+                isAppColumn: true
+            });
         }
 
         function addColumn(nodes, title) {
@@ -415,15 +708,38 @@
 
             const header = document.createElement('div');
             header.className = 'column-header';
-            header.textContent = title;
+
+            // Create title with numbering
+            const titleSpan = document.createElement('span');
+            titleSpan.className = 'column-title';
+            if (columnIndex === 0) {
+                titleSpan.textContent = 'Direct Dependencies';
+            } else {
+                titleSpan.textContent = `Transitive Dependencies ${columnIndex}`;
+            }
+
+            // Calculate aggregate stats for this column
+            let totalDownstream = 0;
+            nodes.forEach(purl => {
+                const allTransitive = collectAllTransitiveDeps(purl, new Set());
+                totalDownstream += allTransitive.size;
+            });
+
+            // Create aggregate badge (libraries : total downstream)
+            const aggregateSpan = document.createElement('span');
+            aggregateSpan.className = 'column-aggregate';
+            aggregateSpan.textContent = `${nodes.length}:${totalDownstream}`;
+
+            header.appendChild(titleSpan);
+            header.appendChild(aggregateSpan);
 
             const content = document.createElement('div');
             content.className = 'column-content';
 
-            // Calculate max dependencies for bar sizing
+            // Calculate max transitive dependencies for bar sizing (entire subtree)
             const maxDeps = Math.max(...nodes.map(purl => {
-                const deps = dependencyMap.get(purl) || [];
-                return deps.length;
+                const allTransitive = collectAllTransitiveDeps(purl, new Set());
+                return allTransitive.size;
             }));
 
             nodes.forEach((purl, index) => {
@@ -436,40 +752,125 @@
                 item.dataset.columnIndex = columnIndex;
                 item.dataset.itemIndex = index;
 
-                const name = document.createElement('div');
-                name.className = 'node-name';
-
-                if (component) {
-                    const shortName = component.name || component.purl;
-                    name.textContent = shortName;
-                } else {
-                    name.textContent = purl.split('/').pop() || purl;
+                // Add scope-based styling
+                if (component && component.scope) {
+                    const scope = component.scope.toLowerCase();
+                    console.log(`Component ${component.name} has scope: ${scope}`);
+                    if (scope === 'optional') {
+                        item.classList.add('scope-optional');
+                        console.log(`  Added scope-optional class`);
+                    } else if (scope === 'excluded') {
+                        item.classList.add('scope-excluded');
+                        console.log(`  Added scope-excluded class to ${component.name}`);
+                    }
                 }
 
+                // Line 1: Group (filter out urn:cdx: and other URN prefixes)
+                const groupDiv = document.createElement('div');
+                groupDiv.className = 'node-group';
+                let groupText = '';
+
+                if (component && component.group && !component.group.startsWith('urn:')) {
+                    groupText = component.group;
+                } else if (purl && purl.startsWith('pkg:maven/')) {
+                    // Extract group from purl: pkg:maven/GROUP/ARTIFACT@VERSION
+                    const purlMatch = purl.match(/pkg:maven\/([^\/]+)\//);
+                    if (purlMatch) {
+                        groupText = purlMatch[1];
+                    }
+                } else if (purl && purl.startsWith('urn:cdx:')) {
+                    // URN format: urn:cdx:GROUP:ARTIFACT:VERSION
+                    // Need to split by colons and extract GROUP (everything up to second-to-last colon)
+                    const withoutPrefix = purl.replace('urn:cdx:', '');
+                    const parts = withoutPrefix.split(':');
+                    if (parts.length >= 3) {
+                        // Group is everything except last 2 parts (artifact and version)
+                        groupText = parts.slice(0, -2).join('.');
+                    } else if (parts.length === 2) {
+                        // Just artifact:version, no group
+                        groupText = 'unknown';
+                    }
+                }
+
+                groupDiv.textContent = groupText || 'unknown';
+
+                // Debug logging
+                if (component && component.name === 'hibernate-entitymanager') {
+                    console.log('hibernate-entitymanager debug:');
+                    console.log('  group:', groupText);
+                    console.log('  component.name:', component.name);
+                    console.log('  component.version:', component.version);
+                }
+
+                // Line 2: Artifact name (bold) and version
+                const nameDiv = document.createElement('div');
+                nameDiv.className = 'node-name';
+
+                let artifactName = '';
+                let version = '';
+
+                if (component) {
+                    // Use component data
+                    artifactName = component.name || '';
+                    version = component.version || '';
+                } else if (purl.startsWith('pkg:maven/')) {
+                    // Extract from maven purl: pkg:maven/group/artifact@version
+                    const parts = purl.split('/').pop().split('@');
+                    artifactName = parts[0];
+                    version = parts[1] || '';
+                } else if (purl.startsWith('urn:cdx:')) {
+                    // URN format: urn:cdx:GROUP:ARTIFACT:VERSION
+                    const withoutPrefix = purl.replace('urn:cdx:', '');
+                    const parts = withoutPrefix.split(':');
+                    if (parts.length >= 3) {
+                        // Second to last is artifact, last is version
+                        artifactName = parts[parts.length - 2];
+                        version = parts[parts.length - 1];
+                    } else if (parts.length === 2) {
+                        // Just artifact:version
+                        artifactName = parts[0];
+                        version = parts[1];
+                    }
+                } else {
+                    artifactName = purl.split('/').pop().split('@')[0] || purl;
+                }
+
+                if (version) {
+                    nameDiv.innerHTML = `<strong>${artifactName}</strong> <span class="node-version">${version}</span>`;
+                } else {
+                    nameDiv.innerHTML = `<strong>${artifactName}</strong>`;
+                }
+
+                // Meta: dependency count with arrow
                 const meta = document.createElement('div');
                 meta.className = 'node-meta';
 
-                const version = document.createElement('span');
-                if (component && component.version) {
-                    version.className = 'version-badge';
-                    version.textContent = component.version;
+                const count = document.createElement('span');
+
+                // Calculate filtered dependencies
+                const filteredDeps = filterNodesByScope(deps);
+                const allTransitive = collectAllTransitiveDeps(purl, new Set());
+                const transitiveCount = allTransitive.size;
+
+                count.className = filteredDeps.length > 0 ? 'node-count' : 'node-count no-deps';
+
+                if (filteredDeps.length > 0) {
+                    count.textContent = `${filteredDeps.length}:${transitiveCount}`;
+                } else {
+                    count.textContent = '0';
                 }
 
-                const count = document.createElement('span');
-                count.className = 'node-count';
-                count.textContent = deps.length;
-
-                meta.appendChild(version);
                 meta.appendChild(count);
 
-                item.appendChild(name);
+                item.appendChild(groupDiv);
+                item.appendChild(nameDiv);
                 item.appendChild(meta);
 
-                // Add proportional bar
-                if (deps.length > 0 && maxDeps > 0) {
+                // Add proportional bar (based on entire subtree size)
+                if (transitiveCount > 0 && maxDeps > 0) {
                     const bar = document.createElement('div');
                     bar.className = 'node-bar';
-                    bar.style.width = `${(deps.length / maxDeps) * 100}%`;
+                    bar.style.width = `${(transitiveCount / maxDeps) * 100}%`;
                     item.appendChild(bar);
                 }
 
@@ -504,17 +905,30 @@
             // Update UI selection
             updateSelectionUI();
 
-            // Get dependencies and add new column
+            // Get dependencies and add new column (filtered by scope)
             const deps = dependencyMap.get(purl) || [];
-            if (deps.length > 0) {
-                const component = componentMap.get(purl);
-                const title = component ? component.name : 'Dependencies';
-                addColumn(deps, title);
+            const filteredDeps = filterNodesByScope(deps);
+            if (filteredDeps.length > 0) {
+                addColumn(filteredDeps);
                 drawConnectors();
             }
 
-            updateStats();
-            updatePathDisplay();
+            // Mark last column
+            updateLastColumnHighlight();
+
+            updateComponentDetails();
+        }
+
+        function updateLastColumnHighlight() {
+            // Remove last-column class from all columns
+            document.querySelectorAll('.column').forEach(col => {
+                col.classList.remove('last-column');
+            });
+
+            // Add to the actual last column
+            if (columns.length > 0) {
+                columns[columns.length - 1].element.classList.add('last-column');
+            }
         }
 
         function updateSelectionUI() {
@@ -536,35 +950,112 @@
             const svg = document.getElementById('connectorsCanvas');
             svg.innerHTML = '';
 
+            // Update SVG dimensions to cover the entire scrollable area
+            const container = document.getElementById('columnsContainer');
+            svg.setAttribute('width', container.scrollWidth);
+            svg.setAttribute('height', container.scrollHeight);
+
+            // Add arrowhead marker definitions
+            const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+
+            const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+            marker.setAttribute('id', 'arrowhead');
+            marker.setAttribute('markerWidth', '8');
+            marker.setAttribute('markerHeight', '8');
+            marker.setAttribute('refX', '0');
+            marker.setAttribute('refY', '2.5');
+            marker.setAttribute('orient', 'auto');
+            marker.setAttribute('markerUnits', 'strokeWidth');
+
+            const path1 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path1.setAttribute('d', 'M0,0 L0,5 L6,2.5 z');
+            path1.setAttribute('fill', '#0078d4');
+            path1.setAttribute('opacity', '0.3');
+            marker.appendChild(path1);
+            defs.appendChild(marker);
+
+            const markerActive = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+            markerActive.setAttribute('id', 'arrowhead-active');
+            markerActive.setAttribute('markerWidth', '8');
+            markerActive.setAttribute('markerHeight', '8');
+            markerActive.setAttribute('refX', '0');
+            markerActive.setAttribute('refY', '2.5');
+            markerActive.setAttribute('orient', 'auto');
+            markerActive.setAttribute('markerUnits', 'strokeWidth');
+
+            const path2 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path2.setAttribute('d', 'M0,0 L0,5 L6,2.5 z');
+            path2.setAttribute('fill', '#0078d4');
+            path2.setAttribute('opacity', '0.8');
+            markerActive.appendChild(path2);
+            defs.appendChild(markerActive);
+
+            svg.appendChild(defs);
+
             if (columns.length < 2) return;
 
-            // Draw connectors between last two columns
-            const fromColumnIndex = columns.length - 2;
-            const toColumnIndex = columns.length - 1;
-
-            const fromColumn = columns[fromColumnIndex].element;
-            const toColumn = columns[toColumnIndex].element;
-
-            const selectedPurl = selectedPath[fromColumnIndex];
-            const fromItem = fromColumn.querySelector(`.node-item[data-purl="${selectedPurl}"]`);
-
-            if (!fromItem) return;
-
-            const fromRect = fromItem.getBoundingClientRect();
             const containerRect = document.getElementById('columnsContainer').getBoundingClientRect();
+            const scrollLeft = document.getElementById('columnsContainer').scrollLeft;
+            const scrollTop = document.getElementById('columnsContainer').scrollTop;
 
-            const deps = dependencyMap.get(selectedPurl) || [];
+            // Draw connectors from Application column to all Direct Dependencies
+            if (columns.length >= 2 && columns[0].isAppColumn) {
+                const appColumn = columns[0].element;
+                const directDepsColumn = columns[1].element;
 
-            deps.forEach(depPurl => {
-                const toItem = toColumn.querySelector(`.node-item[data-purl="${depPurl}"]`);
-                if (!toItem) return;
+                const appItem = appColumn.querySelector('.node-item');
+                const directDepsItems = directDepsColumn.querySelectorAll('.node-item');
 
+                if (appItem && directDepsItems.length > 0) {
+                    const fromRect = appItem.getBoundingClientRect();
+
+                    directDepsItems.forEach(toItem => {
+                        const toRect = toItem.getBoundingClientRect();
+
+                        const x1 = fromRect.right - containerRect.left + scrollLeft;
+                        const y1 = fromRect.top + fromRect.height / 2 - containerRect.top + scrollTop;
+                        const x2 = toRect.left - containerRect.left + scrollLeft - 6;
+                        const y2 = toRect.top + toRect.height / 2 - containerRect.top + scrollTop;
+
+                        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                        const midX = (x1 + x2) / 2;
+                        const d = `M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}`;
+
+                        path.setAttribute('d', d);
+                        path.setAttribute('class', 'connector-line active');
+
+                        svg.appendChild(path);
+                    });
+                }
+            }
+
+            // Draw connectors for all connections in the selected path
+            for (let i = 0; i < selectedPath.length; i++) {
+                const fromColumnIndex = i;
+                const toColumnIndex = i + 1;
+
+                if (toColumnIndex >= columns.length) break;
+
+                const fromColumn = columns[fromColumnIndex].element;
+                const toColumn = columns[toColumnIndex].element;
+
+                const selectedPurl = selectedPath[fromColumnIndex];
+                const targetPurl = selectedPath[toColumnIndex];
+
+                const fromItem = fromColumn.querySelector(`.node-item[data-purl="${selectedPurl}"]`);
+                const toItem = toColumn.querySelector(`.node-item[data-purl="${targetPurl}"]`);
+
+                if (!fromItem || !toItem) continue;
+
+                const fromRect = fromItem.getBoundingClientRect();
                 const toRect = toItem.getBoundingClientRect();
 
-                const x1 = fromRect.right - containerRect.left;
-                const y1 = fromRect.top + fromRect.height / 2 - containerRect.top;
-                const x2 = toRect.left - containerRect.left;
-                const y2 = toRect.top + toRect.height / 2 - containerRect.top;
+                // Calculate positions accounting for scroll
+                const x1 = fromRect.right - containerRect.left + scrollLeft;
+                const y1 = fromRect.top + fromRect.height / 2 - containerRect.top + scrollTop;
+                // Subtract arrowhead width (6) so arrow tip touches box edge
+                const x2 = toRect.left - containerRect.left + scrollLeft - 6;
+                const y2 = toRect.top + toRect.height / 2 - containerRect.top + scrollTop;
 
                 const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
                 const midX = (x1 + x2) / 2;
@@ -574,32 +1065,239 @@
                 path.setAttribute('class', 'connector-line active');
 
                 svg.appendChild(path);
-            });
+            }
+
+            // Also draw connectors from the last selected item to all its children in the last column
+            if (columns.length > 1 && selectedPath.length > 0) {
+                const lastSelectedIndex = selectedPath.length - 1;
+                const lastSelectedPurl = selectedPath[lastSelectedIndex];
+                const deps = dependencyMap.get(lastSelectedPurl) || [];
+
+                if (deps.length > 0) {
+                    const fromColumn = columns[lastSelectedIndex].element;
+                    const toColumn = columns[lastSelectedIndex + 1].element;
+
+                    const fromItem = fromColumn.querySelector(`.node-item[data-purl="${lastSelectedPurl}"]`);
+                    if (!fromItem) return;
+
+                    const fromRect = fromItem.getBoundingClientRect();
+
+                    deps.forEach(depPurl => {
+                        const toItem = toColumn.querySelector(`.node-item[data-purl="${depPurl}"]`);
+                        if (!toItem) return;
+
+                        const toRect = toItem.getBoundingClientRect();
+
+                        // Calculate positions accounting for scroll
+                        const x1 = fromRect.right - containerRect.left + scrollLeft;
+                        const y1 = fromRect.top + fromRect.height / 2 - containerRect.top + scrollTop;
+                        // Subtract arrowhead width (6) so arrow tip touches box edge
+                        const x2 = toRect.left - containerRect.left + scrollLeft - 6;
+                        const y2 = toRect.top + toRect.height / 2 - containerRect.top + scrollTop;
+
+                        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                        const midX = (x1 + x2) / 2;
+                        const d = `M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}`;
+
+                        path.setAttribute('d', d);
+                        path.setAttribute('class', 'connector-line active');
+
+                        svg.appendChild(path);
+                    });
+                }
+            }
         }
 
-        function updateStats() {
-            document.getElementById('totalComponents').textContent = componentMap.size;
-            document.getElementById('columnCount').textContent = columns.length;
-            document.getElementById('pathDepth').textContent = selectedPath.length;
-        }
-
-        function updatePathDisplay() {
-            const display = document.getElementById('pathDisplay');
+        function updateComponentDetails() {
+            const detailsDiv = document.getElementById('componentDetails');
+            const pathsDiv = document.getElementById('pathsDisplay');
+            const treeStatsDiv = document.getElementById('treeStats');
 
             if (selectedPath.length === 0) {
-                display.innerHTML = '<em>Click a dependency to see its path</em>';
+                detailsDiv.innerHTML = '<em>Click a component to see details</em>';
+                pathsDiv.innerHTML = '<em>Click a component to see all paths</em>';
+                treeStatsDiv.style.display = 'none';
                 return;
             }
 
+            // Get the selected component
+            const selectedPurl = selectedPath[selectedPath.length - 1];
+            const component = componentMap.get(selectedPurl);
+
+            // Show component details
             let html = '';
-            selectedPath.forEach((purl, index) => {
-                const component = componentMap.get(purl);
-                const name = component ? `${component.group}/${component.name}@${component.version}` : purl;
-                const arrow = index < selectedPath.length - 1 ? ' → ' : '';
-                html += `<div class="path-item">${index + 1}. ${name}${arrow}</div>`;
+            if (component) {
+                html += `<div class="detail-row">
+                    <div class="detail-label">Group</div>
+                    <div class="detail-value">${component.group || 'N/A'}</div>
+                </div>`;
+                html += `<div class="detail-row">
+                    <div class="detail-label">Artifact</div>
+                    <div class="detail-value"><strong>${component.name}</strong></div>
+                </div>`;
+                html += `<div class="detail-row">
+                    <div class="detail-label">Version</div>
+                    <div class="detail-value">${component.version || 'N/A'}</div>
+                </div>`;
+                html += `<div class="detail-row">
+                    <div class="detail-label">Type</div>
+                    <div class="detail-value">${component.type || 'library'}</div>
+                </div>`;
+                html += `<div class="detail-row">
+                    <div class="detail-label">Scope</div>
+                    <div class="detail-value">${component.scope || 'required'}</div>
+                </div>`;
+
+                // Show tags if present
+                if (component.tags && component.tags.length > 0) {
+                    html += `<div class="detail-row">
+                        <div class="detail-label">Tags</div>
+                        <div class="detail-value">`;
+                    component.tags.forEach(tag => {
+                        // Color code the tags
+                        let tagClass = '';
+                        if (tag.includes('conflict-resolution-loser')) {
+                            tagClass = 'style="color: #f44336; font-weight: 600;"';
+                        } else if (tag.includes('winner')) {
+                            tagClass = 'style="color: #4caf50; font-weight: 600;"';
+                        }
+                        html += `<div ${tagClass}>• ${tag}</div>`;
+                    });
+                    html += `</div></div>`;
+                }
+
+                html += `<div class="detail-row">
+                    <div class="detail-label">Package URL</div>
+                    <div class="detail-value" style="font-size: 10px;">${component.purl}</div>
+                </div>`;
+            } else {
+                html = `<div class="detail-value">${selectedPurl}</div>`;
+            }
+            detailsDiv.innerHTML = html;
+
+            // Find all paths to this component
+            const allPaths = findAllPathsToComponent(selectedPurl);
+            let pathsHtml = '';
+            if (allPaths.length > 0) {
+                allPaths.forEach((path, index) => {
+                    const pathStr = path.map(purl => {
+                        const comp = componentMap.get(purl);
+                        return comp ? `${comp.name}@${comp.version}` : purl;
+                    }).join(' → ');
+                    pathsHtml += `<div class="path-item"><strong>Path ${index + 1}:</strong><br/>${pathStr}</div>`;
+                });
+            } else {
+                pathsHtml = '<em>No paths found</em>';
+            }
+            pathsDiv.innerHTML = pathsHtml;
+
+            // Calculate tree stats
+            const deps = dependencyMap.get(selectedPurl) || [];
+            const allTransitive = collectAllTransitiveDeps(selectedPurl, new Set());
+            const maxDepth = calculateMaxDepth(selectedPurl, new Map());
+
+            document.getElementById('directDeps').textContent = deps.length;
+            document.getElementById('transitiveDeps').textContent = allTransitive.size;
+            document.getElementById('treeDepth').textContent = maxDepth;
+            treeStatsDiv.style.display = 'block';
+        }
+
+        function findAllPathsToComponent(targetPurl) {
+            const paths = [];
+            const rootNodes = findRootNodes();
+
+            function dfs(currentPurl, path) {
+                const newPath = [...path, currentPurl];
+
+                if (currentPurl === targetPurl) {
+                    paths.push(newPath);
+                    return;
+                }
+
+                const deps = dependencyMap.get(currentPurl) || [];
+                for (const dep of deps) {
+                    if (!path.includes(dep)) { // Avoid cycles
+                        dfs(dep, newPath);
+                    }
+                }
+            }
+
+            rootNodes.forEach(root => {
+                dfs(root, []);
             });
 
-            display.innerHTML = html;
+            return paths;
+        }
+
+        function collectAllTransitiveDeps(purl, visited) {
+            const deps = dependencyMap.get(purl) || [];
+            const filteredDeps = filterNodesByScope(deps);
+            filteredDeps.forEach(dep => {
+                if (!visited.has(dep)) {
+                    visited.add(dep);
+                    collectAllTransitiveDeps(dep, visited);
+                }
+            });
+
+            return visited;
+        }
+
+        function calculateMaxDepth(purl, memo) {
+            if (memo.has(purl)) return memo.get(purl);
+
+            const deps = dependencyMap.get(purl) || [];
+            const filteredDeps = filterNodesByScope(deps);
+            if (filteredDeps.length === 0) {
+                memo.set(purl, 0);
+                return 0;
+            }
+
+            let maxChildDepth = 0;
+            filteredDeps.forEach(dep => {
+                const depth = calculateMaxDepth(dep, memo);
+                maxChildDepth = Math.max(maxChildDepth, depth);
+            });
+
+            const result = maxChildDepth + 1;
+            memo.set(purl, result);
+            return result;
+        }
+
+        function applyFilters() {
+            // Get current filter state
+            activeFilters.required = document.getElementById('scopeRequired').checked;
+            activeFilters.optional = document.getElementById('scopeOptional').checked;
+            activeFilters.excluded = document.getElementById('scopeExcluded').checked;
+
+            console.log(`Filters updated: required=${activeFilters.required}, optional=${activeFilters.optional}, excluded=${activeFilters.excluded}`);
+
+            // Rebuild view with filtered nodes
+            if (sbomData) {
+                const rootNodes = findRootNodes();
+                console.log(`Found ${rootNodes.length} root nodes before filtering`);
+                const filteredRoots = filterNodesByScope(rootNodes);
+                console.log(`${filteredRoots.length} root nodes after filtering`);
+                initializeView(filteredRoots);
+            }
+        }
+
+        function filterNodesByScope(purls) {
+            // Filter nodes based on active scope filters
+            return purls.filter(purl => {
+                const component = componentMap.get(purl);
+                if (!component) {
+                    // No component info - default to required
+                    return activeFilters.required;
+                }
+
+                const scope = (component.scope || 'required').toLowerCase();
+
+                if (scope === 'required' && activeFilters.required) return true;
+                if (scope === 'optional' && activeFilters.optional) return true;
+                if (scope === 'excluded' && activeFilters.excluded) return true;
+
+                return false;
+            });
         }
 
         function resetView() {
@@ -617,9 +1315,16 @@
         });
 
         document.getElementById('columnsContainer').addEventListener('scroll', () => {
-            clearTimeout(resizeTimeout);
-            resizeTimeout = setTimeout(drawConnectors, 50);
+            // Immediate redraw for smooth scrolling
+            drawConnectors();
         });
+
+        // Also listen for scroll events on individual column content areas
+        document.addEventListener('scroll', (e) => {
+            if (e.target.classList && e.target.classList.contains('column-content')) {
+                drawConnectors();
+            }
+        }, true);
     </script>
 </body>
 </html>
