@@ -153,24 +153,41 @@ public class DependencyTreeGenerator {
 
             if (arg.startsWith("--input=")) {
                 inputType = arg.substring(8).toLowerCase();
+            } else if (arg.equals("--input") && i + 1 < args.length && !args[i + 1].startsWith("--")) {
+                inputType = args[++i].toLowerCase();
             } else if (arg.startsWith("--output=")) {
                 outputFormat = arg.substring(9).toLowerCase();
+            } else if (arg.equals("--output") && i + 1 < args.length && !args[i + 1].startsWith("--")) {
+                outputFormat = args[++i].toLowerCase();
             } else if (arg.startsWith("--format=")) {
                 treeFormat = arg.substring(9).toLowerCase();
+            } else if (arg.equals("--format") && i + 1 < args.length && !args[i + 1].startsWith("--")) {
+                treeFormat = args[++i].toLowerCase();
             } else if (arg.startsWith("--tree-style=")) {
                 treeFormat = arg.substring(13).toLowerCase();
+            } else if (arg.equals("--tree-style") && i + 1 < args.length && !args[i + 1].startsWith("--")) {
+                treeFormat = args[++i].toLowerCase();
             } else if (arg.startsWith("--project-name=")) {
                 projectName = arg.substring(15);
+            } else if (arg.equals("--project-name") && i + 1 < args.length && !args[i + 1].startsWith("--")) {
+                projectName = args[++i];
             } else if (arg.startsWith("--scope=")) {
                 scope = arg.substring(8).toLowerCase();
+            } else if (arg.equals("--scope") && i + 1 < args.length && !args[i + 1].startsWith("--")) {
+                scope = args[++i].toLowerCase();
             } else if (arg.startsWith("--strategy=")) {
                 resolutionStrategy = arg.substring(11).toLowerCase();
+            } else if (arg.equals("--strategy") && i + 1 < args.length && !args[i + 1].startsWith("--")) {
+                resolutionStrategy = args[++i].toLowerCase();
             } else if (arg.equals("--include-optional")) {
                 includeOptional = true;
             } else if (arg.equals("--verbose") || arg.equals("-v")) {
                 verbose = true;
             } else if (arg.startsWith("--loglevel=")) {
                 String logLevel = arg.substring(11).toUpperCase();
+                setLogLevel(logLevel);
+            } else if (arg.equals("--loglevel") && i + 1 < args.length && !args[i + 1].startsWith("--")) {
+                String logLevel = args[++i].toUpperCase();
                 setLogLevel(logLevel);
             } else if (arg.equals("--use-existing-deps")) {
                 useExistingDeps = true;
@@ -1135,19 +1152,19 @@ public class DependencyTreeGenerator {
         System.out.println("  help                      Show this help message");
         System.out.println();
         System.out.println("Create Options:");
-        System.out.println("  --input=roots|list        Input type (default: auto-detected)");
+        System.out.println("  --input <type>            Input type (default: auto-detected)");
         System.out.println("                            roots - Root packages (fetch transitives)");
         System.out.println("                            list  - Complete flat list (find roots)");
-        System.out.println("  --output=sbom|roots|tree|list  Output format (default: sbom)");
+        System.out.println("  --output <format>         Output format (default: sbom)");
         System.out.println("                            sbom  - Full CycloneDX SBOM (JSON)");
         System.out.println("                            roots - SBOM with only root packages");
         System.out.println("                            tree  - Tree visualization (text)");
         System.out.println("                            list  - Flat list (one per line)");
-        System.out.println("  --format=tree|maven       Tree format (default: tree)");
-        System.out.println("  --project-name=<name>     Project name for tree output");
-        System.out.println("  --scope=<scope>           Maven scope filter (runtime, compile, provided, test, all)");
+        System.out.println("  --format <style>          Tree format (default: tree)");
+        System.out.println("  --project-name <name>     Project name for tree output");
+        System.out.println("  --scope <scope>           Maven scope filter (runtime, compile, provided, test, all)");
         System.out.println("                            Default: compile");
-        System.out.println("  --resolution-strategy=<strategy>  Version resolution strategy (maven, highest)");
+        System.out.println("  --strategy <strategy>     Version resolution strategy (maven, highest)");
         System.out.println("                            maven - Use Maven's nearest-wins algorithm (default)");
         System.out.println("                            highest - Use highest version encountered");
         System.out.println("  --include-optional        Include optional/provided dependencies from POM");
@@ -1157,7 +1174,7 @@ public class DependencyTreeGenerator {
         System.out.println("  --rebuild-deps            Rebuild dependency graph from scratch (default)");
         System.out.println("                            Makes API calls, ensures accuracy");
         System.out.println("  --verbose, -v             Verbose logging");
-        System.out.println("  --loglevel=<level>        Log level (TRACE, DEBUG, INFO, WARN, ERROR)");
+        System.out.println("  --loglevel <level>        Log level (TRACE, DEBUG, INFO, WARN, ERROR)");
         System.out.println();
         System.out.println("Examples:");
         System.out.println("  # Create SBOM from pom.xml");

@@ -109,12 +109,40 @@ public class DependencyGraphBuilder implements AutoCloseable {
             logger.debug("Input package: {}", pkg.getFullName());
         }
 
+        // STEP 1.5: Add managed dependency versions to fetch list if not already present
+        List<Package> packagesToFetch = new ArrayList<>(inputPackages);
+        logger.debug("Processing {} managed dependencies", dependencyManagement.size());
+        for (Map.Entry<String, String> entry : dependencyManagement.entrySet()) {
+            String groupAndArtifact = entry.getKey(); // format: "groupId:artifactId"
+            String version = entry.getValue();
+
+            // Dependency management from POM is always Maven
+            // Parse groupId:artifactId into Maven coordinates
+            String[] parts = groupAndArtifact.split(":");
+            if (parts.length != 2) {
+                logger.warn("Invalid dependency management key format: {}", groupAndArtifact);
+                continue;
+            }
+
+            String groupId = parts[0];
+            String artifactId = parts[1];
+            String fullName = "maven:" + groupId + ":" + artifactId + ":" + version;
+
+            // Only add if not already in input packages
+            if (!inputPackageNames.contains(fullName)) {
+                Package managedPkg = new Package("maven", groupId + ":" + artifactId, version);
+                packagesToFetch.add(managedPkg);
+                allPackages.put(fullName, managedPkg);
+                logger.info("Adding managed dependency version to fetch list: {}", fullName);
+            }
+        }
+
         // STEP 2: Fetch complete dependency graph for each package
         // Skip packages that already appear in other trees to reduce API calls
         Set<String> packagesAlreadyInTrees = new HashSet<>();
         int skippedCount = 0;
 
-        for (Package pkg : inputPackages) {
+        for (Package pkg : packagesToFetch) {
             String pkgName = pkg.getFullName();
 
             // Check if this package already appears in any fetched tree
