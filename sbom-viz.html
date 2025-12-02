@@ -153,6 +153,10 @@
             color: #0078d4;
         }
 
+        .column.selected-column {
+            background: #d4edda;
+        }
+
         .column:last-child {
             margin-right: 0;
         }
@@ -196,12 +200,15 @@
         }
 
         .node-item {
-            padding: 8px 20px 8px 50px;
+            padding: 8px 16px 8px 50px;
             cursor: pointer;
-            border-left: 4px solid transparent;
-            transition: all 0.15s;
+            border-left: 3px solid transparent;
+            transition: all 0.2s ease;
             position: relative;
-            margin-bottom: 6px;
+            margin: 6px 8px;
+            border-radius: 6px;
+            background: white;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
         }
 
         .node-type-icon {
@@ -217,7 +224,9 @@
         }
 
         .node-item:hover {
-            background: #f0f0f0;
+            background: #fafafa;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+            transform: translateY(-1px);
         }
 
         .node-item.selected {
@@ -313,6 +322,40 @@
             display: flex;
             justify-content: flex-end;
             align-items: center;
+            gap: 8px;
+        }
+
+        .node-actions {
+            display: flex;
+            gap: 4px;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+
+        .node-item:hover .node-actions {
+            opacity: 1;
+        }
+
+        .node-action-btn {
+            background: transparent;
+            color: #0078d4;
+            border: 1px solid #e0e0e0;
+            padding: 4px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            font-weight: 500;
+        }
+
+        .node-action-btn:hover {
+            background: #0078d4;
+            color: white;
+            border-color: #0078d4;
+            box-shadow: 0 2px 4px rgba(0, 120, 212, 0.2);
         }
 
         .node-count {
@@ -321,7 +364,7 @@
             border-radius: 10px;
             font-size: 10px;
             font-weight: 600;
-            display: inline-flex;
+            display: none; /* Hidden per user request */
             align-items: center;
             gap: 4px;
         }
@@ -342,6 +385,7 @@
             background: #0078d4;
             margin-top: 8px;
             border-radius: 2px;
+            display: none; /* Hidden per user request */
         }
 
         .loading-message {
@@ -479,6 +523,8 @@
         <div class="controls">
             <input type="file" id="fileInput" accept=".json,.sbom" style="display: none;">
             <button onclick="document.getElementById('fileInput').click()">Load SBOM</button>
+            <button id="backButton" onclick="goBack()" disabled style="opacity: 0.5;">← Back</button>
+            <button id="forwardButton" onclick="goForward()" disabled style="opacity: 0.5;">Forward →</button>
             <div class="view-selector" id="viewSelector" style="display: none; margin-left: 20px;">
                 <label style="font-size: 13px; color: #666;">Focus:</label>
                 <select id="componentSelector" onchange="changeView()">
@@ -537,6 +583,10 @@
         };
         let currentViewMode = 'app'; // 'app' = explore mode (click to drill), 'focus' = focus mode (center node, no click)
         let currentSelectedComponent = '__app__';
+        let navigationHistory = []; // Stack of previous states (back navigation)
+        let navigationForward = []; // Stack of future states (forward navigation)
+        let isNavigatingBack = false; // Flag to prevent adding to history during back navigation
+        let isNavigatingForward = false; // Flag to prevent adding to history during forward navigation
 
         // Trigger file dialog on page load
         window.addEventListener('load', function() {
@@ -725,9 +775,30 @@
         function changeView() {
             const selector = document.getElementById('componentSelector');
             const selected = selector.value;
-            currentSelectedComponent = selected;
 
             console.log(`🎯 changeView() called. Selected: ${selected.substring(selected.lastIndexOf('/') + 1)}`);
+            console.log(`   Current: ${currentSelectedComponent.substring(currentSelectedComponent.lastIndexOf('/') + 1)}`);
+            console.log(`   isNavigatingBack: ${isNavigatingBack}, isNavigatingForward: ${isNavigatingForward}`);
+            console.log(`   History length before: ${navigationHistory.length}`);
+
+            // Add current state to history before changing (unless we're navigating back/forward)
+            if (!isNavigatingBack && !isNavigatingForward && currentSelectedComponent !== selected) {
+                // Save focus mode state
+                const currentState = {
+                    mode: 'focus',
+                    component: currentSelectedComponent
+                };
+                navigationHistory.push(currentState);
+                console.log(`   ✅ Added to history: ${currentSelectedComponent.substring(currentSelectedComponent.lastIndexOf('/') + 1)}`);
+                console.log(`   History length after: ${navigationHistory.length}`);
+                // Clear forward history when making a new navigation
+                navigationForward = [];
+                updateNavigationButtons();
+            }
+            isNavigatingBack = false;
+            isNavigatingForward = false;
+
+            currentSelectedComponent = selected;
 
             if (selected === '__app__') {
                 // App view: explore mode with click-to-drill
@@ -1023,6 +1094,9 @@
 
             const column = document.createElement('div');
             column.className = 'column';
+            if (columnType === 'selected') {
+                column.classList.add('selected-column');
+            }
             column.dataset.columnIndex = columnIndex;
 
             const header = document.createElement('div');
@@ -1235,10 +1309,18 @@
                     item.appendChild(bar);
                 }
 
-                // Only add click handler in APP (explore) mode, not in FOCUS mode
-                if (currentViewMode === 'app') {
-                    item.addEventListener('click', () => selectNode(purl, columnIndex));
-                }
+                // Add click handler - always allow clicking to show details
+                item.addEventListener('click', () => {
+                    if (currentViewMode === 'app') {
+                        // APP mode: navigate through dependencies
+                        selectNode(purl, columnIndex);
+                    } else {
+                        // FOCUS mode: just update details panel without navigation
+                        selectedPath = [purl];
+                        updateSelectionUI();
+                        updateComponentDetails();
+                    }
+                });
 
                 content.appendChild(item);
             });
@@ -1257,6 +1339,24 @@
         }
 
         function selectNode(purl, columnIndex) {
+            console.log(`🖱️ selectNode() called. purl: ${purl.substring(purl.lastIndexOf('/') + 1)}, columnIndex: ${columnIndex}`);
+
+            // ALWAYS save current state to history before any state change
+            // This captures every single click in explore mode
+            const currentState = {
+                mode: 'explore',
+                path: [...selectedPath],  // Clone current path
+                columns: columns.length,
+                selectedComponent: currentSelectedComponent
+            };
+
+            console.log(`   💾 Saving current state to history. Path length: ${selectedPath.length}, Columns: ${columns.length}`);
+            navigationHistory.push(currentState);
+
+            // Clear forward history when making a new navigation
+            navigationForward = [];
+            updateNavigationButtons();
+
             // Remove columns after this one
             while (columns.length > columnIndex + 1) {
                 const removed = columns.pop();
@@ -1281,7 +1381,12 @@
             // Mark last column
             updateLastColumnHighlight();
 
+            // Ensure stats panel is visible
+            document.getElementById('statsPanel').style.display = 'block';
+
             updateComponentDetails();
+
+            console.log(`   ✅ New state. Path length: ${selectedPath.length}, Columns: ${columns.length}`);
         }
 
         function updateLastColumnHighlight() {
@@ -1492,6 +1597,8 @@
         function updateComponentDetails() {
             const detailsDiv = document.getElementById('componentDetails');
 
+            console.log(`📊 updateComponentDetails() called. selectedPath length: ${selectedPath.length}`);
+
             if (selectedPath.length === 0) {
                 detailsDiv.innerHTML = '<em>Click a component to see details</em>';
                 return;
@@ -1499,7 +1606,9 @@
 
             // Get the selected component
             const selectedPurl = selectedPath[selectedPath.length - 1];
+            console.log(`📊 Selected component: ${selectedPurl.substring(selectedPurl.lastIndexOf('/') + 1)}`);
             const component = componentMap.get(selectedPurl);
+            console.log(`📊 Component found in map: ${component ? 'YES' : 'NO'}`);
 
             // Calculate dependency stats
             const deps = dependencyMap.get(selectedPurl) || [];
@@ -1538,20 +1647,32 @@
                     <div class="detail-value">${allTransitive.size}</div>
                 </div>`;
 
-                // Show tags if present
-                if (component.tags && component.tags.length > 0) {
+                // Show tags if present (check both component and dependency objects)
+                const componentTags = component.tags || [];
+                const depEntry = dependencyMap.has(selectedPurl) ? sbomData.dependencies?.find(d => d.ref === selectedPurl) : null;
+                const depTags = depEntry?.tags || [];
+                const allTags = [...new Set([...componentTags, ...depTags])]; // Combine and deduplicate
+
+                if (allTags.length > 0) {
                     html += `<div class="detail-row">
                         <div class="detail-label">Tags</div>
                         <div class="detail-value">`;
-                    component.tags.forEach(tag => {
+                    allTags.forEach(tag => {
+                        // Handle both string tags and object tags with name/value
+                        const tagText = typeof tag === 'string' ? tag : (tag.name || tag.value || JSON.stringify(tag));
+
                         // Color code the tags
                         let tagClass = '';
-                        if (tag.includes('conflict-resolution-loser')) {
+                        if (tagText.includes('conflict-resolution-loser')) {
                             tagClass = 'style="color: #f44336; font-weight: 600;"';
-                        } else if (tag.includes('winner')) {
+                        } else if (tagText.includes('winner')) {
                             tagClass = 'style="color: #4caf50; font-weight: 600;"';
+                        } else if (tagText.includes('optional') || tagText.includes('test')) {
+                            tagClass = 'style="color: #ff9800; font-weight: 500;"';
+                        } else if (tagText.includes('runtime') || tagText.includes('required')) {
+                            tagClass = 'style="color: #2196f3; font-weight: 500;"';
                         }
-                        html += `<div ${tagClass}>• ${tag}</div>`;
+                        html += `<div ${tagClass}>• ${tagText}</div>`;
                     });
                     html += `</div></div>`;
                 }
@@ -1672,17 +1793,12 @@
         }
 
         function highlightComponentInView(purl) {
-            clearFocusedComponent();
-
-            document.querySelectorAll(`.node-item[data-purl="${purl}"]`).forEach(item => {
-                item.classList.add('focused-component');
-            });
+            // Column highlighting is now handled by the selected-column CSS class
+            // Node highlighting removed as requested - column gets light green background instead
         }
 
         function clearFocusedComponent() {
-            document.querySelectorAll('.focused-component').forEach(item => {
-                item.classList.remove('focused-component');
-            });
+            // No longer needed - column highlighting handled by CSS class
         }
 
         function centerOnComponent(purl) {
@@ -1716,10 +1832,218 @@
             // Update the component selector dropdown to this component
             const selector = document.getElementById('componentSelector');
             selector.value = purl;
-            currentSelectedComponent = purl;
+
+            // Don't set currentSelectedComponent here - let changeView() handle it
+            // so the history tracking works correctly
 
             // Trigger view change to show this component's context
             changeView();
+        }
+
+        function goBack() {
+            if (navigationHistory.length === 0) return;
+
+            console.log(`🔙 goBack() called. History length: ${navigationHistory.length}`);
+
+            // Pop the previous state from history
+            const previousState = navigationHistory.pop();
+
+            console.log(`🔙 Previous state:`, previousState);
+
+            if (typeof previousState === 'string') {
+                // Legacy format: just a component purl string (old code compatibility)
+                console.log(`🔙 Restoring legacy focus mode component: ${previousState.substring(previousState.lastIndexOf('/') + 1)}`);
+
+                // Save current state to forward history
+                navigationForward.push({
+                    mode: 'focus',
+                    component: currentSelectedComponent
+                });
+
+                // Set flag to prevent adding current component to history again
+                isNavigatingBack = true;
+
+                // Update the selector and trigger view change
+                const selector = document.getElementById('componentSelector');
+                selector.value = previousState;
+                changeView();
+            } else if (previousState.mode === 'focus') {
+                // Focus mode: component switching
+                console.log(`🔙 Restoring focus mode component: ${previousState.component.substring(previousState.component.lastIndexOf('/') + 1)}`);
+
+                // Save current state to forward history
+                navigationForward.push({
+                    mode: 'focus',
+                    component: currentSelectedComponent
+                });
+
+                // Set flag to prevent adding current component to history again
+                isNavigatingBack = true;
+
+                // Update the selector and trigger view change
+                const selector = document.getElementById('componentSelector');
+                selector.value = previousState.component;
+                changeView();
+            } else if (previousState.mode === 'explore') {
+                // New style: explore mode with path restoration
+                console.log(`🔙 Restoring explore mode path with ${previousState.path.length} items`);
+
+                // Save current state to forward history
+                navigationForward.push({
+                    mode: 'explore',
+                    path: [...selectedPath],
+                    columns: columns.length
+                });
+
+                // Restore the previous selectedPath
+                selectedPath = previousState.path;
+
+                // Remove columns beyond what we had before
+                while (columns.length > previousState.columns) {
+                    const removed = columns.pop();
+                    removed.element.remove();
+                }
+
+                // If we need to add columns (going back to a deeper state)
+                if (previousState.columns > columns.length && previousState.path.length > 0) {
+                    // Get the last purl in the path and add its dependencies as the next column
+                    const lastPurl = previousState.path[previousState.path.length - 1];
+                    const deps = dependencyMap.get(lastPurl) || [];
+                    const filteredDeps = filterNodesByScope(deps);
+                    if (filteredDeps.length > 0) {
+                        addColumn(filteredDeps);
+                    }
+                }
+
+                // Update UI
+                updateSelectionUI();
+                updateLastColumnHighlight();
+                updateComponentDetails();
+                drawConnectors();
+            }
+
+            // Update navigation buttons state
+            updateNavigationButtons();
+        }
+
+        function goForward() {
+            if (navigationForward.length === 0) return;
+
+            console.log(`➡️ goForward() called. Forward length: ${navigationForward.length}`);
+
+            // Pop the next state from forward history
+            const nextState = navigationForward.pop();
+
+            console.log(`➡️ Next state:`, nextState);
+
+            if (typeof nextState === 'string') {
+                // Legacy format: just a component purl string (old code compatibility)
+                console.log(`➡️ Restoring legacy focus mode component: ${nextState.substring(nextState.lastIndexOf('/') + 1)}`);
+
+                // Save current state to back history
+                navigationHistory.push({
+                    mode: 'focus',
+                    component: currentSelectedComponent
+                });
+
+                // Set flag to prevent adding current component to history again
+                isNavigatingForward = true;
+
+                // Update the selector and trigger view change
+                const selector = document.getElementById('componentSelector');
+                selector.value = nextState;
+                changeView();
+            } else if (nextState.mode === 'focus') {
+                // Focus mode: component switching
+                console.log(`➡️ Restoring focus mode component: ${nextState.component.substring(nextState.component.lastIndexOf('/') + 1)}`);
+
+                // Save current state to back history
+                navigationHistory.push({
+                    mode: 'focus',
+                    component: currentSelectedComponent
+                });
+
+                // Set flag to prevent adding current component to history again
+                isNavigatingForward = true;
+
+                // Update the selector and trigger view change
+                const selector = document.getElementById('componentSelector');
+                selector.value = nextState.component;
+                changeView();
+            } else if (nextState.mode === 'explore') {
+                // New style: explore mode with path restoration
+                console.log(`➡️ Restoring explore mode path with ${nextState.path.length} items`);
+
+                // Save current state to back history
+                navigationHistory.push({
+                    mode: 'explore',
+                    path: [...selectedPath],
+                    columns: columns.length
+                });
+
+                // Restore the next selectedPath
+                selectedPath = nextState.path;
+
+                // Remove columns beyond what we had before
+                while (columns.length > nextState.columns) {
+                    const removed = columns.pop();
+                    removed.element.remove();
+                }
+
+                // If we need to add columns (going forward deeper into tree)
+                if (nextState.columns > columns.length && nextState.path.length > 0) {
+                    // Get the last purl in the path and add its dependencies as the next column
+                    const lastPurl = nextState.path[nextState.path.length - 1];
+                    const deps = dependencyMap.get(lastPurl) || [];
+                    const filteredDeps = filterNodesByScope(deps);
+                    if (filteredDeps.length > 0) {
+                        addColumn(filteredDeps);
+                    }
+                }
+
+                // Update UI
+                updateSelectionUI();
+                updateLastColumnHighlight();
+                updateComponentDetails();
+                drawConnectors();
+            }
+
+            // Update navigation buttons state
+            updateNavigationButtons();
+        }
+
+        function updateBackButton() {
+            // Legacy function - redirects to updateNavigationButtons()
+            updateNavigationButtons();
+        }
+
+        function updateNavigationButtons() {
+            const backButton = document.getElementById('backButton');
+            const forwardButton = document.getElementById('forwardButton');
+
+            console.log(`🔄 updateNavigationButtons() called. Back: ${navigationHistory.length}, Forward: ${navigationForward.length}`);
+
+            // Update back button
+            if (navigationHistory.length > 0) {
+                console.log(`   ✅ Enabling back button`);
+                backButton.disabled = false;
+                backButton.style.opacity = '1';
+            } else {
+                console.log(`   ❌ Disabling back button`);
+                backButton.disabled = true;
+                backButton.style.opacity = '0.5';
+            }
+
+            // Update forward button
+            if (navigationForward.length > 0) {
+                console.log(`   ✅ Enabling forward button`);
+                forwardButton.disabled = false;
+                forwardButton.style.opacity = '1';
+            } else {
+                console.log(`   ❌ Disabling forward button`);
+                forwardButton.disabled = true;
+                forwardButton.style.opacity = '0.5';
+            }
         }
 
         // Redraw connectors on scroll/resize
@@ -1740,6 +2064,13 @@
                 drawConnectors();
             }
         }, true);
+
+        // Support browser back button
+        window.addEventListener('popstate', (e) => {
+            if (navigationHistory.length > 0) {
+                goBack();
+            }
+        });
     </script>
 </body>
 </html>
