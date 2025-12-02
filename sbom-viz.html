@@ -913,29 +913,33 @@
             console.log(`📊 Building parent columns. parentLevelMap has ${parentLevelMap.size} levels`);
             const maxParentDistance = parentLevelMap.size > 0 ? Math.max(...parentLevelMap.keys()) : 0;
             console.log(`📊 Max parent distance: ${maxParentDistance}`);
+            let parentColumnNumber = maxParentDistance;
             for (let distance = maxParentDistance; distance >= 1; distance--) {
                 if (parentLevelMap.has(distance)) {
                     const nodesAtLevel = Array.from(parentLevelMap.get(distance));
                     const filteredNodes = filterNodesByScope(nodesAtLevel);
                     console.log(`📊 Distance ${distance}: ${nodesAtLevel.length} nodes before filter, ${filteredNodes.length} after filter`);
                     if (filteredNodes.length > 0) {
-                        addColumn(filteredNodes, `Parents ${distance}`);
+                        addColumn(filteredNodes, `Parent ${parentColumnNumber}`);
+                        parentColumnNumber--;
                     }
                 }
             }
 
             // Add selected component in the middle
-            addColumn([innerPurl], 'Selected');
+            addColumn([innerPurl], 'Selected Component');
 
             // Add child columns from left to right (closest first)
             // Apply scope filtering when building columns
             const maxChildDistance = childLevelMap.size > 0 ? Math.max(...childLevelMap.keys()) : 0;
+            let childColumnNumber = 1;
             for (let distance = 1; distance <= maxChildDistance; distance++) {
                 if (childLevelMap.has(distance)) {
                     const nodesAtLevel = Array.from(childLevelMap.get(distance));
                     const filteredNodes = filterNodesByScope(nodesAtLevel);
                     if (filteredNodes.length > 0) {
-                        addColumn(filteredNodes, `Children ${distance}`);
+                        addColumn(filteredNodes, `Child ${childColumnNumber}`);
+                        childColumnNumber++;
                     }
                 }
             }
