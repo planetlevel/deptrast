@@ -484,12 +484,11 @@
     <div class="header">
         <h1>SBOM Dependency Explorer</h1>
         <div class="controls">
-            <label for="fileInput" class="file-label">Load SBOM</label>
-            <input type="file" id="fileInput" accept=".json,.sbom">
+            <input type="file" id="fileInput" accept=".json,.sbom" style="display: none;">
             <div class="view-selector" id="viewSelector" style="display: none; margin-left: 20px;">
-                <label style="font-size: 13px; color: #666;">View:</label>
+                <label style="font-size: 13px; color: #666;">Focus:</label>
                 <select id="componentSelector" onchange="changeView()">
-                    <option value="__app__">Application (Full Tree)</option>
+                    <option value="__app__">Application (Explore Mode)</option>
                 </select>
             </div>
             <button onclick="resetView()">Reset View</button>
@@ -563,8 +562,13 @@
             optional: true,
             excluded: false
         };
-        let currentViewMode = 'app'; // 'app', 'leaf', 'inner'
+        let currentViewMode = 'app'; // 'app' = explore mode (click to drill), 'focus' = focus mode (center node, no click)
         let currentSelectedComponent = '__app__';
+
+        // Trigger file dialog on page load
+        window.addEventListener('load', function() {
+            document.getElementById('fileInput').click();
+        });
 
         document.getElementById('fileInput').addEventListener('change', function(e) {
             const file = e.target.files[0];
@@ -746,30 +750,13 @@
             currentSelectedComponent = selected;
 
             if (selected === '__app__') {
-                // App view: show full tree, no app column
+                // App view: explore mode with click-to-drill
                 const rootNodes = findRootNodes();
                 const filteredRoots = filterNodesByScope(rootNodes);
                 initializeAppView(filteredRoots);
             } else {
-                // Determine node type
-                const deps = dependencyMap.get(selected) || [];
-                const reverseDeps = reverseDependencyMap.get(selected) || [];
-                const hasDeps = deps.length > 0;
-                const hasParents = reverseDeps.length > 0;
-
-                if (!hasDeps && hasParents) {
-                    // True leaf node (no children, has parents): show reverse paths
-                    initializeLeafView(selected);
-                } else if (hasDeps && !hasParents) {
-                    // Root node (has children, no parents): show forward only
-                    initializeInnerView(selected);
-                } else if (hasDeps && hasParents) {
-                    // Inner node (has both): show both directions
-                    initializeInnerView(selected);
-                } else {
-                    // Isolated node (no deps, no parents): just show it
-                    initializeInnerView(selected);
-                }
+                // Focus mode: center node with parents left, children right, no click
+                initializeFocusView(selected);
             }
         }
 
@@ -819,87 +806,14 @@
         }
 
         // Leaf View Mode: Show all reverse paths to a leaf node
-        function initializeLeafView(leafPurl) {
+        // Focus View Mode: Center node with parents left, children right, no click-to-explore
+        function initializeFocusView(innerPurl) {
             const container = document.getElementById('columnsContainer');
             container.innerHTML = '<svg id="connectorsCanvas"></svg>';
 
             columns = [];
             selectedPath = [];
-            currentViewMode = 'leaf';
-
-            // Build parent columns by walking backwards from selected component
-            const parentLevelMap = new Map(); // distance -> Set of purls
-
-            // BFS to find all parents at each distance - walk until we hit roots
-            function getParentsAtDistance(startPurl) {
-                const visited = new Set([startPurl]);
-                let currentLevel = new Set([startPurl]);
-                let distance = 1;
-
-                while (currentLevel.size > 0) {
-                    const nextLevel = new Set();
-
-                    for (const purl of currentLevel) {
-                        const parents = reverseDependencyMap.get(purl) || [];
-                        const filteredParents = filterNodesByScope(parents);
-
-                        for (const parent of filteredParents) {
-                            if (!visited.has(parent)) {
-                                visited.add(parent);
-                                nextLevel.add(parent);
-
-                                if (!parentLevelMap.has(distance)) {
-                                    parentLevelMap.set(distance, new Set());
-                                }
-                                parentLevelMap.get(distance).add(parent);
-                            }
-                        }
-                    }
-
-                    currentLevel = nextLevel;
-                    distance++;
-                }
-            }
-
-            // Get all parents (walk until we hit roots)
-            getParentsAtDistance(leafPurl);
-
-            // If no parents found, this is a root component - switch to inner view to show children
-            if (parentLevelMap.size === 0) {
-                initializeInnerView(leafPurl);
-                return;
-            }
-
-            // Add parent columns from left to right (furthest first)
-            const maxDistance = Math.max(...parentLevelMap.keys());
-            for (let distance = maxDistance; distance >= 1; distance--) {
-                if (parentLevelMap.has(distance)) {
-                    const nodesAtLevel = Array.from(parentLevelMap.get(distance));
-                    addColumn(nodesAtLevel, `Parents ${distance}`);
-                }
-            }
-
-            // Add the selected component in the middle
-            addColumn([leafPurl], 'Selected');
-
-            updateLastColumnHighlight();
-            document.getElementById('statsPanel').style.display = 'block';
-
-            // Highlight the selected component
-            highlightComponentInView(leafPurl);
-
-            // Center the view on the selected component
-            setTimeout(() => centerOnComponent(leafPurl), 100);
-        }
-
-        // Inner View Mode: Show parents on left, selected in middle, children on right
-        function initializeInnerView(innerPurl) {
-            const container = document.getElementById('columnsContainer');
-            container.innerHTML = '<svg id="connectorsCanvas"></svg>';
-
-            columns = [];
-            selectedPath = [];
-            currentViewMode = 'inner';
+            currentViewMode = 'focus';
 
             // Build parent columns by walking backwards from selected component
             const parentLevelMap = new Map(); // distance -> Set of purls
@@ -1300,7 +1214,10 @@
                     item.appendChild(bar);
                 }
 
-                item.addEventListener('click', () => selectNode(purl, columnIndex));
+                // Only add click handler in APP (explore) mode, not in FOCUS mode
+                if (currentViewMode === 'app') {
+                    item.addEventListener('click', () => selectNode(purl, columnIndex));
+                }
 
                 content.appendChild(item);
             });
