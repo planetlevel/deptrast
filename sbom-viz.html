@@ -39,6 +39,33 @@
             align-items: center;
         }
 
+        .view-selector {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .view-selector select {
+            padding: 8px 12px;
+            border: 1px solid #ccc;
+            border-radius: 2px;
+            font-size: 13px;
+            background: white;
+            cursor: pointer;
+            min-width: 300px;
+        }
+
+        .view-selector select:focus {
+            outline: none;
+            border-color: #0078d4;
+        }
+
+        .focused-component {
+            background: #d4edda !important;
+            border-left-color: #28a745 !important;
+            border-left-width: 4px !important;
+        }
+
         .scope-filters {
             display: flex;
             align-items: center;
@@ -459,6 +486,12 @@
         <div class="controls">
             <label for="fileInput" class="file-label">Load SBOM</label>
             <input type="file" id="fileInput" accept=".json,.sbom">
+            <div class="view-selector" id="viewSelector" style="display: none; margin-left: 20px;">
+                <label style="font-size: 13px; color: #666;">View:</label>
+                <select id="componentSelector" onchange="changeView()">
+                    <option value="__app__">Application (Full Tree)</option>
+                </select>
+            </div>
             <button onclick="resetView()">Reset View</button>
             <div class="scope-filters" id="scopeFilters" style="display: none; margin-left: 20px;">
                 <label style="font-size: 13px; color: #666; margin-right: 10px;">Scope:</label>
@@ -521,6 +554,7 @@
         let sbomData = null;
         let componentMap = new Map();
         let dependencyMap = new Map();
+        let reverseDependencyMap = new Map(); // Maps purl -> array of purls that depend on it
         let columns = [];
         let selectedPath = [];
         let availableScopes = new Set();
@@ -529,6 +563,8 @@
             optional: true,
             excluded: false
         };
+        let currentViewMode = 'app'; // 'app', 'leaf', 'inner'
+        let currentSelectedComponent = '__app__';
 
         document.getElementById('fileInput').addEventListener('change', function(e) {
             const file = e.target.files[0];
@@ -550,6 +586,7 @@
             sbomData = sbom;
             componentMap.clear();
             dependencyMap.clear();
+            reverseDependencyMap.clear();
             columns = [];
             selectedPath = [];
 
@@ -574,9 +611,18 @@
                 });
             }
 
+            // Build reverse dependency map (who depends on me?)
+            buildReverseDependencyMap();
+
+            // Populate component selector dropdown
+            populateComponentSelector();
+
             // Always show scope filters when SBOM is loaded
             const scopeFiltersDiv = document.getElementById('scopeFilters');
             scopeFiltersDiv.style.display = 'flex';
+
+            // Show view selector
+            document.getElementById('viewSelector').style.display = 'flex';
 
             // Find root nodes (those not depended upon by others)
             const rootNodes = findRootNodes();
@@ -584,8 +630,147 @@
             // Filter root nodes by scope before initializing
             const filteredRoots = filterNodesByScope(rootNodes);
 
-            // Initialize first column with filtered root nodes
-            initializeView(filteredRoots);
+            // Initialize app view (no app column, just root -> transitive)
+            initializeAppView(filteredRoots);
+        }
+
+        function buildReverseDependencyMap() {
+            reverseDependencyMap.clear();
+
+            // Initialize all components with empty arrays
+            componentMap.forEach((comp, purl) => {
+                reverseDependencyMap.set(purl, []);
+            });
+
+            // Build reverse mappings
+            dependencyMap.forEach((dependencies, fromPurl) => {
+                dependencies.forEach(toPurl => {
+                    if (!reverseDependencyMap.has(toPurl)) {
+                        reverseDependencyMap.set(toPurl, []);
+                    }
+                    reverseDependencyMap.get(toPurl).push(fromPurl);
+                });
+            });
+        }
+
+        function populateComponentSelector() {
+            const selector = document.getElementById('componentSelector');
+            selector.innerHTML = '<option value="__app__">🌳 Application (Full Tree)</option>';
+
+            // Group components by type (root, leaf, inner)
+            const roots = findRootNodes();
+            const rootSet = new Set(roots);
+            const leafNodes = [];
+            const innerNodes = [];
+            const rootInnerNodes = [];
+
+            componentMap.forEach((comp, purl) => {
+                const deps = dependencyMap.get(purl) || [];
+                const reverseDeps = reverseDependencyMap.get(purl) || [];
+                const isRoot = rootSet.has(purl);
+
+                if (deps.length === 0 && reverseDeps.length > 0) {
+                    leafNodes.push({ purl, comp, isRoot });
+                } else if (deps.length > 0 && reverseDeps.length > 0) {
+                    if (isRoot) {
+                        rootInnerNodes.push({ purl, comp, isRoot });
+                    } else {
+                        innerNodes.push({ purl, comp, isRoot });
+                    }
+                }
+            });
+
+            // Sort all groups alphabetically by name
+            leafNodes.sort((a, b) => (a.comp.name || a.purl).localeCompare(b.comp.name || b.purl));
+            innerNodes.sort((a, b) => (a.comp.name || a.purl).localeCompare(b.comp.name || b.purl));
+            rootInnerNodes.sort((a, b) => (a.comp.name || a.purl).localeCompare(b.comp.name || b.purl));
+
+            // Helper function to get scope icon
+            function getScopeIcon(comp) {
+                const scope = (comp.scope || 'required').toLowerCase();
+                if (scope === 'optional') {
+                    return '🟡'; // Yellow for optional
+                } else if (scope === 'excluded') {
+                    return '🔴'; // Red for excluded
+                } else {
+                    return '🟢'; // Green for required
+                }
+            }
+
+            // Add root inner nodes (roots that have children)
+            if (rootInnerNodes.length > 0) {
+                const rootGroup = document.createElement('optgroup');
+                rootGroup.label = '🌱 Root Dependencies (starting points)';
+                rootInnerNodes.forEach(({purl, comp}) => {
+                    const option = document.createElement('option');
+                    option.value = purl;
+                    const icon = getScopeIcon(comp);
+                    option.textContent = `${icon} ${comp.name || purl} ${comp.version || ''}`.trim();
+                    rootGroup.appendChild(option);
+                });
+                selector.appendChild(rootGroup);
+            }
+
+            // Add inner nodes
+            if (innerNodes.length > 0) {
+                const innerGroup = document.createElement('optgroup');
+                innerGroup.label = '🔗 Inner Dependencies (has parents & children)';
+                innerNodes.forEach(({purl, comp}) => {
+                    const option = document.createElement('option');
+                    option.value = purl;
+                    const icon = getScopeIcon(comp);
+                    option.textContent = `${icon} ${comp.name || purl} ${comp.version || ''}`.trim();
+                    innerGroup.appendChild(option);
+                });
+                selector.appendChild(innerGroup);
+            }
+
+            // Add leaf nodes
+            if (leafNodes.length > 0) {
+                const leafGroup = document.createElement('optgroup');
+                leafGroup.label = '📍 Leaf Dependencies (no children)';
+                leafNodes.forEach(({purl, comp}) => {
+                    const option = document.createElement('option');
+                    option.value = purl;
+                    const icon = getScopeIcon(comp);
+                    option.textContent = `${icon} ${comp.name || purl} ${comp.version || ''}`.trim();
+                    leafGroup.appendChild(option);
+                });
+                selector.appendChild(leafGroup);
+            }
+        }
+
+        function changeView() {
+            const selector = document.getElementById('componentSelector');
+            const selected = selector.value;
+            currentSelectedComponent = selected;
+
+            if (selected === '__app__') {
+                // App view: show full tree, no app column
+                const rootNodes = findRootNodes();
+                const filteredRoots = filterNodesByScope(rootNodes);
+                initializeAppView(filteredRoots);
+            } else {
+                // Determine node type
+                const deps = dependencyMap.get(selected) || [];
+                const reverseDeps = reverseDependencyMap.get(selected) || [];
+                const hasDeps = deps.length > 0;
+                const hasParents = reverseDeps.length > 0;
+
+                if (!hasDeps && hasParents) {
+                    // True leaf node (no children, has parents): show reverse paths
+                    initializeLeafView(selected);
+                } else if (hasDeps && !hasParents) {
+                    // Root node (has children, no parents): show forward only
+                    initializeInnerView(selected);
+                } else if (hasDeps && hasParents) {
+                    // Inner node (has both): show both directions
+                    initializeInnerView(selected);
+                } else {
+                    // Isolated node (no deps, no parents): just show it
+                    initializeInnerView(selected);
+                }
+            }
         }
 
         function findRootNodes() {
@@ -613,28 +798,231 @@
             return roots;
         }
 
-        function initializeView(nodes) {
+        // App View Mode: Show full forward tree without app column
+        function initializeAppView(nodes) {
             const container = document.getElementById('columnsContainer');
             container.innerHTML = '<svg id="connectorsCanvas"></svg>';
 
             columns = [];
             selectedPath = [];
+            currentViewMode = 'app';
 
             if (nodes.length === 0) {
                 container.innerHTML += '<div class="loading-message"><div class="empty-state"><p>No dependencies found in SBOM</p></div></div>';
                 return;
             }
 
-            // Add Application column first
-            addApplicationColumn(nodes);
+            // Add first column as "Root Dependencies"
+            addColumn(nodes, 'Root Dependencies');
+            updateLastColumnHighlight();
+            document.getElementById('statsPanel').style.display = 'block';
+        }
 
-            // Add Direct Dependencies column
-            addColumn(nodes);
+        // Leaf View Mode: Show all reverse paths to a leaf node
+        function initializeLeafView(leafPurl) {
+            const container = document.getElementById('columnsContainer');
+            container.innerHTML = '<svg id="connectorsCanvas"></svg>';
+
+            columns = [];
+            selectedPath = [];
+            currentViewMode = 'leaf';
+
+            // Build parent columns by walking backwards from selected component
+            const parentLevelMap = new Map(); // distance -> Set of purls
+
+            // BFS to find all parents at each distance - walk until we hit roots
+            function getParentsAtDistance(startPurl) {
+                const visited = new Set([startPurl]);
+                let currentLevel = new Set([startPurl]);
+                let distance = 1;
+
+                while (currentLevel.size > 0) {
+                    const nextLevel = new Set();
+
+                    for (const purl of currentLevel) {
+                        const parents = reverseDependencyMap.get(purl) || [];
+                        const filteredParents = filterNodesByScope(parents);
+
+                        for (const parent of filteredParents) {
+                            if (!visited.has(parent)) {
+                                visited.add(parent);
+                                nextLevel.add(parent);
+
+                                if (!parentLevelMap.has(distance)) {
+                                    parentLevelMap.set(distance, new Set());
+                                }
+                                parentLevelMap.get(distance).add(parent);
+                            }
+                        }
+                    }
+
+                    currentLevel = nextLevel;
+                    distance++;
+                }
+            }
+
+            // Get all parents (walk until we hit roots)
+            getParentsAtDistance(leafPurl);
+
+            // If no parents found, this is a root component - switch to inner view to show children
+            if (parentLevelMap.size === 0) {
+                initializeInnerView(leafPurl);
+                return;
+            }
+
+            // Add parent columns from left to right (furthest first)
+            const maxDistance = Math.max(...parentLevelMap.keys());
+            for (let distance = maxDistance; distance >= 1; distance--) {
+                if (parentLevelMap.has(distance)) {
+                    const nodesAtLevel = Array.from(parentLevelMap.get(distance));
+                    addColumn(nodesAtLevel, `Parents ${distance}`);
+                }
+            }
+
+            // Add the selected component in the middle
+            addColumn([leafPurl], 'Selected');
+
             updateLastColumnHighlight();
             document.getElementById('statsPanel').style.display = 'block';
 
-            // Draw connectors from Application to Direct Dependencies
-            drawConnectors();
+            // Highlight the selected component
+            highlightComponentInView(leafPurl);
+
+            // Center the view on the selected component
+            setTimeout(() => centerOnComponent(leafPurl), 100);
+        }
+
+        // Inner View Mode: Show parents on left, selected in middle, children on right
+        function initializeInnerView(innerPurl) {
+            const container = document.getElementById('columnsContainer');
+            container.innerHTML = '<svg id="connectorsCanvas"></svg>';
+
+            columns = [];
+            selectedPath = [];
+            currentViewMode = 'inner';
+
+            // Build parent columns by walking backwards from selected component
+            const parentLevelMap = new Map(); // distance -> Set of purls
+
+            // BFS to find all parents at each distance - walk until we hit roots
+            function getParentsAtDistance(startPurl) {
+                const visited = new Set([startPurl]);
+                let currentLevel = new Set([startPurl]);
+                let distance = 1;
+
+                while (currentLevel.size > 0) {
+                    const nextLevel = new Set();
+
+                    for (const purl of currentLevel) {
+                        const parents = reverseDependencyMap.get(purl) || [];
+                        const filteredParents = filterNodesByScope(parents);
+
+                        for (const parent of filteredParents) {
+                            if (!visited.has(parent)) {
+                                visited.add(parent);
+                                nextLevel.add(parent);
+
+                                if (!parentLevelMap.has(distance)) {
+                                    parentLevelMap.set(distance, new Set());
+                                }
+                                parentLevelMap.get(distance).add(parent);
+                            }
+                        }
+                    }
+
+                    currentLevel = nextLevel;
+                    distance++;
+                }
+            }
+
+            // Get all parents (walk until we hit roots)
+            getParentsAtDistance(innerPurl);
+
+            // Build child columns by walking forward from selected component
+            const childLevelMap = new Map(); // distance -> Set of purls
+
+            // BFS to find all children at each distance - walk until we hit leaves
+            function getChildrenAtDistance(startPurl) {
+                const visited = new Set([startPurl]);
+                let currentLevel = new Set([startPurl]);
+                let distance = 1;
+
+                while (currentLevel.size > 0) {
+                    const nextLevel = new Set();
+
+                    for (const purl of currentLevel) {
+                        const children = dependencyMap.get(purl) || [];
+                        const filteredChildren = filterNodesByScope(children);
+
+                        for (const child of filteredChildren) {
+                            if (!visited.has(child)) {
+                                visited.add(child);
+                                nextLevel.add(child);
+
+                                if (!childLevelMap.has(distance)) {
+                                    childLevelMap.set(distance, new Set());
+                                }
+                                childLevelMap.get(distance).add(child);
+                            }
+                        }
+                    }
+
+                    currentLevel = nextLevel;
+                    distance++;
+                }
+            }
+
+            // Get all children (walk until we hit leaves)
+            getChildrenAtDistance(innerPurl);
+
+            // If no parents and no children after filtering, show message
+            if (parentLevelMap.size === 0 && childLevelMap.size === 0) {
+                // Just show the selected component alone
+                addColumn([innerPurl], 'Selected');
+
+                const container = document.getElementById('columnsContainer');
+                const message = document.createElement('div');
+                message.className = 'loading-message';
+                message.style.marginLeft = '20px';
+                message.innerHTML = '<div class="empty-state"><p>This component has no visible dependencies or dependents with the current scope filters.</p></div>';
+                container.appendChild(message);
+
+                updateLastColumnHighlight();
+                document.getElementById('statsPanel').style.display = 'block';
+                highlightComponentInView(innerPurl);
+                setTimeout(() => centerOnComponent(innerPurl), 100);
+                return;
+            }
+
+            // Add parent columns from left to right (furthest first)
+            const maxParentDistance = parentLevelMap.size > 0 ? Math.max(...parentLevelMap.keys()) : 0;
+            for (let distance = maxParentDistance; distance >= 1; distance--) {
+                if (parentLevelMap.has(distance)) {
+                    const nodesAtLevel = Array.from(parentLevelMap.get(distance));
+                    addColumn(nodesAtLevel, `Parents ${distance}`);
+                }
+            }
+
+            // Add selected component in the middle
+            addColumn([innerPurl], 'Selected');
+
+            // Add child columns from left to right (closest first)
+            const maxChildDistance = childLevelMap.size > 0 ? Math.max(...childLevelMap.keys()) : 0;
+            for (let distance = 1; distance <= maxChildDistance; distance++) {
+                if (childLevelMap.has(distance)) {
+                    const nodesAtLevel = Array.from(childLevelMap.get(distance));
+                    addColumn(nodesAtLevel, `Children ${distance}`);
+                }
+            }
+
+            updateLastColumnHighlight();
+            document.getElementById('statsPanel').style.display = 'block';
+
+            // Highlight the selected node
+            highlightComponentInView(innerPurl);
+
+            // Center the view on the selected component
+            setTimeout(() => centerOnComponent(innerPurl), 100);
         }
 
         function addApplicationColumn(directDeps) {
@@ -765,6 +1153,27 @@
                     }
                 }
 
+                // Determine node type icon (chain link style)
+                const hasDeps = deps.length > 0;
+                const hasParents = (reverseDependencyMap.get(purl) || []).length > 0;
+                let nodeTypeIcon = '';
+
+                if (!hasParents && hasDeps) {
+                    nodeTypeIcon = '|>'; // Root: no parents, has children
+                } else if (!hasDeps && hasParents) {
+                    nodeTypeIcon = '<|'; // Leaf: has parents, no children
+                } else if (hasDeps && hasParents) {
+                    nodeTypeIcon = '<>'; // Inner: has both
+                }
+
+                // Add icon as a separate element on the left
+                if (nodeTypeIcon) {
+                    const iconDiv = document.createElement('div');
+                    iconDiv.className = 'node-type-icon';
+                    iconDiv.textContent = nodeTypeIcon;
+                    item.appendChild(iconDiv);
+                }
+
                 // Line 1: Group (filter out urn:cdx: and other URN prefixes)
                 const groupDiv = document.createElement('div');
                 groupDiv.className = 'node-group';
@@ -861,6 +1270,23 @@
                 }
 
                 meta.appendChild(count);
+
+                // Add action buttons container
+                const actions = document.createElement('div');
+                actions.className = 'node-actions';
+
+                // Analyze button
+                const analyzeBtn = document.createElement('button');
+                analyzeBtn.className = 'node-action-btn';
+                analyzeBtn.innerHTML = '🔍';
+                analyzeBtn.title = 'Analyze this component';
+                analyzeBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    analyzeComponent(purl);
+                };
+                actions.appendChild(analyzeBtn);
+
+                meta.appendChild(actions);
 
                 item.appendChild(groupDiv);
                 item.appendChild(nameDiv);
@@ -1271,13 +1697,9 @@
 
             console.log(`Filters updated: required=${activeFilters.required}, optional=${activeFilters.optional}, excluded=${activeFilters.excluded}`);
 
-            // Rebuild view with filtered nodes
+            // Rebuild current view with filtered nodes
             if (sbomData) {
-                const rootNodes = findRootNodes();
-                console.log(`Found ${rootNodes.length} root nodes before filtering`);
-                const filteredRoots = filterNodesByScope(rootNodes);
-                console.log(`${filteredRoots.length} root nodes after filtering`);
-                initializeView(filteredRoots);
+                changeView();
             }
         }
 
@@ -1302,9 +1724,64 @@
 
         function resetView() {
             if (sbomData) {
+                // Reset to app view
+                document.getElementById('componentSelector').value = '__app__';
+                currentSelectedComponent = '__app__';
                 const rootNodes = findRootNodes();
-                initializeView(rootNodes);
+                const filteredRoots = filterNodesByScope(rootNodes);
+                initializeAppView(filteredRoots);
             }
+        }
+
+        function highlightComponentInView(purl) {
+            clearFocusedComponent();
+
+            document.querySelectorAll(`.node-item[data-purl="${purl}"]`).forEach(item => {
+                item.classList.add('focused-component');
+            });
+        }
+
+        function clearFocusedComponent() {
+            document.querySelectorAll('.focused-component').forEach(item => {
+                item.classList.remove('focused-component');
+            });
+        }
+
+        function centerOnComponent(purl) {
+            // Find the component in the view
+            const componentItem = document.querySelector(`.node-item[data-purl="${purl}"]`);
+            if (!componentItem) return;
+
+            const container = document.getElementById('columnsContainer');
+            const itemRect = componentItem.getBoundingClientRect();
+            const containerRect = container.getBoundingClientRect();
+
+            // Calculate the position to center the component horizontally
+            const itemCenterX = itemRect.left + itemRect.width / 2;
+            const containerCenterX = containerRect.left + containerRect.width / 2;
+            const scrollXOffset = itemCenterX - containerCenterX;
+
+            // Calculate the position to center the component vertically
+            const itemCenterY = itemRect.top + itemRect.height / 2;
+            const containerCenterY = containerRect.top + containerRect.height / 2;
+            const scrollYOffset = itemCenterY - containerCenterY;
+
+            // Scroll to center position with smooth animation
+            container.scrollBy({
+                left: scrollXOffset,
+                top: scrollYOffset,
+                behavior: 'smooth'
+            });
+        }
+
+        function analyzeComponent(purl) {
+            // Update the component selector dropdown to this component
+            const selector = document.getElementById('componentSelector');
+            selector.value = purl;
+            currentSelectedComponent = purl;
+
+            // Trigger view change to show this component's context
+            changeView();
         }
 
         // Redraw connectors on scroll/resize
