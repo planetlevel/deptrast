@@ -805,10 +805,10 @@
 
                     for (const purl of currentLevel) {
                         const parents = reverseDependencyMap.get(purl) || [];
-                        const filteredParents = filterNodesByScope(parents);
-                        console.log(`    🔗 ${purl.substring(purl.lastIndexOf('/') + 1)}: ${parents.length} parents total, ${filteredParents.length} after filtering`);
+                        // DON'T filter during traversal - we need to walk the full graph to reach roots
+                        console.log(`    🔗 ${purl.substring(purl.lastIndexOf('/') + 1)}: ${parents.length} parents total`);
 
-                        for (const parent of filteredParents) {
+                        for (const parent of parents) {
                             if (!visited.has(parent)) {
                                 visited.add(parent);
                                 nextLevel.add(parent);
@@ -849,10 +849,10 @@
 
                     for (const purl of currentLevel) {
                         const children = dependencyMap.get(purl) || [];
-                        const filteredChildren = filterNodesByScope(children);
-                        console.log(`    🔗 ${purl.substring(purl.lastIndexOf('/') + 1)}: ${children.length} children total, ${filteredChildren.length} after filtering`);
+                        // DON'T filter during traversal - we need to walk the full graph to reach leaves
+                        console.log(`    🔗 ${purl.substring(purl.lastIndexOf('/') + 1)}: ${children.length} children total`);
 
-                        for (const child of filteredChildren) {
+                        for (const child of children) {
                             if (!visited.has(child)) {
                                 visited.add(child);
                                 nextLevel.add(child);
@@ -896,11 +896,15 @@
             }
 
             // Add parent columns from left to right (furthest first)
+            // Apply scope filtering when building columns
             const maxParentDistance = parentLevelMap.size > 0 ? Math.max(...parentLevelMap.keys()) : 0;
             for (let distance = maxParentDistance; distance >= 1; distance--) {
                 if (parentLevelMap.has(distance)) {
                     const nodesAtLevel = Array.from(parentLevelMap.get(distance));
-                    addColumn(nodesAtLevel, `Parents ${distance}`);
+                    const filteredNodes = filterNodesByScope(nodesAtLevel);
+                    if (filteredNodes.length > 0) {
+                        addColumn(filteredNodes, `Parents ${distance}`);
+                    }
                 }
             }
 
@@ -908,11 +912,15 @@
             addColumn([innerPurl], 'Selected');
 
             // Add child columns from left to right (closest first)
+            // Apply scope filtering when building columns
             const maxChildDistance = childLevelMap.size > 0 ? Math.max(...childLevelMap.keys()) : 0;
             for (let distance = 1; distance <= maxChildDistance; distance++) {
                 if (childLevelMap.has(distance)) {
                     const nodesAtLevel = Array.from(childLevelMap.get(distance));
-                    addColumn(nodesAtLevel, `Children ${distance}`);
+                    const filteredNodes = filterNodesByScope(nodesAtLevel);
+                    if (filteredNodes.length > 0) {
+                        addColumn(filteredNodes, `Children ${distance}`);
+                    }
                 }
             }
 
