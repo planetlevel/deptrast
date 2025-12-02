@@ -922,8 +922,11 @@
             // Highlight the selected node
             highlightComponentInView(innerPurl);
 
-            // Center the view on the selected component
-            setTimeout(() => centerOnComponent(innerPurl), 100);
+            // Draw connectors after layout completes
+            setTimeout(() => {
+                drawConnectors();
+                centerOnComponent(innerPurl);
+            }, 100);
         }
 
         function addApplicationColumn(directDeps) {
@@ -1328,62 +1331,13 @@
             const scrollLeft = document.getElementById('columnsContainer').scrollLeft;
             const scrollTop = document.getElementById('columnsContainer').scrollTop;
 
-            // Draw connectors from Application column to all Direct Dependencies
-            if (columns.length >= 2 && columns[0].isAppColumn) {
-                const appColumn = columns[0].element;
-                const directDepsColumn = columns[1].element;
-
-                const appItem = appColumn.querySelector('.node-item');
-                const directDepsItems = directDepsColumn.querySelectorAll('.node-item');
-
-                if (appItem && directDepsItems.length > 0) {
-                    const fromRect = appItem.getBoundingClientRect();
-
-                    directDepsItems.forEach(toItem => {
-                        const toRect = toItem.getBoundingClientRect();
-
-                        const x1 = fromRect.right - containerRect.left + scrollLeft;
-                        const y1 = fromRect.top + fromRect.height / 2 - containerRect.top + scrollTop;
-                        const x2 = toRect.left - containerRect.left + scrollLeft - 6;
-                        const y2 = toRect.top + toRect.height / 2 - containerRect.top + scrollTop;
-
-                        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                        const midX = (x1 + x2) / 2;
-                        const d = `M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}`;
-
-                        path.setAttribute('d', d);
-                        path.setAttribute('class', 'connector-line active');
-
-                        svg.appendChild(path);
-                    });
-                }
-            }
-
-            // Draw connectors for all connections in the selected path
-            for (let i = 0; i < selectedPath.length; i++) {
-                const fromColumnIndex = i;
-                const toColumnIndex = i + 1;
-
-                if (toColumnIndex >= columns.length) break;
-
-                const fromColumn = columns[fromColumnIndex].element;
-                const toColumn = columns[toColumnIndex].element;
-
-                const selectedPurl = selectedPath[fromColumnIndex];
-                const targetPurl = selectedPath[toColumnIndex];
-
-                const fromItem = fromColumn.querySelector(`.node-item[data-purl="${selectedPurl}"]`);
-                const toItem = toColumn.querySelector(`.node-item[data-purl="${targetPurl}"]`);
-
-                if (!fromItem || !toItem) continue;
-
+            // Helper function to draw a connector line
+            function drawLine(fromItem, toItem) {
                 const fromRect = fromItem.getBoundingClientRect();
                 const toRect = toItem.getBoundingClientRect();
 
-                // Calculate positions accounting for scroll
                 const x1 = fromRect.right - containerRect.left + scrollLeft;
                 const y1 = fromRect.top + fromRect.height / 2 - containerRect.top + scrollTop;
-                // Subtract arrowhead width (6) so arrow tip touches box edge
                 const x2 = toRect.left - containerRect.left + scrollLeft - 6;
                 const y2 = toRect.top + toRect.height / 2 - containerRect.top + scrollTop;
 
@@ -1397,42 +1351,86 @@
                 svg.appendChild(path);
             }
 
-            // Also draw connectors from the last selected item to all its children in the last column
-            if (columns.length > 1 && selectedPath.length > 0) {
-                const lastSelectedIndex = selectedPath.length - 1;
-                const lastSelectedPurl = selectedPath[lastSelectedIndex];
-                const deps = dependencyMap.get(lastSelectedPurl) || [];
+            if (currentViewMode === 'app') {
+                // APP MODE: Draw arrows based on selectedPath (click-to-explore)
 
-                if (deps.length > 0) {
-                    const fromColumn = columns[lastSelectedIndex].element;
-                    const toColumn = columns[lastSelectedIndex + 1].element;
+                // Draw connectors from Application column to all Direct Dependencies
+                if (columns.length >= 2 && columns[0].isAppColumn) {
+                    const appColumn = columns[0].element;
+                    const directDepsColumn = columns[1].element;
 
-                    const fromItem = fromColumn.querySelector(`.node-item[data-purl="${lastSelectedPurl}"]`);
-                    if (!fromItem) return;
+                    const appItem = appColumn.querySelector('.node-item');
+                    const directDepsItems = directDepsColumn.querySelectorAll('.node-item');
 
-                    const fromRect = fromItem.getBoundingClientRect();
+                    if (appItem && directDepsItems.length > 0) {
+                        directDepsItems.forEach(toItem => {
+                            drawLine(appItem, toItem);
+                        });
+                    }
+                }
 
-                    deps.forEach(depPurl => {
-                        const toItem = toColumn.querySelector(`.node-item[data-purl="${depPurl}"]`);
-                        if (!toItem) return;
+                // Draw connectors for all connections in the selected path
+                for (let i = 0; i < selectedPath.length; i++) {
+                    const fromColumnIndex = i;
+                    const toColumnIndex = i + 1;
 
-                        const toRect = toItem.getBoundingClientRect();
+                    if (toColumnIndex >= columns.length) break;
 
-                        // Calculate positions accounting for scroll
-                        const x1 = fromRect.right - containerRect.left + scrollLeft;
-                        const y1 = fromRect.top + fromRect.height / 2 - containerRect.top + scrollTop;
-                        // Subtract arrowhead width (6) so arrow tip touches box edge
-                        const x2 = toRect.left - containerRect.left + scrollLeft - 6;
-                        const y2 = toRect.top + toRect.height / 2 - containerRect.top + scrollTop;
+                    const fromColumn = columns[fromColumnIndex].element;
+                    const toColumn = columns[toColumnIndex].element;
 
-                        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                        const midX = (x1 + x2) / 2;
-                        const d = `M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}`;
+                    const selectedPurl = selectedPath[fromColumnIndex];
+                    const targetPurl = selectedPath[toColumnIndex];
 
-                        path.setAttribute('d', d);
-                        path.setAttribute('class', 'connector-line active');
+                    const fromItem = fromColumn.querySelector(`.node-item[data-purl="${selectedPurl}"]`);
+                    const toItem = toColumn.querySelector(`.node-item[data-purl="${targetPurl}"]`);
 
-                        svg.appendChild(path);
+                    if (fromItem && toItem) {
+                        drawLine(fromItem, toItem);
+                    }
+                }
+
+                // Also draw connectors from the last selected item to all its children in the last column
+                if (columns.length > 1 && selectedPath.length > 0) {
+                    const lastSelectedIndex = selectedPath.length - 1;
+                    const lastSelectedPurl = selectedPath[lastSelectedIndex];
+                    const deps = dependencyMap.get(lastSelectedPurl) || [];
+
+                    if (deps.length > 0) {
+                        const fromColumn = columns[lastSelectedIndex].element;
+                        const toColumn = columns[lastSelectedIndex + 1].element;
+
+                        const fromItem = fromColumn.querySelector(`.node-item[data-purl="${lastSelectedPurl}"]`);
+                        if (fromItem) {
+                            deps.forEach(depPurl => {
+                                const toItem = toColumn.querySelector(`.node-item[data-purl="${depPurl}"]`);
+                                if (toItem) {
+                                    drawLine(fromItem, toItem);
+                                }
+                            });
+                        }
+                    }
+                }
+            } else if (currentViewMode === 'focus') {
+                // FOCUS MODE: Draw ALL parent->child arrows between adjacent columns
+                for (let colIdx = 0; colIdx < columns.length - 1; colIdx++) {
+                    const fromColumn = columns[colIdx];
+                    const toColumn = columns[colIdx + 1];
+
+                    // Get all nodes in the from column
+                    const fromItems = fromColumn.element.querySelectorAll('.node-item');
+
+                    fromItems.forEach(fromItem => {
+                        const fromPurl = fromItem.dataset.purl;
+                        const children = dependencyMap.get(fromPurl) || [];
+
+                        // Draw arrow to each child in the next column
+                        children.forEach(childPurl => {
+                            const toItem = toColumn.element.querySelector(`.node-item[data-purl="${childPurl}"]`);
+                            if (toItem) {
+                                drawLine(fromItem, toItem);
+                            }
+                        });
                     });
                 }
             }
