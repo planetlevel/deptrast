@@ -485,7 +485,7 @@
                     <option value="__app__">Application (Explore Mode)</option>
                 </select>
             </div>
-            <button onclick="resetView()">Reset View</button>
+            <button onclick="resetView()">🔍 Focus on App</button>
             <div class="scope-filters" id="scopeFilters" style="display: none; margin-left: 20px;">
                 <label style="font-size: 13px; color: #666; margin-right: 10px;">Scope:</label>
                 <label class="scope-checkbox">
@@ -904,14 +904,14 @@
                     const filteredNodes = filterNodesByScope(nodesAtLevel);
                     console.log(`📊 Distance ${distance}: ${nodesAtLevel.length} nodes before filter, ${filteredNodes.length} after filter`);
                     if (filteredNodes.length > 0) {
-                        addColumn(filteredNodes, `Parent ${parentColumnNumber}`);
+                        addColumn(filteredNodes, `Parent ${parentColumnNumber}`, 'parent');
                         parentColumnNumber--;
                     }
                 }
             }
 
             // Add selected component in the middle
-            addColumn([innerPurl], 'Selected Component');
+            addColumn([innerPurl], 'Selected Component', 'selected');
 
             // Add child columns from left to right (closest first)
             // Apply scope filtering when building columns
@@ -922,7 +922,7 @@
                     const nodesAtLevel = Array.from(childLevelMap.get(distance));
                     const filteredNodes = filterNodesByScope(nodesAtLevel);
                     if (filteredNodes.length > 0) {
-                        addColumn(filteredNodes, `Child ${childColumnNumber}`);
+                        addColumn(filteredNodes, `Child ${childColumnNumber}`, 'child');
                         childColumnNumber++;
                     }
                 }
@@ -1012,7 +1012,7 @@
             });
         }
 
-        function addColumn(nodes, title) {
+        function addColumn(nodes, title, columnType) {
             const container = document.getElementById('columnsContainer');
             const columnIndex = columns.length;
 
@@ -1244,7 +1244,8 @@
 
             columns.push({
                 element: column,
-                nodes: nodes
+                nodes: nodes,
+                type: columnType
             });
 
             return column;
@@ -1439,25 +1440,38 @@
                 }
             } else if (currentViewMode === 'focus') {
                 // FOCUS MODE: Draw ALL parent->child arrows between adjacent columns
+                console.log(`🎨 Drawing connectors in FOCUS mode. ${columns.length} columns total.`);
                 for (let colIdx = 0; colIdx < columns.length - 1; colIdx++) {
                     const fromColumn = columns[colIdx];
                     const toColumn = columns[colIdx + 1];
 
+                    console.log(`  📊 Column ${colIdx} (${fromColumn.type}) → Column ${colIdx + 1} (${toColumn.type})`);
+
                     // Get all nodes in the from column
                     const fromItems = fromColumn.element.querySelectorAll('.node-item');
+                    console.log(`    Found ${fromItems.length} items in from column`);
 
+                    let arrowCount = 0;
                     fromItems.forEach(fromItem => {
                         const fromPurl = fromItem.dataset.purl;
+                        const fromName = fromPurl.substring(fromPurl.lastIndexOf('/') + 1);
                         const children = dependencyMap.get(fromPurl) || [];
+                        console.log(`      ${fromName}: ${children.length} children in dependencyMap`);
 
                         // Draw arrow to each child in the next column
                         children.forEach(childPurl => {
+                            const childName = childPurl.substring(childPurl.lastIndexOf('/') + 1);
                             const toItem = toColumn.element.querySelector(`.node-item[data-purl="${childPurl}"]`);
                             if (toItem) {
+                                console.log(`        ✓ Drawing arrow to ${childName}`);
                                 drawLine(fromItem, toItem);
+                                arrowCount++;
+                            } else {
+                                console.log(`        ✗ Child ${childName} not found in next column`);
                             }
                         });
                     });
+                    console.log(`    Drew ${arrowCount} arrows between these columns`);
                 }
             }
         }
