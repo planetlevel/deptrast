@@ -110,7 +110,7 @@
 
         .main-container {
             display: flex;
-            height: calc(100vh - 60px);
+            height: calc(100vh - 70px);
             background: white;
         }
 
@@ -1669,10 +1669,14 @@
 
                         // Color code the tags
                         let tagClass = '';
-                        if (tagText.includes('conflict-resolution-loser')) {
+                        if (tagText.includes('resolution-loser') || tagText.includes('resolution-override-loser') || tagText.includes('conflict-resolution-loser')) {
                             tagClass = 'style="color: #f44336; font-weight: 600;"';
-                        } else if (tagText.includes('winner')) {
+                        } else if (tagText.includes('resolution-winner') || tagText.includes('resolution-override-winner') || tagText.includes('winner')) {
                             tagClass = 'style="color: #4caf50; font-weight: 600;"';
+                        } else if (tagText.includes('resolution-defeated-by') || tagText.includes('resolution-defeated:')) {
+                            tagClass = 'style="color: #9c27b0; font-weight: 500;"';
+                        } else if (tagText.includes('resolution-strategy:')) {
+                            tagClass = 'style="color: #2196f3; font-weight: 500;"';
                         } else if (tagText.includes('optional') || tagText.includes('test')) {
                             tagClass = 'style="color: #ff9800; font-weight: 500;"';
                         } else if (tagText.includes('runtime') || tagText.includes('required')) {

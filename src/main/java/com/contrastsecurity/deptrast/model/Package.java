@@ -1,5 +1,7 @@
 package com.contrastsecurity.deptrast.model;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -15,6 +17,9 @@ public class Package {
     private String scope;  // Maven scope: compile, runtime, test, provided, system, optional, excluded
     private String scopeReason;  // Reason for scope assignment (e.g., "conflict-resolution-loser", "not-observed-at-runtime")
     private String winningVersion;  // If this is a losing version, what version won?
+    private String scopeStrategy;  // Conflict resolution strategy used: "maven" or "highest"
+    private List<String> defeatedVersions;  // If this is a winner, list of versions it defeated
+    private boolean isOverrideWinner;  // True if this won via dependency management override
 
     public Package(String system, String name, String version) {
         this(system, name, version, "compile");  // Default to compile scope
@@ -27,6 +32,9 @@ public class Package {
         this.scope = scope != null ? scope : "compile";
         this.scopeReason = null;
         this.winningVersion = null;
+        this.scopeStrategy = null;
+        this.defeatedVersions = new ArrayList<>();
+        this.isOverrideWinner = false;
     }
 
     public String getName() {
@@ -63,6 +71,32 @@ public class Package {
 
     public void setWinningVersion(String winningVersion) {
         this.winningVersion = winningVersion;
+    }
+
+    public String getScopeStrategy() {
+        return scopeStrategy;
+    }
+
+    public void setScopeStrategy(String scopeStrategy) {
+        this.scopeStrategy = scopeStrategy;
+    }
+
+    public List<String> getDefeatedVersions() {
+        return defeatedVersions;
+    }
+
+    public void addDefeatedVersion(String version) {
+        if (!defeatedVersions.contains(version)) {
+            defeatedVersions.add(version);
+        }
+    }
+
+    public boolean isOverrideWinner() {
+        return isOverrideWinner;
+    }
+
+    public void setOverrideWinner(boolean overrideWinner) {
+        isOverrideWinner = overrideWinner;
     }
 
     public String getFullName() {

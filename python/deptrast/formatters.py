@@ -423,12 +423,39 @@ class OutputFormatter:
         purl_str = OutputFormatter._build_purl(pkg)
         purl_obj = PackageURL.from_string(purl_str)
 
-        # Build tags list to indicate scope reason and winning version
+        # Build tags list for conflict resolution and dependency management overrides
         tags = []
-        if pkg.scope_reason:
+
+        # For conflict resolution losers: add resolution-strategy, resolution-loser, and resolution-defeated-by tags
+        if pkg.scope_reason == "loser":
+            if pkg.scope_strategy:
+                tags.append(f"resolution-strategy:{pkg.scope_strategy}")
+            tags.append("resolution-loser")
+            if pkg.winning_version:
+                tags.append(f"resolution-defeated-by:{pkg.winning_version}")
+        # For dependency management override losers: add resolution-override-loser and resolution-defeated-by tags
+        elif pkg.scope_reason == "override-loser":
+            tags.append("resolution-override-loser")
+            if pkg.winning_version:
+                tags.append(f"resolution-defeated-by:{pkg.winning_version}")
+        # For other scope reasons (backwards compatibility), keep old format
+        elif pkg.scope_reason:
             tags.append(f"scope:{pkg.scope_reason}")
-        if pkg.winning_version:
-            tags.append(f"winner:{pkg.winning_version}")
+            if pkg.winning_version:
+                tags.append(f"winner:{pkg.winning_version}")
+
+        # For winners: check if they have defeated versions
+        if pkg.defeated_versions:
+            # Distinguish between conflict resolution winners and dependency management override winners
+            if pkg.is_override_winner:
+                tags.append("resolution-override-winner")
+            else:
+                # Conflict resolution winner - add strategy tag
+                if pkg.scope_strategy:
+                    tags.append(f"resolution-strategy:{pkg.scope_strategy}")
+                tags.append("resolution-winner")
+            for defeated_version in pkg.defeated_versions:
+                tags.append(f"resolution-defeated:{defeated_version}")
 
         component = Component(
             name=name,

@@ -14,6 +14,9 @@ class Package:
     scope: str = "compile"  # Maven scope: compile, runtime, test, provided, system, optional, excluded
     scope_reason: Optional[str] = None  # Reason for scope assignment (e.g., "conflict-resolution", "not-observed-at-runtime")
     winning_version: Optional[str] = None  # If this is a losing version, what version won?
+    scope_strategy: Optional[str] = None  # Conflict resolution strategy used: "maven" or "highest"
+    defeated_versions: List[str] = field(default_factory=list)  # If this is a winner, list of versions it defeated
+    is_override_winner: bool = False  # True if this won via dependency management override
 
     def __post_init__(self):
         """Normalize system to lowercase."""
@@ -57,6 +60,13 @@ class DependencyNode:
 
     def add_child(self, child: 'DependencyNode') -> None:
         """Add a child dependency to this node."""
+        # DEBUG: Track commons-io additions to commons-compress
+        if "commons-compress@1.27.1" in self.package.full_name and "commons-io@2.19.0" in child.package.full_name:
+            import traceback
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"DEBUG: add_child() - Adding commons-io@2.19.0 to commons-compress@1.27.1")
+            logger.warning(f"DEBUG: Stack trace:\n{''.join(traceback.format_stack())}")
         if child not in self.children:  # Avoid duplicates
             self.children.append(child)
 

@@ -187,36 +187,24 @@ class DependencyGraphBuilder:
 
             # Mark wrong version as excluded due to dependency management override
             wrong_pkg = wrong_node.package
+            correct_pkg = correct_node.package
             parts = correct_full_name.split(':')
             managed_version = parts[2] if len(parts) == 3 else "unknown"
 
             wrong_pkg.scope = "excluded"
-            wrong_pkg.scope_reason = "dependency-management-override"
+            wrong_pkg.scope_reason = "override-loser"
             wrong_pkg.winning_version = managed_version
+
+            # Track defeated version on the winner and mark as override winner
+            if wrong_pkg.version not in correct_pkg.defeated_versions:
+                correct_pkg.defeated_versions.append(wrong_pkg.version)
+            correct_pkg.is_override_winner = True
+
             logger.info(f"Marked {wrong_full_name} as excluded (dependency management override, winner: {managed_version})")
 
-            # Find all parents of the wrong node
-            parents = self.parent_map.get(wrong_full_name, set())
-
-            for parent_name in list(parents):
-                parent_node = self.all_nodes.get(parent_name)
-                if not parent_node:
-                    continue
-
-                # Replace wrong child with correct child in parent
-                if wrong_node in parent_node.children:
-                    parent_node.children.remove(wrong_node)
-                if correct_node not in parent_node.children:
-                    parent_node.add_child(correct_node)
-                    self.parent_map.setdefault(correct_full_name, set()).add(parent_name)
-                    logger.debug(f"Redirected {parent_name} → {wrong_full_name} to use managed version {correct_full_name}")
-
-            # Check if wrong node has any remaining parents
-            remaining_parents = self.parent_map.get(wrong_full_name, set())
-            if not remaining_parents:
-                logger.debug(f"Would remove unreferenced wrong version {wrong_full_name} but keeping for excluded scope tracking")
-            else:
-                logger.debug(f"Keeping wrong version {wrong_full_name} as excluded (still has {len(remaining_parents)} parents)")
+            # DON'T disconnect override losers - keep them in the graph alongside winners
+            # The visualization will show both the overridden version and the managed version
+            logger.debug(f"Keeping both {wrong_full_name} (override loser) and {correct_full_name} (override winner) in graph")
 
         logger.info(f"Applied {len(nodes_to_replace)} managed version overrides")
 
@@ -263,11 +251,22 @@ class DependencyGraphBuilder:
 
         logger.info(f"Found {conflicts_found} losing versions out of {len(self.all_nodes)} total nodes")
 
-        # Step 3: Redirect edges from loser parents → winner
+        # Step 3: Track defeated versions for winners
+        defeated_versions_by_base_key = {}
+        for loser_name in losers:
+            loser_node = self.all_nodes[loser_name]
+            loser_pkg = loser_node.package
+            base_key = self._get_base_key(loser_pkg)
+
+            if base_key not in defeated_versions_by_base_key:
+                defeated_versions_by_base_key[base_key] = []
+            defeated_versions_by_base_key[base_key].append(loser_pkg.version)
+
+        # Step 4: Redirect edges from loser parents → winner
         redirect_count = self._redirect_edges_to_winners(losers, winning_versions)
         logger.info(f"Redirected {redirect_count} edges to winning versions")
 
-        # Step 4: Mark losers as excluded
+        # Step 5: Mark losers as excluded and set strategy
         for loser_name in losers:
             loser_node = self.all_nodes[loser_name]
             loser_pkg = loser_node.package
@@ -276,10 +275,13 @@ class DependencyGraphBuilder:
             base_key = self._get_base_key(loser_pkg)
             winning_version = winning_versions.get(base_key)
 
+            # Set the strategy on the loser
+            loser_pkg.scope_strategy = self.resolution_strategy
+
             # Only set scope reason if not already set (preserve dependency-management-override from Phase 1.5)
             if not loser_pkg.scope_reason:
                 loser_pkg.scope = 'excluded'
-                loser_pkg.scope_reason = 'conflict-resolution-loser'
+                loser_pkg.scope_reason = 'loser'
                 loser_pkg.winning_version = winning_version
                 logger.debug(f"Marked as excluded: {loser_name} (winner: {winning_version})")
             else:
@@ -287,6 +289,23 @@ class DependencyGraphBuilder:
                 loser_pkg.scope = 'excluded'
                 loser_pkg.winning_version = winning_version
                 logger.debug(f"Already marked as excluded: {loser_name} (reason: {loser_pkg.scope_reason}, winner: {winning_version})")
+
+        # Step 6: Mark winners with defeated versions
+        for base_key, winning_version in winning_versions.items():
+            defeated = defeated_versions_by_base_key.get(base_key, [])
+
+            if defeated:
+                # Find the winner package node
+                winner_full_name = f"{base_key}:{winning_version}"
+                winner_node = self.all_nodes.get(winner_full_name)
+
+                if winner_node:
+                    winner_pkg = winner_node.package
+                    winner_pkg.scope_strategy = self.resolution_strategy  # Set strategy on winner too
+                    for defeated_version in defeated:
+                        if defeated_version not in winner_pkg.defeated_versions:
+                            winner_pkg.defeated_versions.append(defeated_version)
+                    logger.debug(f"Winner {winner_full_name} defeated versions: {defeated}")
 
         # Step 5: Mark loser subtrees as excluded (unless other incoming links)
         excluded_subtree_count = self._mark_loser_subtrees_excluded(losers)
@@ -823,6 +842,11 @@ class DependencyGraphBuilder:
                     self.parent_map[winner_name].add(parent_name)
                     redirect_count += 1
                     logger.debug(f"Redirected: {parent_name} → {winner_name} (was {loser_name})")
+
+                    # DEBUG: Track commons-io additions to commons-compress
+                    if "commons-compress@1.27.1" in parent_name and "commons-io" in winner_name:
+                        logger.warning(f"DEBUG: Adding {winner_name} to commons-compress@1.27.1 (from loser {loser_name})")
+                        logger.warning(f"DEBUG: commons-compress@1.27.1 children before: {[c.package.full_name for c in parent_node.children]}")
 
         return redirect_count
 

@@ -1505,14 +1505,51 @@ public class DependencyTreeGenerator {
                 }
 
                 // Add conflict resolution tags if present
-                if (pkg.getScopeReason() != null || pkg.getWinningVersion() != null) {
-                    List<String> tagList = new ArrayList<>();
-                    if (pkg.getScopeReason() != null) {
-                        tagList.add("scope:" + pkg.getScopeReason());
+                List<String> tagList = new ArrayList<>();
+
+                // For conflict resolution losers: add resolution-strategy, resolution-loser, and resolution-defeated-by tags
+                if (pkg.getScopeReason() != null && "loser".equals(pkg.getScopeReason())) {
+                    if (pkg.getScopeStrategy() != null) {
+                        tagList.add("resolution-strategy:" + pkg.getScopeStrategy());
                     }
+                    tagList.add("resolution-loser");
+                    if (pkg.getWinningVersion() != null) {
+                        tagList.add("resolution-defeated-by:" + pkg.getWinningVersion());
+                    }
+                }
+                // For dependency management override losers: add resolution-override-loser and resolution-defeated-by tags
+                else if (pkg.getScopeReason() != null && "override-loser".equals(pkg.getScopeReason())) {
+                    tagList.add("resolution-override-loser");
+                    if (pkg.getWinningVersion() != null) {
+                        tagList.add("resolution-defeated-by:" + pkg.getWinningVersion());
+                    }
+                }
+                // For other scope reasons (backwards compatibility), keep old format
+                else if (pkg.getScopeReason() != null) {
+                    tagList.add("scope:" + pkg.getScopeReason());
                     if (pkg.getWinningVersion() != null) {
                         tagList.add("winner:" + pkg.getWinningVersion());
                     }
+                }
+
+                // For winners: check if they have defeated versions
+                if (pkg.getDefeatedVersions() != null && !pkg.getDefeatedVersions().isEmpty()) {
+                    // Distinguish between conflict resolution winners and dependency management override winners
+                    if (pkg.isOverrideWinner()) {
+                        tagList.add("resolution-override-winner");
+                    } else {
+                        // Conflict resolution winner - add strategy tag
+                        if (pkg.getScopeStrategy() != null) {
+                            tagList.add("resolution-strategy:" + pkg.getScopeStrategy());
+                        }
+                        tagList.add("resolution-winner");
+                    }
+                    for (String defeatedVersion : pkg.getDefeatedVersions()) {
+                        tagList.add("resolution-defeated:" + defeatedVersion);
+                    }
+                }
+
+                if (!tagList.isEmpty()) {
                     component.setTags(new org.cyclonedx.model.component.Tags(tagList));
                 }
 

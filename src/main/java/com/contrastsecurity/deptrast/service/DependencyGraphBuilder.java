@@ -280,40 +280,23 @@ public class DependencyGraphBuilder implements AutoCloseable {
 
             // Mark wrong version as excluded due to dependency management override
             Package wrongPkg = wrongNode.getPackage();
+            Package correctPkg = correctNode.getPackage();
             String[] correctParts = correctFullName.split(":");
             String managedVersion = correctParts.length == 3 ? correctParts[2] : "unknown";
 
             wrongPkg.setScope("excluded");
-            wrongPkg.setScopeReason("dependency-management-override");
+            wrongPkg.setScopeReason("override-loser");
             wrongPkg.setWinningVersion(managedVersion);
+
+            // Track defeated version on the winner and mark as override winner
+            correctPkg.addDefeatedVersion(wrongPkg.getVersion());
+            correctPkg.setOverrideWinner(true);
+
             logger.info("Marked {} as excluded (dependency management override, winner: {})", wrongFullName, managedVersion);
 
-            // Find all parents of the wrong node
-            Set<String> parents = parentMap.getOrDefault(wrongFullName, Collections.emptySet());
-
-            for (String parentName : new HashSet<>(parents)) {
-                DependencyNode parentNode = allNodes.get(parentName);
-                if (parentNode == null) {
-                    continue;
-                }
-
-                // Replace wrong child with correct child in parent
-                parentNode.getChildren().remove(wrongNode);
-                if (!parentNode.getChildren().contains(correctNode)) {
-                    parentNode.addChild(correctNode);
-                    parentMap.computeIfAbsent(correctFullName, k -> new HashSet<>()).add(parentName);
-                    logger.debug("Redirected {} → {} to use managed version {}", parentName, wrongFullName, correctFullName);
-                }
-            }
-
-            // Check if wrong node has any remaining parents
-            Set<String> remainingParents = parentMap.getOrDefault(wrongFullName, Collections.emptySet());
-            if (remainingParents.isEmpty()) {
-                // No one else references this node, can remove it (but we already marked it excluded above)
-                logger.debug("Would remove unreferenced wrong version {} but keeping for excluded scope tracking", wrongFullName);
-            } else {
-                logger.debug("Keeping wrong version {} as excluded (still has {} parents)", wrongFullName, remainingParents.size());
-            }
+            // DON'T disconnect override losers - keep them in the graph alongside winners
+            // The visualization will show both the overridden version and the managed version
+            logger.debug("Keeping both {} (override loser) and {} (override winner) in graph", wrongFullName, correctFullName);
         }
 
         logger.info("Applied {} managed version overrides", nodesToReplace.size());
@@ -628,11 +611,24 @@ public class DependencyGraphBuilder implements AutoCloseable {
 
         logger.info("Found {} losing versions out of {} total nodes", conflictsFound, allNodes.size());
 
-        // Step 3: Redirect edges from loser parents → winner
+        // Step 3: Track defeated versions for winners
+        Map<String, List<String>> defeatedVersionsByBaseKey = new HashMap<>();
+        for (String loserName : losers) {
+            DependencyNode loserNode = allNodes.get(loserName);
+            if (loserNode == null) continue;
+
+            Package loserPkg = loserNode.getPackage();
+            String baseKey = getBaseKey(loserPkg);
+
+            defeatedVersionsByBaseKey.computeIfAbsent(baseKey, k -> new ArrayList<>())
+                .add(loserPkg.getVersion());
+        }
+
+        // Step 4: Redirect edges from loser parents → winner
         int redirectCount = redirectEdgesToWinners(losers, winningVersions);
         logger.info("Redirected {} edges to winning versions", redirectCount);
 
-        // Step 4: Mark losers as excluded
+        // Step 5: Mark losers as excluded and set strategy
         for (String loserName : losers) {
             DependencyNode loserNode = allNodes.get(loserName);
             if (loserNode == null) continue;
@@ -641,10 +637,13 @@ public class DependencyGraphBuilder implements AutoCloseable {
             String baseKey = getBaseKey(loserPkg);
             String winningVersion = winningVersions.get(baseKey);
 
+            // Set the strategy on the loser
+            loserPkg.setScopeStrategy(strategy);
+
             // Only set scope reason if not already set (preserve dependency-management-override from Phase 1.5)
             if (loserPkg.getScopeReason() == null || loserPkg.getScopeReason().isEmpty()) {
                 loserPkg.setScope("excluded");
-                loserPkg.setScopeReason("conflict-resolution-loser");
+                loserPkg.setScopeReason("loser");
                 loserPkg.setWinningVersion(winningVersion);
                 logger.debug("Marked as excluded: {} (winner: {})", loserName, winningVersion);
             } else {
@@ -653,6 +652,28 @@ public class DependencyGraphBuilder implements AutoCloseable {
                 loserPkg.setWinningVersion(winningVersion);
                 logger.debug("Already marked as excluded: {} (reason: {}, winner: {})",
                     loserName, loserPkg.getScopeReason(), winningVersion);
+            }
+        }
+
+        // Step 6: Mark winners with defeated versions
+        for (Map.Entry<String, String> entry : winningVersions.entrySet()) {
+            String baseKey = entry.getKey();
+            String winningVersion = entry.getValue();
+            List<String> defeated = defeatedVersionsByBaseKey.get(baseKey);
+
+            if (defeated != null && !defeated.isEmpty()) {
+                // Find the winner package node
+                String winnerFullName = baseKey + ":" + winningVersion;
+                DependencyNode winnerNode = allNodes.get(winnerFullName);
+
+                if (winnerNode != null) {
+                    Package winnerPkg = winnerNode.getPackage();
+                    winnerPkg.setScopeStrategy(strategy);  // Set strategy on winner too
+                    for (String defeatedVersion : defeated) {
+                        winnerPkg.addDefeatedVersion(defeatedVersion);
+                    }
+                    logger.debug("Winner {} defeated versions: {}", winnerFullName, defeated);
+                }
             }
         }
 
