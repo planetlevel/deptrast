@@ -807,13 +807,6 @@
 
                 while (currentLevel.size > 0) {
                     console.log(`  📊 Parent Level ${distance}: currentLevel has ${currentLevel.size} nodes`);
-
-                    // Add current level nodes to parentLevelMap first
-                    if (!parentLevelMap.has(distance)) {
-                        parentLevelMap.set(distance, new Set());
-                    }
-                    currentLevel.forEach(purl => parentLevelMap.get(distance).add(purl));
-
                     const nextLevel = new Set();
 
                     for (const purl of currentLevel) {
@@ -823,8 +816,14 @@
                         for (const parent of parents) {
                             // Only continue traversing if we haven't seen this node yet
                             if (!seenAtLevel.has(parent)) {
-                                seenAtLevel.set(parent, distance + 1);
+                                seenAtLevel.set(parent, distance);
                                 nextLevel.add(parent);
+
+                                // Add parent to the level map
+                                if (!parentLevelMap.has(distance)) {
+                                    parentLevelMap.set(distance, new Set());
+                                }
+                                parentLevelMap.get(distance).add(parent);
                             }
                         }
                     }
@@ -861,13 +860,6 @@
 
                 while (currentLevel.size > 0) {
                     console.log(`  📊 Child Level ${distance}: currentLevel has ${currentLevel.size} nodes`);
-
-                    // Add current level nodes to childLevelMap first
-                    if (!childLevelMap.has(distance)) {
-                        childLevelMap.set(distance, new Set());
-                    }
-                    currentLevel.forEach(purl => childLevelMap.get(distance).add(purl));
-
                     const nextLevel = new Set();
 
                     for (const purl of currentLevel) {
@@ -877,8 +869,14 @@
                         for (const child of children) {
                             // Only continue traversing if we haven't seen this node yet
                             if (!seenAtLevel.has(child)) {
-                                seenAtLevel.set(child, distance + 1);
+                                seenAtLevel.set(child, distance);
                                 nextLevel.add(child);
+
+                                // Add child to the level map
+                                if (!childLevelMap.has(distance)) {
+                                    childLevelMap.set(distance, new Set());
+                                }
+                                childLevelMap.get(distance).add(child);
                             }
                         }
                     }
