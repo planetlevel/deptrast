@@ -807,6 +807,13 @@
 
                 while (currentLevel.size > 0) {
                     console.log(`  📊 Parent Level ${distance}: currentLevel has ${currentLevel.size} nodes`);
+
+                    // Add current level nodes to parentLevelMap first
+                    if (!parentLevelMap.has(distance)) {
+                        parentLevelMap.set(distance, new Set());
+                    }
+                    currentLevel.forEach(purl => parentLevelMap.get(distance).add(purl));
+
                     const nextLevel = new Set();
 
                     for (const purl of currentLevel) {
@@ -814,18 +821,11 @@
                         console.log(`    🔗 ${purl.substring(purl.lastIndexOf('/') + 1)}: ${parents.length} parents total`);
 
                         for (const parent of parents) {
-                            // Only continue traversing if we haven't seen this node yet,
-                            // but ADD it to the level map even if we have (for visualization)
+                            // Only continue traversing if we haven't seen this node yet
                             if (!seenAtLevel.has(parent)) {
-                                seenAtLevel.set(parent, distance);
+                                seenAtLevel.set(parent, distance + 1);
                                 nextLevel.add(parent);
                             }
-
-                            // Always add to parentLevelMap for this level (allows nodes at multiple levels)
-                            if (!parentLevelMap.has(distance)) {
-                                parentLevelMap.set(distance, new Set());
-                            }
-                            parentLevelMap.get(distance).add(parent);
                         }
                     }
 
@@ -861,6 +861,13 @@
 
                 while (currentLevel.size > 0) {
                     console.log(`  📊 Child Level ${distance}: currentLevel has ${currentLevel.size} nodes`);
+
+                    // Add current level nodes to childLevelMap first
+                    if (!childLevelMap.has(distance)) {
+                        childLevelMap.set(distance, new Set());
+                    }
+                    currentLevel.forEach(purl => childLevelMap.get(distance).add(purl));
+
                     const nextLevel = new Set();
 
                     for (const purl of currentLevel) {
@@ -868,18 +875,11 @@
                         console.log(`    🔗 ${purl.substring(purl.lastIndexOf('/') + 1)}: ${children.length} children total`);
 
                         for (const child of children) {
-                            // Only continue traversing if we haven't seen this node yet,
-                            // but ADD it to the level map even if we have (for visualization)
+                            // Only continue traversing if we haven't seen this node yet
                             if (!seenAtLevel.has(child)) {
-                                seenAtLevel.set(child, distance);
+                                seenAtLevel.set(child, distance + 1);
                                 nextLevel.add(child);
                             }
-
-                            // Always add to childLevelMap for this level (allows nodes at multiple levels)
-                            if (!childLevelMap.has(distance)) {
-                                childLevelMap.set(distance, new Set());
-                            }
-                            childLevelMap.get(distance).add(child);
                         }
                     }
 
