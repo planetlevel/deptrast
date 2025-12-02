@@ -797,12 +797,16 @@
                 let currentLevel = new Set([startPurl]);
                 let distance = 1;
 
+                console.log(`🔍 Starting parent traversal from ${startPurl}`);
+
                 while (currentLevel.size > 0) {
+                    console.log(`  📊 Parent Level ${distance}: currentLevel has ${currentLevel.size} nodes`);
                     const nextLevel = new Set();
 
                     for (const purl of currentLevel) {
                         const parents = reverseDependencyMap.get(purl) || [];
                         const filteredParents = filterNodesByScope(parents);
+                        console.log(`    🔗 ${purl.substring(purl.lastIndexOf('/') + 1)}: ${parents.length} parents total, ${filteredParents.length} after filtering`);
 
                         for (const parent of filteredParents) {
                             if (!visited.has(parent)) {
@@ -817,9 +821,12 @@
                         }
                     }
 
+                    console.log(`  ✅ Parent Level ${distance} complete: found ${nextLevel.size} nodes for next level`);
                     currentLevel = nextLevel;
                     distance++;
                 }
+
+                console.log(`🏁 Parent traversal complete: reached ${distance - 1} levels, visited ${visited.size} total nodes`);
             }
 
             // Get all parents (walk until we hit roots)
@@ -834,12 +841,16 @@
                 let currentLevel = new Set([startPurl]);
                 let distance = 1;
 
+                console.log(`🔍 Starting child traversal from ${startPurl}`);
+
                 while (currentLevel.size > 0) {
+                    console.log(`  📊 Child Level ${distance}: currentLevel has ${currentLevel.size} nodes`);
                     const nextLevel = new Set();
 
                     for (const purl of currentLevel) {
                         const children = dependencyMap.get(purl) || [];
                         const filteredChildren = filterNodesByScope(children);
+                        console.log(`    🔗 ${purl.substring(purl.lastIndexOf('/') + 1)}: ${children.length} children total, ${filteredChildren.length} after filtering`);
 
                         for (const child of filteredChildren) {
                             if (!visited.has(child)) {
@@ -854,9 +865,12 @@
                         }
                     }
 
+                    console.log(`  ✅ Child Level ${distance} complete: found ${nextLevel.size} nodes for next level`);
                     currentLevel = nextLevel;
                     distance++;
                 }
+
+                console.log(`🏁 Child traversal complete: reached ${distance - 1} levels, visited ${visited.size} total nodes`);
             }
 
             // Get all children (walk until we hit leaves)
