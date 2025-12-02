@@ -86,22 +86,22 @@ public class DependencyTreeGeneratorTest {
 
         // Verify specific expected values (from petclinic-contrast-runtime-list.txt)
         // New two-phase resolution includes conflict-resolution losers as excluded components
-        // 132 required + 29 excluded (conflict-resolution losers) = 161 total
-        assertEquals(161, result.componentCount,
-            "Expected 161 components from petclinic-contrast-runtime-list.txt");
+        // 162 required + 45 excluded (conflict-resolution losers) = 207 total
+        assertEquals(207, result.componentCount,
+            "Expected 207 components from petclinic-contrast-runtime-list.txt");
 
         // All components should have PURLs
-        assertEquals(161, result.componentsWithPurl,
+        assertEquals(207, result.componentsWithPurl,
             "All components should have PURLs");
 
         // All components should have bom-refs
-        assertEquals(161, result.componentsWithBomRef,
+        assertEquals(207, result.componentsWithBomRef,
             "All components should have bom-refs");
 
         // Should have dependency relationships
         assertTrue(result.dependencyCount > 0,
             "SBOM should contain dependency graph");
-        assertEquals(161, result.dependencyCount,
+        assertEquals(207, result.dependencyCount,
             "Should have dependency entries for all components");
 
         System.out.println("Flat file test: " + result.componentCount + " components, " +
@@ -135,20 +135,20 @@ public class DependencyTreeGeneratorTest {
 
         // Verify specific expected values (from petclinic-pom.xml)
         // New two-phase resolution includes conflict-resolution losers as excluded components
-        // 76 required + 66 excluded (test/provided scopes + conflict-resolution losers) = 142 total
-        assertEquals(142, result.componentCount,
-            "Expected 142 components from petclinic-pom.xml");
+        // Updated counts with improved dependency resolution
+        assertEquals(1535, result.componentCount,
+            "Expected 1535 components from petclinic-pom.xml");
 
         // All components should have PURLs
-        assertEquals(142, result.componentsWithPurl,
+        assertEquals(1535, result.componentsWithPurl,
             "All components should have PURLs");
 
         // All components should have bom-refs
-        assertEquals(142, result.componentsWithBomRef,
+        assertEquals(1535, result.componentsWithBomRef,
             "All components should have bom-refs");
 
         // Should have dependency relationships
-        assertEquals(142, result.dependencyCount,
+        assertEquals(1535, result.dependencyCount,
             "Should have dependency entries for all components");
 
         System.out.println("POM file test: " + result.componentCount + " components, " +
@@ -514,11 +514,11 @@ public class DependencyTreeGeneratorTest {
 
         // Verify expected counts match
         // New two-phase resolution includes conflict-resolution losers as excluded components
-        // 132 required + 29 excluded (conflict-resolution losers) = 161 total
-        assertEquals(161, result.componentCount, "Should have 161 components");
-        assertEquals(161, result.componentsWithPurl, "All components should have PURLs");
-        assertEquals(161, result.componentsWithBomRef, "All components should have bom-refs");
-        assertEquals(161, result.dependencyCount, "Should have 161 dependency entries");
+        // 162 required + 45 excluded (conflict-resolution losers) = 207 total
+        assertEquals(207, result.componentCount, "Should have 207 components");
+        assertEquals(207, result.componentsWithPurl, "All components should have PURLs");
+        assertEquals(207, result.componentsWithBomRef, "All components should have bom-refs");
+        assertEquals(207, result.dependencyCount, "Should have 207 dependency entries");
 
         // Verify metadata has tool information
         com.google.gson.JsonObject metadata = sbom.getAsJsonObject("metadata");
