@@ -647,8 +647,13 @@
                 const isRoot = rootSet.has(purl);
 
                 if (deps.length === 0 && reverseDeps.length > 0) {
+                    // Leaf: has parents, no children
                     leafNodes.push({ purl, comp, isRoot });
+                } else if (deps.length > 0 && reverseDeps.length === 0) {
+                    // True root: has children, no parents
+                    rootInnerNodes.push({ purl, comp, isRoot: true });
                 } else if (deps.length > 0 && reverseDeps.length > 0) {
+                    // Inner: has both parents and children
                     if (isRoot) {
                         rootInnerNodes.push({ purl, comp, isRoot });
                     } else {
