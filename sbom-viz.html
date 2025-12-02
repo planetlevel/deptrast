@@ -195,11 +195,24 @@
         }
 
         .node-item {
-            padding: 12px 20px;
+            padding: 8px 20px 8px 50px;
             cursor: pointer;
             border-left: 4px solid transparent;
             transition: all 0.15s;
             position: relative;
+            margin-bottom: 6px;
+        }
+
+        .node-type-icon {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 24px;
+            font-weight: 900;
+            color: #666;
+            font-family: monospace;
+            line-height: 1;
         }
 
         .node-item:hover {
@@ -372,26 +385,6 @@
             color: #0078d4;
         }
 
-        .path-display {
-            background: white;
-            border: 1px solid #e0e0e0;
-            border-radius: 4px;
-            padding: 12px;
-            font-size: 11px;
-            color: #666;
-            max-height: 200px;
-            overflow-y: auto;
-        }
-
-        .path-display .path-item {
-            padding: 4px 0;
-            border-bottom: 1px solid #f0f0f0;
-        }
-
-        .path-display .path-item:last-child {
-            border-bottom: none;
-        }
-
         #componentDetails {
             background: white;
             border: 1px solid #e0e0e0;
@@ -525,27 +518,6 @@
             <h2>Component Details</h2>
             <div id="componentDetails">
                 <em>Click a component to see details</em>
-            </div>
-
-            <h2 style="margin-top: 30px;">Paths to Component</h2>
-            <div class="path-display" id="pathsDisplay">
-                <em>Click a component to see all paths</em>
-            </div>
-
-            <h2 style="margin-top: 30px;">Dependency Tree Stats</h2>
-            <div id="treeStats" style="display: none;">
-                <div class="stat-item">
-                    <div class="stat-label">Direct Dependencies</div>
-                    <div class="stat-value" id="directDeps">0</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-label">Total Transitive</div>
-                    <div class="stat-value" id="transitiveDeps">0</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-label">Max Depth</div>
-                    <div class="stat-value" id="treeDepth">0</div>
-                </div>
             </div>
         </div>
     </div>
@@ -1079,15 +1051,15 @@
                     nodeTypeIcon = '<|'; // Leaf: has parents, no children
                 } else if (hasDeps && hasParents) {
                     nodeTypeIcon = '<>'; // Inner: has both
+                } else {
+                    nodeTypeIcon = '○'; // Isolated: no parents, no children
                 }
 
-                // Add icon as a separate element on the left
-                if (nodeTypeIcon) {
-                    const iconDiv = document.createElement('div');
-                    iconDiv.className = 'node-type-icon';
-                    iconDiv.textContent = nodeTypeIcon;
-                    item.appendChild(iconDiv);
-                }
+                // Always add icon element on the left
+                const iconDiv = document.createElement('div');
+                iconDiv.className = 'node-type-icon';
+                iconDiv.textContent = nodeTypeIcon;
+                item.appendChild(iconDiv);
 
                 // Line 1: Group (filter out urn:cdx: and other URN prefixes)
                 const groupDiv = document.createElement('div');
