@@ -818,13 +818,13 @@
                             if (!seenAtLevel.has(parent)) {
                                 seenAtLevel.set(parent, distance);
                                 nextLevel.add(parent);
-
-                                // Add parent to the level map
-                                if (!parentLevelMap.has(distance)) {
-                                    parentLevelMap.set(distance, new Set());
-                                }
-                                parentLevelMap.get(distance).add(parent);
                             }
+
+                            // Always add parent to level map (allows diamond dependencies at multiple levels)
+                            if (!parentLevelMap.has(distance)) {
+                                parentLevelMap.set(distance, new Set());
+                            }
+                            parentLevelMap.get(distance).add(parent);
                         }
                     }
 
@@ -871,13 +871,13 @@
                             if (!seenAtLevel.has(child)) {
                                 seenAtLevel.set(child, distance);
                                 nextLevel.add(child);
-
-                                // Add child to the level map
-                                if (!childLevelMap.has(distance)) {
-                                    childLevelMap.set(distance, new Set());
-                                }
-                                childLevelMap.get(distance).add(child);
                             }
+
+                            // Always add child to level map (allows diamond dependencies at multiple levels)
+                            if (!childLevelMap.has(distance)) {
+                                childLevelMap.set(distance, new Set());
+                            }
+                            childLevelMap.get(distance).add(child);
                         }
                     }
 
