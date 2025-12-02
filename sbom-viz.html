@@ -1026,7 +1026,11 @@
             // Create title with numbering
             const titleSpan = document.createElement('span');
             titleSpan.className = 'column-title';
-            if (columnIndex === 0) {
+            if (title) {
+                // Use provided title (for focus mode)
+                titleSpan.textContent = title;
+            } else if (columnIndex === 0) {
+                // Default for app mode
                 titleSpan.textContent = 'Direct Dependencies';
             } else {
                 titleSpan.textContent = `Transitive Dependencies ${columnIndex}`;
