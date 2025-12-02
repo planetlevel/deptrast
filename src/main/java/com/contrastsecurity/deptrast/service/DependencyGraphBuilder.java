@@ -138,32 +138,23 @@ public class DependencyGraphBuilder implements AutoCloseable {
         }
 
         // STEP 2: Fetch complete dependency graph for each package
-        // Skip packages that already appear in other trees to reduce API calls
-        Set<String> packagesAlreadyInTrees = new HashSet<>();
-        int skippedCount = 0;
-
         for (Package pkg : packagesToFetch) {
             String pkgName = pkg.getFullName();
-
-            // Check if this package already appears in any fetched tree
-            if (packagesAlreadyInTrees.contains(pkgName)) {
-                logger.debug("Skipping {} - already found in another dependency tree", pkgName);
-                skippedCount++;
-                continue;
-            }
 
             DependencyNode tree = fetchCompleteDependencyTree(pkg, inputPackageNames);
             if (tree != null) {
                 completeTrees.put(pkgName, tree);
-
-                // Add all packages in this tree to the set to avoid redundant fetches
-                collectAllPackageNames(tree, packagesAlreadyInTrees);
             }
         }
 
-        if (skippedCount > 0) {
-            logger.info("⚡ Optimization: Skipped {} packages already found in other trees ({} fewer API calls)",
-                skippedCount, skippedCount);
+        logger.info("Fetched {} graphs", completeTrees.size());
+
+        // STEP 2.5: Apply dependency management overrides by fetching correct versions and replacing nodes
+        try {
+            applyManagedVersionOverrides();
+        } catch (Exception e) {
+            System.err.println("ERROR in applyManagedVersionOverrides: " + e.getMessage());
+            e.printStackTrace();
         }
 
         // STEP 3: Find which INPUT packages appear as dependencies in OTHER input packages' trees
@@ -196,6 +187,136 @@ public class DependencyGraphBuilder implements AutoCloseable {
         this.rootNodes = rootTrees;
 
         return rootTrees;
+    }
+
+    /**
+     * Apply dependency management overrides by fetching correct versions and replacing wrong nodes.
+     * For each node in allNodes where dependency management specifies a different version:
+     * 1. Fetch the correct version from deps.dev
+     * 2. Remove the wrong version node (if it has no other parents)
+     * 3. Add the correct version node and redirect parent edges
+     */
+    private void applyManagedVersionOverrides() {
+        if (dependencyManagement.isEmpty()) {
+            return;
+        }
+
+        logger.info("Applying managed version overrides ({} managed versions, {} nodes)",
+            dependencyManagement.size(), allNodes.size());
+
+        Map<String, String> nodesToReplace = new HashMap<>(); // wrongFullName -> correctFullName
+
+        // Find all nodes that need to be replaced
+        for (Map.Entry<String, DependencyNode> entry : new HashMap<>(allNodes).entrySet()) {
+            String fullName = entry.getKey();
+            DependencyNode node = entry.getValue();
+            Package pkg = node.getPackage();
+
+            String baseKey = getBaseKey(pkg);
+            String managedVersion = dependencyManagement.get(baseKey);
+
+            if (managedVersion != null && !managedVersion.equals(pkg.getVersion())) {
+                String correctFullName = pkg.getSystem().toLowerCase() + ":" + pkg.getName() + ":" + managedVersion;
+                nodesToReplace.put(fullName, correctFullName);
+                logger.info("Need to replace {} with managed version {}", fullName, correctFullName);
+            }
+        }
+
+        if (nodesToReplace.isEmpty()) {
+            logger.info("No version overrides needed");
+            return;
+        }
+
+        // Fetch the correct versions
+        for (Map.Entry<String, String> replacement : nodesToReplace.entrySet()) {
+            String wrongFullName = replacement.getKey();
+            String correctFullName = replacement.getValue();
+
+            // Skip if we already have the correct version
+            if (allNodes.containsKey(correctFullName)) {
+                logger.debug("Correct version {} already exists", correctFullName);
+                continue;
+            }
+
+            // Parse the correct version info
+            String[] parts = correctFullName.split(":");
+            if (parts.length != 3) {
+                logger.warn("Invalid fullName format: {}", correctFullName);
+                continue;
+            }
+
+            String system = parts[0];
+            String name = parts[1];
+            String version = parts[2];
+
+            Package correctPkg = new Package(system, name, version);
+
+            logger.info("Fetching managed version: {}", correctFullName);
+
+            try {
+                DependencyNode correctTree = fetchCompleteDependencyTree(correctPkg, new HashSet<>());
+                if (correctTree != null) {
+                    // The correct version is now in allNodes via fetchCompleteDependencyTree
+                    logger.info("Successfully fetched managed version {}", correctFullName);
+                } else {
+                    logger.warn("Failed to fetch managed version {}", correctFullName);
+                }
+            } catch (Exception e) {
+                logger.warn("Error fetching managed version {}: {}", correctFullName, e.getMessage());
+            }
+        }
+
+        // Now redirect edges from wrong versions to correct versions
+        for (Map.Entry<String, String> replacement : nodesToReplace.entrySet()) {
+            String wrongFullName = replacement.getKey();
+            String correctFullName = replacement.getValue();
+
+            DependencyNode wrongNode = allNodes.get(wrongFullName);
+            DependencyNode correctNode = allNodes.get(correctFullName);
+
+            if (wrongNode == null || correctNode == null) {
+                continue;
+            }
+
+            // Mark wrong version as excluded due to dependency management override
+            Package wrongPkg = wrongNode.getPackage();
+            String[] correctParts = correctFullName.split(":");
+            String managedVersion = correctParts.length == 3 ? correctParts[2] : "unknown";
+
+            wrongPkg.setScope("excluded");
+            wrongPkg.setScopeReason("dependency-management-override");
+            wrongPkg.setWinningVersion(managedVersion);
+            logger.info("Marked {} as excluded (dependency management override, winner: {})", wrongFullName, managedVersion);
+
+            // Find all parents of the wrong node
+            Set<String> parents = parentMap.getOrDefault(wrongFullName, Collections.emptySet());
+
+            for (String parentName : new HashSet<>(parents)) {
+                DependencyNode parentNode = allNodes.get(parentName);
+                if (parentNode == null) {
+                    continue;
+                }
+
+                // Replace wrong child with correct child in parent
+                parentNode.getChildren().remove(wrongNode);
+                if (!parentNode.getChildren().contains(correctNode)) {
+                    parentNode.addChild(correctNode);
+                    parentMap.computeIfAbsent(correctFullName, k -> new HashSet<>()).add(parentName);
+                    logger.debug("Redirected {} → {} to use managed version {}", parentName, wrongFullName, correctFullName);
+                }
+            }
+
+            // Check if wrong node has any remaining parents
+            Set<String> remainingParents = parentMap.getOrDefault(wrongFullName, Collections.emptySet());
+            if (remainingParents.isEmpty()) {
+                // No one else references this node, can remove it (but we already marked it excluded above)
+                logger.debug("Would remove unreferenced wrong version {} but keeping for excluded scope tracking", wrongFullName);
+            } else {
+                logger.debug("Keeping wrong version {} as excluded (still has {} parents)", wrongFullName, remainingParents.size());
+            }
+        }
+
+        logger.info("Applied {} managed version overrides", nodesToReplace.size());
     }
 
     /**
@@ -232,15 +353,27 @@ public class DependencyGraphBuilder implements AutoCloseable {
      * @param packageNames Set to add package names to
      */
     private void collectAllPackageNames(DependencyNode node, Set<String> packageNames) {
+        collectAllPackageNames(node, packageNames, new HashSet<>());
+    }
+
+    private void collectAllPackageNames(DependencyNode node, Set<String> packageNames, Set<String> visited) {
         if (node == null) {
             return;
         }
 
-        packageNames.add(node.getPackage().getFullName());
+        String packageName = node.getPackage().getFullName();
+
+        // Prevent infinite loops when visiting shared nodes
+        if (visited.contains(packageName)) {
+            return;
+        }
+        visited.add(packageName);
+
+        packageNames.add(packageName);
 
         // Recurse into children
         for (DependencyNode child : node.getChildren()) {
-            collectAllPackageNames(child, packageNames);
+            collectAllPackageNames(child, packageNames, visited);
         }
     }
 
@@ -508,10 +641,19 @@ public class DependencyGraphBuilder implements AutoCloseable {
             String baseKey = getBaseKey(loserPkg);
             String winningVersion = winningVersions.get(baseKey);
 
-            loserPkg.setScope("excluded");
-            loserPkg.setScopeReason("conflict-resolution-loser");
-            loserPkg.setWinningVersion(winningVersion);
-            logger.debug("Marked as excluded: {} (winner: {})", loserName, winningVersion);
+            // Only set scope reason if not already set (preserve dependency-management-override from Phase 1.5)
+            if (loserPkg.getScopeReason() == null || loserPkg.getScopeReason().isEmpty()) {
+                loserPkg.setScope("excluded");
+                loserPkg.setScopeReason("conflict-resolution-loser");
+                loserPkg.setWinningVersion(winningVersion);
+                logger.debug("Marked as excluded: {} (winner: {})", loserName, winningVersion);
+            } else {
+                // Already marked (e.g., by dependency management), just ensure scope is excluded
+                loserPkg.setScope("excluded");
+                loserPkg.setWinningVersion(winningVersion);
+                logger.debug("Already marked as excluded: {} (reason: {}, winner: {})",
+                    loserName, loserPkg.getScopeReason(), winningVersion);
+            }
         }
 
         // Step 5: Mark loser subtrees as excluded (unless other incoming links)

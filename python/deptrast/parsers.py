@@ -528,7 +528,15 @@ class FileParser:
                         else:
                             logger.warn(f"Skipping dependency with unresolvable version: {group_id}:{artifact_id}:{version}")
                             continue
-    
+
+                    # ALWAYS check if dependency management overrides this version
+                    # This matches Maven's behavior where dependency management wins
+                    key = f"{group_id}:{artifact_id}"
+                    managed_version = dependency_management.get(key)
+                    if managed_version and managed_version != version:
+                        logger.info(f"Overriding {group_id}:{artifact_id} version {version} with managed version {managed_version}")
+                        version = managed_version
+
                     name = f"{group_id}:{artifact_id}"
                     # Use "optional" scope if optional=true, otherwise use Maven scope
                     effective_scope = "optional" if optional == 'true' else scope
@@ -549,7 +557,7 @@ class FileParser:
             logger.error(f"Error parsing pom.xml file {file_path}: {e}")
             import traceback
             traceback.print_exc()
-    
+
         return packages, dependency_management, exclusions_map
     
 

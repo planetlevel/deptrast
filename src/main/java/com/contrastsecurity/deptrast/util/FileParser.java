@@ -254,6 +254,24 @@ public class FileParser {
                 if (node.getNodeType() == Node.ELEMENT_NODE) {
                     Element element = (Element) node;
 
+                    // ONLY include dependencies from <project><dependencies><dependency>
+                    // Skip dependencies from:
+                    //   - <dependencyManagement><dependencies><dependency>
+                    //   - <build><plugins><plugin><dependencies><dependency>
+                    //   - <profiles><profile><dependencies><dependency>
+                    Node parent = element.getParentNode();
+                    if (parent == null || !"dependencies".equals(parent.getNodeName())) {
+                        continue;
+                    }
+
+                    Node grandparent = parent.getParentNode();
+                    if (grandparent == null || !"project".equals(grandparent.getNodeName())) {
+                        logger.debug("Skipping non-project dependency (parent: {}): {}:{}",
+                            grandparent != null ? grandparent.getNodeName() : "null",
+                            getElementText(element, "groupId"), getElementText(element, "artifactId"));
+                        continue;
+                    }
+
                     // Apply scope filtering
                     String scope = getElementText(element, "scope");
                     // Default scope is compile if not specified
@@ -301,9 +319,11 @@ public class FileParser {
                     Set<String> depExclusions = parseExclusions(element);
 
                     if (groupId != null && artifactId != null) {
+                        String key = groupId + ":" + artifactId;
+                        String declaredVersion = version;
+
                         // If version is not specified, try to get it from dependency management
                         if (version == null || version.isEmpty()) {
-                            String key = groupId + ":" + artifactId;
                             version = dependencyManagement.get(key);
                             if (version != null) {
                                 logger.info("Resolved version for {}:{} from dependencyManagement: {}", groupId, artifactId, version);
@@ -321,6 +341,15 @@ public class FileParser {
                                 logger.warn("Skipping dependency with unresolvable version: {}:{}:{}", groupId, artifactId, version);
                                 continue;
                             }
+                        }
+
+                        // ALWAYS check if dependency management overrides this version
+                        // This matches Maven's behavior where dependency management wins
+                        String managedVersion = dependencyManagement.get(key);
+                        if (managedVersion != null && !managedVersion.equals(version)) {
+                            logger.info("Overriding {}:{} version {} with managed version {}",
+                                groupId, artifactId, version, managedVersion);
+                            version = managedVersion;
                         }
 
                         String name = groupId + ":" + artifactId;

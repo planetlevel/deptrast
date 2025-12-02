@@ -74,6 +74,14 @@ class DependencyGraphBuilder:
         logger.info("PHASE 1: Building raw dependency graph from deps.dev")
         self._build_raw_graph(input_packages)
 
+        # PHASE 1.5: Apply dependency management overrides by fetching correct versions
+        try:
+            self._apply_managed_version_overrides()
+        except Exception as e:
+            logger.error(f"ERROR in _apply_managed_version_overrides: {e}")
+            import traceback
+            traceback.print_exc()
+
         # PHASE 2: SKIPPED FOR NOW - just find root nodes
         logger.info("PHASE 2: SKIPPED - no reconciliation, all versions included")
 
@@ -111,6 +119,106 @@ class DependencyGraphBuilder:
         Used for grouping different versions of the same library.
         """
         return f"{pkg.system.lower()}:{pkg.name}"
+
+    def _apply_managed_version_overrides(self) -> None:
+        """
+        Apply dependency management overrides by fetching correct versions and replacing wrong nodes.
+        For each node in all_nodes where dependency management specifies a different version:
+        1. Fetch the correct version from deps.dev
+        2. Remove the wrong version node (if it has no other parents)
+        3. Add the correct version node and redirect parent edges
+        """
+        if not self.dependency_management:
+            return
+
+        logger.info(f"Applying managed version overrides ({len(self.dependency_management)} managed versions, {len(self.all_nodes)} nodes)")
+
+        nodes_to_replace = {}  # wrong_full_name -> correct_full_name
+
+        # Find all nodes that need to be replaced
+        for full_name, node in list(self.all_nodes.items()):
+            pkg = node.package
+            base_key = self._get_base_key(pkg)
+            managed_version = self.dependency_management.get(base_key)
+
+            if managed_version and managed_version != pkg.version:
+                correct_full_name = f"{pkg.system.lower()}:{pkg.name}:{managed_version}"
+                nodes_to_replace[full_name] = correct_full_name
+                logger.info(f"Need to replace {full_name} with managed version {correct_full_name}")
+
+        if not nodes_to_replace:
+            logger.info("No version overrides needed")
+            return
+
+        # Fetch the correct versions
+        for wrong_full_name, correct_full_name in nodes_to_replace.items():
+            # Skip if we already have the correct version
+            if correct_full_name in self.all_nodes:
+                logger.debug(f"Correct version {correct_full_name} already exists")
+                continue
+
+            # Parse the correct version info
+            parts = correct_full_name.split(':')
+            if len(parts) != 3:
+                logger.warning(f"Invalid fullName format: {correct_full_name}")
+                continue
+
+            system, name, version = parts
+            correct_pkg = Package(system=system, name=name, version=version)
+
+            logger.info(f"Fetching managed version: {correct_full_name}")
+
+            try:
+                correct_tree = self._fetch_raw_dependency_graph(correct_pkg)
+                if correct_tree:
+                    logger.info(f"Successfully fetched managed version {correct_full_name}")
+                else:
+                    logger.warning(f"Failed to fetch managed version {correct_full_name}")
+            except Exception as e:
+                logger.warning(f"Error fetching managed version {correct_full_name}: {e}")
+
+        # Now redirect edges from wrong versions to correct versions
+        for wrong_full_name, correct_full_name in nodes_to_replace.items():
+            wrong_node = self.all_nodes.get(wrong_full_name)
+            correct_node = self.all_nodes.get(correct_full_name)
+
+            if not wrong_node or not correct_node:
+                continue
+
+            # Mark wrong version as excluded due to dependency management override
+            wrong_pkg = wrong_node.package
+            parts = correct_full_name.split(':')
+            managed_version = parts[2] if len(parts) == 3 else "unknown"
+
+            wrong_pkg.scope = "excluded"
+            wrong_pkg.scope_reason = "dependency-management-override"
+            wrong_pkg.winning_version = managed_version
+            logger.info(f"Marked {wrong_full_name} as excluded (dependency management override, winner: {managed_version})")
+
+            # Find all parents of the wrong node
+            parents = self.parent_map.get(wrong_full_name, set())
+
+            for parent_name in list(parents):
+                parent_node = self.all_nodes.get(parent_name)
+                if not parent_node:
+                    continue
+
+                # Replace wrong child with correct child in parent
+                if wrong_node in parent_node.children:
+                    parent_node.children.remove(wrong_node)
+                if correct_node not in parent_node.children:
+                    parent_node.add_child(correct_node)
+                    self.parent_map.setdefault(correct_full_name, set()).add(parent_name)
+                    logger.debug(f"Redirected {parent_name} → {wrong_full_name} to use managed version {correct_full_name}")
+
+            # Check if wrong node has any remaining parents
+            remaining_parents = self.parent_map.get(wrong_full_name, set())
+            if not remaining_parents:
+                logger.debug(f"Would remove unreferenced wrong version {wrong_full_name} but keeping for excluded scope tracking")
+            else:
+                logger.debug(f"Keeping wrong version {wrong_full_name} as excluded (still has {len(remaining_parents)} parents)")
+
+        logger.info(f"Applied {len(nodes_to_replace)} managed version overrides")
 
     def apply_conflict_resolution(self) -> None:
         """
@@ -168,10 +276,17 @@ class DependencyGraphBuilder:
             base_key = self._get_base_key(loser_pkg)
             winning_version = winning_versions.get(base_key)
 
-            loser_pkg.scope = 'excluded'
-            loser_pkg.scope_reason = 'conflict-resolution-loser'
-            loser_pkg.winning_version = winning_version
-            logger.debug(f"Marked as excluded: {loser_name} (winner: {winning_version})")
+            # Only set scope reason if not already set (preserve dependency-management-override from Phase 1.5)
+            if not loser_pkg.scope_reason:
+                loser_pkg.scope = 'excluded'
+                loser_pkg.scope_reason = 'conflict-resolution-loser'
+                loser_pkg.winning_version = winning_version
+                logger.debug(f"Marked as excluded: {loser_name} (winner: {winning_version})")
+            else:
+                # Already marked (e.g., by dependency management), just ensure scope is excluded
+                loser_pkg.scope = 'excluded'
+                loser_pkg.winning_version = winning_version
+                logger.debug(f"Already marked as excluded: {loser_name} (reason: {loser_pkg.scope_reason}, winner: {winning_version})")
 
         # Step 5: Mark loser subtrees as excluded (unless other incoming links)
         excluded_subtree_count = self._mark_loser_subtrees_excluded(losers)
@@ -199,28 +314,42 @@ class DependencyGraphBuilder:
                 self.all_packages[pkg.full_name] = pkg
                 logger.debug(f"Pre-registered input package: {pkg.full_name} (scope: {pkg.scope})")
 
-        packages_already_in_trees = set()
-        skipped_count = 0
+        # STEP 1.5: Add managed dependency versions to fetch list if not already present
+        input_package_names = {pkg.full_name for pkg in input_packages}
+        packages_to_fetch = list(input_packages)
 
-        for pkg in input_packages:
-            pkg_name = pkg.full_name
-
-            # Check if this package already appears in any fetched tree
-            if pkg_name in packages_already_in_trees:
-                logger.debug(f"Skipping {pkg_name} - already found in another dependency tree")
-                skipped_count += 1
+        logger.debug(f"Processing {len(self.dependency_management)} managed dependencies")
+        for group_and_artifact, version in self.dependency_management.items():
+            # Dependency management from POM is always Maven
+            # Parse groupId:artifactId
+            parts = group_and_artifact.split(':')
+            if len(parts) != 2:
+                logger.warning(f"Invalid dependency management key format: {group_and_artifact}")
                 continue
+
+            group_id, artifact_id = parts
+            name = f"{group_id}:{artifact_id}"
+            full_name = f"maven:{name}:{version}"
+
+            # Only add if not already in input packages
+            if full_name not in input_package_names:
+                managed_pkg = Package(system='maven', name=name, version=version)
+                packages_to_fetch.append(managed_pkg)
+                self.all_packages[full_name] = managed_pkg
+                logger.info(f"Adding managed dependency version to fetch list: {full_name}")
+
+        for pkg in packages_to_fetch:
+            pkg_name = pkg.full_name
 
             # Fetch graph from deps.dev (this returns the COMPLETE transitive tree!)
             root_node = self._fetch_raw_dependency_graph(pkg)
             if root_node:
                 self.raw_graphs[pkg_name] = root_node
+                logger.debug(f"Successfully fetched graph for {pkg_name}")
+            else:
+                logger.debug(f"Failed to fetch graph for {pkg_name}")
 
-                # Add all packages in this tree to the set to avoid redundant fetches
-                self._collect_all_package_names(root_node, packages_already_in_trees)
-
-        if skipped_count > 0:
-            logger.info(f"⚡ Optimization: Skipped {skipped_count} packages already found in other trees ({skipped_count} fewer API calls)")
+        logger.info(f"Fetched {len(self.raw_graphs)} graphs")
 
         logger.info(f"Phase 1 complete: Fetched {len(self.raw_graphs)} graphs, "
                    f"total {len(self.all_nodes)} unique package versions")
@@ -264,6 +393,9 @@ class DependencyGraphBuilder:
         # If we have nodes but no edges, continue processing
         # (leaf packages have 1 SELF node and 0 edges)
 
+        # Track new packages added during this parse
+        packages_before = len(self.all_packages)
+
         # Build node map: index -> DependencyNode
         node_map: Dict[int, DependencyNode] = {}
         self_node_index = -1
@@ -305,6 +437,8 @@ class DependencyGraphBuilder:
         # Note: _build_graph_from_adjacency will only add children if the node doesn't already have them
         if self_node_index != -1:
             self._build_graph_from_adjacency(node_map, adjacency, self_node_index, set())
+            packages_added = len(self.all_packages) - packages_before
+            logger.debug(f"Parsed graph for {root_package.full_name}: {len(nodes)} nodes in response, {packages_added} new packages added to all_packages")
             return node_map[self_node_index]
 
         return DependencyNode(package=root_package)
@@ -859,8 +993,8 @@ class DependencyGraphBuilder:
         Returns ALL packages including non-winning versions that were discovered.
         This matches Java behavior - all versions are included in the SBOM.
         """
-        # Return all packages from all_nodes (includes both winning and non-winning versions)
-        packages = [node.package for node in self.all_nodes.values()]
+        # Return all packages from all_packages (includes ALL versions discovered, even excluded ones' children)
+        packages = list(self.all_packages.values())
 
         logger.info(f"get_all_reconciled_packages: returning {len(packages)} packages (all versions)")
 
