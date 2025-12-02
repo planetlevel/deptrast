@@ -727,15 +727,20 @@
             const selected = selector.value;
             currentSelectedComponent = selected;
 
+            console.log(`🎯 changeView() called. Selected: ${selected.substring(selected.lastIndexOf('/') + 1)}`);
+
             if (selected === '__app__') {
                 // App view: explore mode with click-to-drill
+                console.log(`  → Switching to APP view mode`);
                 const rootNodes = findRootNodes();
                 const filteredRoots = filterNodesByScope(rootNodes);
                 initializeAppView(filteredRoots);
             } else {
                 // Focus mode: center node with parents left, children right, no click
+                console.log(`  → Switching to FOCUS view mode`);
                 initializeFocusView(selected);
             }
+            console.log(`  → currentViewMode is now: ${currentViewMode}`);
         }
 
         function findRootNodes() {
@@ -1312,8 +1317,12 @@
 
             // Update SVG dimensions to cover the entire scrollable area
             const container = document.getElementById('columnsContainer');
-            svg.setAttribute('width', container.scrollWidth);
-            svg.setAttribute('height', container.scrollHeight);
+            const svgWidth = container.scrollWidth;
+            const svgHeight = container.scrollHeight;
+            svg.setAttribute('width', svgWidth);
+            svg.setAttribute('height', svgHeight);
+
+            console.log(`📐 SVG canvas dimensions: ${svgWidth}x${svgHeight}px`);
 
             // Add arrowhead marker definitions
             const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
@@ -1359,7 +1368,7 @@
             const scrollTop = document.getElementById('columnsContainer').scrollTop;
 
             // Helper function to draw a connector line
-            function drawLine(fromItem, toItem) {
+            function drawLine(fromItem, toItem, debugInfo) {
                 const fromRect = fromItem.getBoundingClientRect();
                 const toRect = toItem.getBoundingClientRect();
 
@@ -1367,6 +1376,10 @@
                 const y1 = fromRect.top + fromRect.height / 2 - containerRect.top + scrollTop;
                 const x2 = toRect.left - containerRect.left + scrollLeft - 6;
                 const y2 = toRect.top + toRect.height / 2 - containerRect.top + scrollTop;
+
+                if (debugInfo) {
+                    console.log(`        🎨 Arrow coords: (${Math.round(x1)},${Math.round(y1)}) → (${Math.round(x2)},${Math.round(y2)})`);
+                }
 
                 const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
                 const midX = (x1 + x2) / 2;
@@ -1452,19 +1465,20 @@
                     console.log(`    Found ${fromItems.length} items in from column`);
 
                     let arrowCount = 0;
-                    fromItems.forEach(fromItem => {
+                    fromItems.forEach((fromItem, itemIdx) => {
                         const fromPurl = fromItem.dataset.purl;
                         const fromName = fromPurl.substring(fromPurl.lastIndexOf('/') + 1);
                         const children = dependencyMap.get(fromPurl) || [];
                         console.log(`      ${fromName}: ${children.length} children in dependencyMap`);
 
                         // Draw arrow to each child in the next column
-                        children.forEach(childPurl => {
+                        children.forEach((childPurl, childIdx) => {
                             const childName = childPurl.substring(childPurl.lastIndexOf('/') + 1);
                             const toItem = toColumn.element.querySelector(`.node-item[data-purl="${childPurl}"]`);
                             if (toItem) {
+                                const showDebug = itemIdx === 0 && childIdx === 0; // Only debug first arrow
                                 console.log(`        ✓ Drawing arrow to ${childName}`);
-                                drawLine(fromItem, toItem);
+                                drawLine(fromItem, toItem, showDebug);
                                 arrowCount++;
                             } else {
                                 console.log(`        ✗ Child ${childName} not found in next column`);
