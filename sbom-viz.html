@@ -889,25 +889,6 @@
             // Get all children (walk until we hit leaves)
             getChildrenAtDistance(innerPurl);
 
-            // If no parents and no children after filtering, show message
-            if (parentLevelMap.size === 0 && childLevelMap.size === 0) {
-                // Just show the selected component alone
-                addColumn([innerPurl], 'Selected');
-
-                const container = document.getElementById('columnsContainer');
-                const message = document.createElement('div');
-                message.className = 'loading-message';
-                message.style.marginLeft = '20px';
-                message.innerHTML = '<div class="empty-state"><p>This component has no visible dependencies or dependents with the current scope filters.</p></div>';
-                container.appendChild(message);
-
-                updateLastColumnHighlight();
-                document.getElementById('statsPanel').style.display = 'block';
-                highlightComponentInView(innerPurl);
-                setTimeout(() => centerOnComponent(innerPurl), 100);
-                return;
-            }
-
             // Add parent columns from left to right (furthest first)
             // Apply scope filtering when building columns
             console.log(`📊 Building parent columns. parentLevelMap has ${parentLevelMap.size} levels`);
@@ -942,6 +923,16 @@
                         childColumnNumber++;
                     }
                 }
+            }
+
+            // If we only have 1 column (just the selected component), show message
+            if (columns.length === 1) {
+                const container = document.getElementById('columnsContainer');
+                const message = document.createElement('div');
+                message.className = 'loading-message';
+                message.style.marginLeft = '20px';
+                message.innerHTML = '<div class="empty-state"><p>This component has no visible dependencies or dependents with the current scope filters.</p></div>';
+                container.appendChild(message);
             }
 
             updateLastColumnHighlight();
