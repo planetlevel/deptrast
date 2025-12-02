@@ -200,12 +200,12 @@
         }
 
         .node-item {
-            padding: 8px 16px 8px 50px;
+            padding: 6px 80px 6px 50px;
             cursor: pointer;
             border-left: 3px solid transparent;
             transition: all 0.2s ease;
             position: relative;
-            margin: 6px 8px;
+            margin: 4px 8px;
             border-radius: 6px;
             background: white;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
@@ -296,18 +296,20 @@
         .node-group {
             font-size: 11px;
             color: #666;
-            margin-bottom: 2px;
+            margin-bottom: 0px;
             word-wrap: break-word;
             display: block;
+            line-height: 1.2;
         }
 
         .node-name {
             font-size: 13px;
             color: #333;
             font-weight: 600;
-            margin-bottom: 4px;
+            margin-bottom: 0px;
             word-wrap: break-word;
             display: block;
+            line-height: 1.2;
         }
 
         .node-version {
@@ -323,6 +325,10 @@
             justify-content: flex-end;
             align-items: center;
             gap: 8px;
+            position: absolute;
+            right: 16px;
+            top: 50%;
+            transform: translateY(-50%);
         }
 
         .node-actions {
@@ -1288,7 +1294,7 @@
                 const analyzeBtn = document.createElement('button');
                 analyzeBtn.className = 'node-action-btn';
                 analyzeBtn.innerHTML = '🔍';
-                analyzeBtn.title = 'Analyze this component';
+                analyzeBtn.title = 'Focus on this component';
                 analyzeBtn.onclick = (e) => {
                     e.stopPropagation();
                     analyzeComponent(purl);
