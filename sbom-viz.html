@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SBOM Dependency Explorer</title>
+    <title>SBOM Dependency Explorer v2</title>
     <style>
         * {
             margin: 0;
@@ -131,6 +131,7 @@
             background: white;
             position: relative;
             margin-right: 60px;
+            z-index: 1;
         }
 
         .column.app-column {
@@ -427,10 +428,9 @@
             position: absolute;
             top: 0;
             left: 0;
-            width: 100%;
-            height: 100%;
             pointer-events: none;
-            z-index: 1;
+            z-index: 100;
+            /* Width and height set dynamically via JavaScript */
         }
 
         .connector-line {
@@ -1317,12 +1317,26 @@
 
             // Update SVG dimensions to cover the entire scrollable area
             const container = document.getElementById('columnsContainer');
-            const svgWidth = container.scrollWidth;
-            const svgHeight = container.scrollHeight;
+
+            // Calculate actual dimensions by looking at all columns
+            let maxRight = 0;
+            let maxBottom = 0;
+
+            columns.forEach(col => {
+                const rect = col.element.getBoundingClientRect();
+                const containerRect = container.getBoundingClientRect();
+                const right = rect.right - containerRect.left + container.scrollLeft;
+                const bottom = rect.bottom - containerRect.top + container.scrollTop;
+                maxRight = Math.max(maxRight, right);
+                maxBottom = Math.max(maxBottom, bottom);
+            });
+
+            // Add padding to ensure arrows have room
+            const svgWidth = Math.max(container.scrollWidth, maxRight + 100);
+            const svgHeight = Math.max(container.scrollHeight, maxBottom + 100);
+
             svg.setAttribute('width', svgWidth);
             svg.setAttribute('height', svgHeight);
-
-            console.log(`📐 SVG canvas dimensions: ${svgWidth}x${svgHeight}px`);
 
             // Add arrowhead marker definitions
             const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
@@ -1376,10 +1390,6 @@
                 const y1 = fromRect.top + fromRect.height / 2 - containerRect.top + scrollTop;
                 const x2 = toRect.left - containerRect.left + scrollLeft - 6;
                 const y2 = toRect.top + toRect.height / 2 - containerRect.top + scrollTop;
-
-                if (debugInfo) {
-                    console.log(`        🎨 Arrow coords: (${Math.round(x1)},${Math.round(y1)}) → (${Math.round(x2)},${Math.round(y2)})`);
-                }
 
                 const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
                 const midX = (x1 + x2) / 2;
@@ -1452,59 +1462,49 @@
                     }
                 }
             } else if (currentViewMode === 'focus') {
-                // FOCUS MODE: Draw ALL parent->child arrows between adjacent columns
-                console.log(`🎨 Drawing connectors in FOCUS mode. ${columns.length} columns total.`);
+                // FOCUS MODE: Draw ALL arrows between adjacent columns
                 for (let colIdx = 0; colIdx < columns.length - 1; colIdx++) {
                     const fromColumn = columns[colIdx];
                     const toColumn = columns[colIdx + 1];
 
-                    console.log(`  📊 Column ${colIdx} (${fromColumn.type}) → Column ${colIdx + 1} (${toColumn.type})`);
-
                     // Get all nodes in the from column
                     const fromItems = fromColumn.element.querySelectorAll('.node-item');
-                    console.log(`    Found ${fromItems.length} items in from column`);
 
-                    let arrowCount = 0;
-                    fromItems.forEach((fromItem, itemIdx) => {
+                    fromItems.forEach((fromItem) => {
                         const fromPurl = fromItem.dataset.purl;
-                        const fromName = fromPurl.substring(fromPurl.lastIndexOf('/') + 1);
-                        const children = dependencyMap.get(fromPurl) || [];
-                        console.log(`      ${fromName}: ${children.length} children in dependencyMap`);
 
-                        // Draw arrow to each child in the next column
-                        children.forEach((childPurl, childIdx) => {
-                            const childName = childPurl.substring(childPurl.lastIndexOf('/') + 1);
+                        // For parent columns, we need to check which nodes in the next column
+                        // have this node as a parent (i.e., which nodes depend on this one)
+                        const children = dependencyMap.get(fromPurl) || [];
+
+                        // Draw arrow to each child that appears in the next column
+                        children.forEach((childPurl) => {
                             const toItem = toColumn.element.querySelector(`.node-item[data-purl="${childPurl}"]`);
                             if (toItem) {
-                                const showDebug = itemIdx === 0 && childIdx === 0; // Only debug first arrow
-                                console.log(`        ✓ Drawing arrow to ${childName}`);
-                                drawLine(fromItem, toItem, showDebug);
-                                arrowCount++;
-                            } else {
-                                console.log(`        ✗ Child ${childName} not found in next column`);
+                                drawLine(fromItem, toItem);
                             }
                         });
                     });
-                    console.log(`    Drew ${arrowCount} arrows between these columns`);
                 }
             }
         }
 
         function updateComponentDetails() {
             const detailsDiv = document.getElementById('componentDetails');
-            const pathsDiv = document.getElementById('pathsDisplay');
-            const treeStatsDiv = document.getElementById('treeStats');
 
             if (selectedPath.length === 0) {
                 detailsDiv.innerHTML = '<em>Click a component to see details</em>';
-                pathsDiv.innerHTML = '<em>Click a component to see all paths</em>';
-                treeStatsDiv.style.display = 'none';
                 return;
             }
 
             // Get the selected component
             const selectedPurl = selectedPath[selectedPath.length - 1];
             const component = componentMap.get(selectedPurl);
+
+            // Calculate dependency stats
+            const deps = dependencyMap.get(selectedPurl) || [];
+            const filteredDeps = filterNodesByScope(deps);
+            const allTransitive = collectAllTransitiveDeps(selectedPurl, new Set());
 
             // Show component details
             let html = '';
@@ -1528,6 +1528,14 @@
                 html += `<div class="detail-row">
                     <div class="detail-label">Scope</div>
                     <div class="detail-value">${component.scope || 'required'}</div>
+                </div>`;
+                html += `<div class="detail-row">
+                    <div class="detail-label">Direct Dependencies</div>
+                    <div class="detail-value">${filteredDeps.length}</div>
+                </div>`;
+                html += `<div class="detail-row">
+                    <div class="detail-label">Transitive Dependencies</div>
+                    <div class="detail-value">${allTransitive.size}</div>
                 </div>`;
 
                 // Show tags if present
@@ -1556,32 +1564,6 @@
                 html = `<div class="detail-value">${selectedPurl}</div>`;
             }
             detailsDiv.innerHTML = html;
-
-            // Find all paths to this component
-            const allPaths = findAllPathsToComponent(selectedPurl);
-            let pathsHtml = '';
-            if (allPaths.length > 0) {
-                allPaths.forEach((path, index) => {
-                    const pathStr = path.map(purl => {
-                        const comp = componentMap.get(purl);
-                        return comp ? `${comp.name}@${comp.version}` : purl;
-                    }).join(' → ');
-                    pathsHtml += `<div class="path-item"><strong>Path ${index + 1}:</strong><br/>${pathStr}</div>`;
-                });
-            } else {
-                pathsHtml = '<em>No paths found</em>';
-            }
-            pathsDiv.innerHTML = pathsHtml;
-
-            // Calculate tree stats
-            const deps = dependencyMap.get(selectedPurl) || [];
-            const allTransitive = collectAllTransitiveDeps(selectedPurl, new Set());
-            const maxDepth = calculateMaxDepth(selectedPurl, new Map());
-
-            document.getElementById('directDeps').textContent = deps.length;
-            document.getElementById('transitiveDeps').textContent = allTransitive.size;
-            document.getElementById('treeDepth').textContent = maxDepth;
-            treeStatsDiv.style.display = 'block';
         }
 
         function findAllPathsToComponent(targetPurl) {
