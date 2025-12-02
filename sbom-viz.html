@@ -793,8 +793,9 @@
 
             // BFS to find all parents at each distance - walk until we hit roots
             function getParentsAtDistance(startPurl) {
-                const visited = new Set([startPurl]);
                 let currentLevel = new Set([startPurl]);
+                const seenAtLevel = new Map(); // Track which level each node was first seen at
+                seenAtLevel.set(startPurl, 0);
                 let distance = 1;
 
                 console.log(`🔍 Starting parent traversal from ${startPurl}`);
@@ -805,19 +806,21 @@
 
                     for (const purl of currentLevel) {
                         const parents = reverseDependencyMap.get(purl) || [];
-                        // DON'T filter during traversal - we need to walk the full graph to reach roots
                         console.log(`    🔗 ${purl.substring(purl.lastIndexOf('/') + 1)}: ${parents.length} parents total`);
 
                         for (const parent of parents) {
-                            if (!visited.has(parent)) {
-                                visited.add(parent);
+                            // Only continue traversing if we haven't seen this node yet,
+                            // but ADD it to the level map even if we have (for visualization)
+                            if (!seenAtLevel.has(parent)) {
+                                seenAtLevel.set(parent, distance);
                                 nextLevel.add(parent);
-
-                                if (!parentLevelMap.has(distance)) {
-                                    parentLevelMap.set(distance, new Set());
-                                }
-                                parentLevelMap.get(distance).add(parent);
                             }
+
+                            // Always add to parentLevelMap for this level (allows nodes at multiple levels)
+                            if (!parentLevelMap.has(distance)) {
+                                parentLevelMap.set(distance, new Set());
+                            }
+                            parentLevelMap.get(distance).add(parent);
                         }
                     }
 
@@ -826,10 +829,17 @@
                     distance++;
                 }
 
-                console.log(`🏁 Parent traversal complete: reached ${distance - 1} levels, visited ${visited.size} total nodes`);
+                console.log(`🏁 Parent traversal complete: reached ${distance - 1} levels, visited ${seenAtLevel.size} total nodes`);
             }
 
             // Get all parents (walk until we hit roots)
+            console.log(`📋 Starting parent traversal. reverseDependencyMap has ${reverseDependencyMap.size} entries`);
+            const testPurl = innerPurl;
+            const testParents = reverseDependencyMap.get(testPurl);
+            console.log(`📋 Test: ${testPurl} has ${testParents ? testParents.length : 0} parents in reverseDependencyMap`);
+            if (testParents && testParents.length > 0) {
+                console.log(`📋 First parent: ${testParents[0]}`);
+            }
             getParentsAtDistance(innerPurl);
 
             // Build child columns by walking forward from selected component
@@ -837,8 +847,9 @@
 
             // BFS to find all children at each distance - walk until we hit leaves
             function getChildrenAtDistance(startPurl) {
-                const visited = new Set([startPurl]);
                 let currentLevel = new Set([startPurl]);
+                const seenAtLevel = new Map(); // Track which level each node was first seen at
+                seenAtLevel.set(startPurl, 0);
                 let distance = 1;
 
                 console.log(`🔍 Starting child traversal from ${startPurl}`);
@@ -849,19 +860,21 @@
 
                     for (const purl of currentLevel) {
                         const children = dependencyMap.get(purl) || [];
-                        // DON'T filter during traversal - we need to walk the full graph to reach leaves
                         console.log(`    🔗 ${purl.substring(purl.lastIndexOf('/') + 1)}: ${children.length} children total`);
 
                         for (const child of children) {
-                            if (!visited.has(child)) {
-                                visited.add(child);
+                            // Only continue traversing if we haven't seen this node yet,
+                            // but ADD it to the level map even if we have (for visualization)
+                            if (!seenAtLevel.has(child)) {
+                                seenAtLevel.set(child, distance);
                                 nextLevel.add(child);
-
-                                if (!childLevelMap.has(distance)) {
-                                    childLevelMap.set(distance, new Set());
-                                }
-                                childLevelMap.get(distance).add(child);
                             }
+
+                            // Always add to childLevelMap for this level (allows nodes at multiple levels)
+                            if (!childLevelMap.has(distance)) {
+                                childLevelMap.set(distance, new Set());
+                            }
+                            childLevelMap.get(distance).add(child);
                         }
                     }
 
@@ -870,7 +883,7 @@
                     distance++;
                 }
 
-                console.log(`🏁 Child traversal complete: reached ${distance - 1} levels, visited ${visited.size} total nodes`);
+                console.log(`🏁 Child traversal complete: reached ${distance - 1} levels, visited ${seenAtLevel.size} total nodes`);
             }
 
             // Get all children (walk until we hit leaves)
@@ -897,11 +910,14 @@
 
             // Add parent columns from left to right (furthest first)
             // Apply scope filtering when building columns
+            console.log(`📊 Building parent columns. parentLevelMap has ${parentLevelMap.size} levels`);
             const maxParentDistance = parentLevelMap.size > 0 ? Math.max(...parentLevelMap.keys()) : 0;
+            console.log(`📊 Max parent distance: ${maxParentDistance}`);
             for (let distance = maxParentDistance; distance >= 1; distance--) {
                 if (parentLevelMap.has(distance)) {
                     const nodesAtLevel = Array.from(parentLevelMap.get(distance));
                     const filteredNodes = filterNodesByScope(nodesAtLevel);
+                    console.log(`📊 Distance ${distance}: ${nodesAtLevel.length} nodes before filter, ${filteredNodes.length} after filter`);
                     if (filteredNodes.length > 0) {
                         addColumn(filteredNodes, `Parents ${distance}`);
                     }
