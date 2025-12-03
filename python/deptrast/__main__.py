@@ -22,11 +22,11 @@ logger = logging.getLogger(__name__)
 def setup_logging(verbose: bool = False, log_level: Optional[str] = None):
     """Configure logging based on verbosity flags."""
     if log_level:
-        level = getattr(logging, log_level.upper(), logging.WARNING)
+        level = getattr(logging, log_level.upper(), logging.ERROR)
     elif verbose:
         level = logging.INFO
     else:
-        level = logging.WARNING
+        level = logging.ERROR
 
     logging.basicConfig(
         level=level,

@@ -1,7 +1,7 @@
 """Core data models for deptrast."""
 
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 
 @dataclass
@@ -17,6 +17,7 @@ class Package:
     scope_strategy: Optional[str] = None  # Conflict resolution strategy used: "maven" or "highest"
     defeated_versions: List[str] = field(default_factory=list)  # If this is a winner, list of versions it defeated
     is_override_winner: bool = False  # True if this won via dependency management override
+    version_metadata: Optional[Dict[str, str]] = None  # Metadata about version (e.g., HeroDevs info)
 
     def __post_init__(self):
         """Normalize system to lowercase."""

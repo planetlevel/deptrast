@@ -457,6 +457,15 @@ class OutputFormatter:
             for defeated_version in pkg.defeated_versions:
                 tags.append(f"resolution-defeated:{defeated_version}")
 
+        # For vendor-patched versions (e.g., HeroDevs NES): add patched version tags
+        if pkg.version_metadata:
+            upstream_version = pkg.version_metadata.get('herodevs:upstream-version')
+            patched_version = pkg.version_metadata.get('herodevs:patched-version')
+            if upstream_version and patched_version:
+                tags.append(f"vendor-patched:{upstream_version}->{patched_version}")
+            if pkg.version_metadata.get('herodevs:nes') == 'true':
+                tags.append("herodevs-nes")
+
         component = Component(
             name=name,
             version=pkg.version,

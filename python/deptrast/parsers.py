@@ -10,9 +10,30 @@ from pathlib import Path
 from typing import List, Dict, Set, Tuple, Optional
 
 from .models import Package
+from .version_parser import VersionParser
 
 logger = logging.getLogger(__name__)
 
+
+def _create_package_with_metadata(system: str, name: str, version: str, scope: str = "compile") -> Package:
+    """
+    Create a Package with version metadata.
+
+    Parses vendor-specific version formats (like HeroDevs NES) and attaches
+    metadata to the package for SBOM generation.
+
+    Args:
+        system: Package system (maven, npm, pypi)
+        name: Package name
+        version: Version string (may be vendor-specific format)
+        scope: Package scope (default: compile)
+
+    Returns:
+        Package instance with version_metadata populated
+    """
+    version_info = VersionParser.parse(version)
+    metadata = version_info.metadata if version_info.is_herodevs else None
+    return Package(system=system, name=name, version=version, scope=scope, version_metadata=metadata)
 
 
 # Helper functions for POM parsing (ported from Java)
@@ -317,7 +338,7 @@ class FileParser:
                     name = parts[1]
                     version = ':'.join(parts[2:])  # Handle versions with colons
 
-                packages.append(Package(system=system, name=name, version=version))
+                packages.append(_create_package_with_metadata(system=system, name=name, version=version))
 
         logger.info(f"Parsed {len(packages)} packages from flat file")
         return packages
@@ -364,7 +385,7 @@ class FileParser:
         else:
             name = name_part
 
-        return Package(system=system, name=name, version=version)
+        return _create_package_with_metadata(system=system, name=name, version=version)
 
     @staticmethod
     def _resolve_parent_properties(file_path: str) -> Dict[str, str]:
@@ -540,8 +561,8 @@ class FileParser:
                     name = f"{group_id}:{artifact_id}"
                     # Use "optional" scope if optional=true, otherwise use Maven scope
                     effective_scope = "optional" if optional == 'true' else scope
-    
-                    pkg = Package(system='maven', name=name, version=version, scope=effective_scope)
+
+                    pkg = _create_package_with_metadata(system='maven', name=name, version=version, scope=effective_scope)
                     packages.append(pkg)
                     pkg_name = f"{pkg.system}:{pkg.name}:{pkg.version}"
                     logger.info(f"Added package from pom.xml: {pkg_name} (scope: {effective_scope})")
@@ -664,7 +685,7 @@ class FileParser:
                             version = parts[1].strip()
                             # Remove any extras like [extra]
                             name = re.sub(r'\[.*\]', '', name)
-                            packages.append(Package(system='pypi', name=name, version=version))
+                            packages.append(_create_package_with_metadata(system='pypi', name=name, version=version))
                             break
                 else:
                     # No version specifier found
@@ -696,7 +717,7 @@ class FileParser:
             for match in matches:
                 group_id, artifact_id, version = match
                 name = f"{group_id}:{artifact_id}"
-                packages.append(Package(system='maven', name=name, version=version))
+                packages.append(_create_package_with_metadata(system='maven', name=name, version=version))
 
         # Filter out test dependencies
         test_pattern = r"(?:testImplementation|testCompile|testRuntimeOnly)\s+"

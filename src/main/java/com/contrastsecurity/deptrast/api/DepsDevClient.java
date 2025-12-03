@@ -2,6 +2,7 @@ package com.contrastsecurity.deptrast.api;
 
 import com.contrastsecurity.deptrast.model.Package;
 import com.contrastsecurity.deptrast.util.SSLUtils;
+import com.contrastsecurity.deptrast.version.VersionParser;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -44,15 +45,26 @@ public class DepsDevClient implements AutoCloseable {
     /**
      * Get the raw dependency graph for a package from deps.dev API
      *
+     * For vendor-patched versions (like HeroDevs NES), this uses the upstream
+     * version for deps.dev queries since deps.dev only knows about the original
+     * Maven Central versions.
+     *
      * @param pkg The package to get the dependency graph for
      * @return JsonObject containing the full dependency graph (nodes and edges)
      * @throws IOException If there's an error making the HTTP request
      */
     public JsonObject getDependencyGraph(Package pkg) throws IOException {
+        // Parse version to handle vendor-specific formats (e.g., HeroDevs)
+        String depsDevVersion = VersionParser.getDepsDevVersion(pkg.getVersion());
+
         String url = String.format("%s/%s/packages/%s/versions/%s:dependencies",
-                BASE_URL, pkg.getSystem().toLowerCase(), pkg.getName(), pkg.getVersion());
+                BASE_URL, pkg.getSystem().toLowerCase(), pkg.getName(), depsDevVersion);
 
         logger.debug("Fetching dependency graph for {}", pkg.getFullName());
+        if (!depsDevVersion.equals(pkg.getVersion())) {
+            logger.debug("  Original version: {}", pkg.getVersion());
+            logger.debug("  deps.dev version: {}", depsDevVersion);
+        }
 
         Request request = new Request.Builder()
                 .url(url)
@@ -61,7 +73,7 @@ public class DepsDevClient implements AutoCloseable {
 
         try (Response response = client.newCall(request).execute()) {
             if (!response.isSuccessful()) {
-                logger.warn("Failed to get dependency graph for {}: {}", pkg.getFullName(), response.code());
+                logger.info("Failed to get dependency graph for {}: {}", pkg.getFullName(), response.code());
                 return null;
             }
 

@@ -1381,8 +1381,10 @@
             const filteredDeps = filterNodesByScope(deps);
             if (filteredDeps.length > 0) {
                 addColumn(filteredDeps);
-                drawConnectors();
             }
+
+            // Always redraw connectors after removing/adding columns
+            drawConnectors();
 
             // Mark last column
             updateLastColumnHighlight();
@@ -1574,24 +1576,25 @@
                 }
             } else if (currentViewMode === 'focus') {
                 // FOCUS MODE: Draw ALL arrows between adjacent columns
+                // Look at the actual nodes present in both columns and check if there's a dependency relationship
                 for (let colIdx = 0; colIdx < columns.length - 1; colIdx++) {
                     const fromColumn = columns[colIdx];
                     const toColumn = columns[colIdx + 1];
 
-                    // Get all nodes in the from column
+                    // Get all nodes in both columns
                     const fromItems = fromColumn.element.querySelectorAll('.node-item');
+                    const toItems = toColumn.element.querySelectorAll('.node-item');
 
+                    // For each pair of nodes, check if there's a dependency relationship
                     fromItems.forEach((fromItem) => {
                         const fromPurl = fromItem.dataset.purl;
-
-                        // For parent columns, we need to check which nodes in the next column
-                        // have this node as a parent (i.e., which nodes depend on this one)
                         const children = dependencyMap.get(fromPurl) || [];
 
-                        // Draw arrow to each child that appears in the next column
-                        children.forEach((childPurl) => {
-                            const toItem = toColumn.element.querySelector(`.node-item[data-purl="${childPurl}"]`);
-                            if (toItem) {
+                        toItems.forEach((toItem) => {
+                            const toPurl = toItem.dataset.purl;
+
+                            // Draw arrow if fromPurl depends on toPurl (forward dependency)
+                            if (children.includes(toPurl)) {
                                 drawLine(fromItem, toItem);
                             }
                         });

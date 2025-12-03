@@ -1284,17 +1284,29 @@ public class DependencyTreeGenerator {
      * Recursively collect dependency relationships from tree
      */
     private static void collectDependenciesFromTree(DependencyNode node, Map<Package, List<Package>> dependencyMap) {
+        collectDependenciesFromTree(node, dependencyMap, new HashSet<>());
+    }
+
+    private static void collectDependenciesFromTree(DependencyNode node, Map<Package, List<Package>> dependencyMap, Set<String> visited) {
         if (node == null) {
             return;
         }
 
         Package pkg = node.getPackage();
+        String nodeName = pkg.getFullName();
+
+        // Cycle detection
+        if (visited.contains(nodeName)) {
+            return;
+        }
+        visited.add(nodeName);
+
         List<Package> children = new ArrayList<>();
 
         for (DependencyNode child : node.getChildren()) {
             children.add(child.getPackage());
             // Recurse into children
-            collectDependenciesFromTree(child, dependencyMap);
+            collectDependenciesFromTree(child, dependencyMap, visited);
         }
 
         // Store this package's direct dependencies
@@ -1549,7 +1561,22 @@ public class DependencyTreeGenerator {
                     }
                 }
 
+                // For vendor-patched versions (e.g., HeroDevs NES): add patched version tags
+                Map<String, String> versionMetadata = pkg.getVersionMetadata();
+                if (!versionMetadata.isEmpty()) {
+                    String upstreamVersion = versionMetadata.get("herodevs:upstream-version");
+                    String patchedVersion = versionMetadata.get("herodevs:patched-version");
+                    if (upstreamVersion != null && patchedVersion != null) {
+                        tagList.add("vendor-patched:" + upstreamVersion + "->" + patchedVersion);
+                    }
+                    if ("true".equals(versionMetadata.get("herodevs:nes"))) {
+                        tagList.add("herodevs-nes");
+                    }
+                }
+
                 if (!tagList.isEmpty()) {
+                    // Sort tags alphabetically for consistency with Python output
+                    Collections.sort(tagList);
                     component.setTags(new org.cyclonedx.model.component.Tags(tagList));
                 }
 

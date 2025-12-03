@@ -1,6 +1,8 @@
 package com.contrastsecurity.deptrast.util;
 
 import com.contrastsecurity.deptrast.model.Package;
+import com.contrastsecurity.deptrast.version.VersionInfo;
+import com.contrastsecurity.deptrast.version.VersionParser;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -44,6 +46,20 @@ import java.security.cert.X509Certificate;
 public class FileParser {
     private static final Logger logger = LoggerFactory.getLogger(FileParser.class);
     private static final String MAVEN_CENTRAL_URL = "https://repo1.maven.org/maven2";
+
+    /**
+     * Create a Package with version metadata.
+     * Parses vendor-specific version formats (like HeroDevs NES) and attaches metadata.
+     */
+    private static Package createPackageWithMetadata(String system, String name, String version) {
+        return createPackageWithMetadata(system, name, version, "compile");
+    }
+
+    private static Package createPackageWithMetadata(String system, String name, String version, String scope) {
+        VersionInfo versionInfo = VersionParser.parse(version);
+        Map<String, String> metadata = versionInfo.isHeroDevs() ? versionInfo.getMetadata() : null;
+        return new Package(system, name, version, scope, metadata);
+    }
 
     // Initialize HTTP client with IPv4 preference
     private static final OkHttpClient httpClient;
@@ -115,7 +131,7 @@ public class FileParser {
                                 version = parts[parts.length - 1];
                             }
                             
-                            Package pkg = new Package(system, name, version);
+                            Package pkg = createPackageWithMetadata(system, name, version);
                             packages.add(pkg);
                             logger.info("Added package: {}", pkg.getFullName());
                         } else {
@@ -126,7 +142,7 @@ public class FileParser {
                         if (parts.length == 3) {
                             String name = parts[1];
                             String version = parts[2];
-                            Package pkg = new Package(system, name, version);
+                            Package pkg = createPackageWithMetadata(system, name, version);
                             packages.add(pkg);
                             logger.info("Added package: {}", pkg.getFullName());
                         } else {
@@ -355,7 +371,7 @@ public class FileParser {
                         String name = groupId + ":" + artifactId;
                         // Use "optional" scope if optional=true, otherwise use the Maven scope
                         String effectiveScope = "true".equalsIgnoreCase(optional) ? "optional" : scope;
-                        Package pkg = new Package("maven", name, version, effectiveScope);
+                        Package pkg = createPackageWithMetadata("maven", name, version, effectiveScope);
                         packages.add(pkg);
                         logger.info("Added package from pom.xml: {} (scope: {})", pkg.getFullName(), effectiveScope);
 
@@ -404,7 +420,7 @@ public class FileParser {
                     String name = parts[0].trim();
                     String version = parts[1].trim().split(";")[0].trim(); // Remove environment markers
 
-                    Package pkg = new Package("pypi", name, version);
+                    Package pkg = createPackageWithMetadata("pypi", name, version);
                     packages.add(pkg);
                     logger.info("Added package from requirements.txt: {}", pkg.getFullName());
                 } else {
@@ -515,7 +531,7 @@ public class FileParser {
                         }
 
                         String name = group + ":" + artifact;
-                        return new Package(system, name, version);
+                        return createPackageWithMetadata(system, name, version);
                     }
                 }
             }
@@ -528,7 +544,7 @@ public class FileParser {
 
                 if (group != null && artifact != null && version != null) {
                     String name = group + ":" + artifact;
-                    return new Package("maven", name, version);
+                    return createPackageWithMetadata("maven", name, version);
                 }
             }
 
@@ -588,10 +604,10 @@ public class FileParser {
             // For Maven, combine group/artifact into name
             if ("maven".equals(type)) {
                 String name = namepart.replace('/', ':');
-                return new Package("maven", name, version);
+                return createPackageWithMetadata("maven", name, version);
             } else {
                 // For other types, use the name as-is
-                return new Package(type, namepart, version);
+                return createPackageWithMetadata(type, namepart, version);
             }
         } catch (Exception e) {
             logger.error("Error parsing purl {}: {}", purl, e.getMessage());

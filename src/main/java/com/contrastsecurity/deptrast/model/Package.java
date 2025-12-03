@@ -1,7 +1,10 @@
 package com.contrastsecurity.deptrast.model;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -20,12 +23,17 @@ public class Package {
     private String scopeStrategy;  // Conflict resolution strategy used: "maven" or "highest"
     private List<String> defeatedVersions;  // If this is a winner, list of versions it defeated
     private boolean isOverrideWinner;  // True if this won via dependency management override
+    private Map<String, String> versionMetadata;  // Metadata about version (e.g., HeroDevs info)
 
     public Package(String system, String name, String version) {
         this(system, name, version, "compile");  // Default to compile scope
     }
 
     public Package(String system, String name, String version, String scope) {
+        this(system, name, version, scope, null);
+    }
+
+    public Package(String system, String name, String version, String scope, Map<String, String> versionMetadata) {
         this.system = system;
         this.name = name;
         this.version = version;
@@ -35,6 +43,7 @@ public class Package {
         this.scopeStrategy = null;
         this.defeatedVersions = new ArrayList<>();
         this.isOverrideWinner = false;
+        this.versionMetadata = versionMetadata != null ? new HashMap<>(versionMetadata) : null;
     }
 
     public String getName() {
@@ -97,6 +106,14 @@ public class Package {
 
     public void setOverrideWinner(boolean overrideWinner) {
         isOverrideWinner = overrideWinner;
+    }
+
+    public Map<String, String> getVersionMetadata() {
+        return versionMetadata != null ? Collections.unmodifiableMap(versionMetadata) : Collections.emptyMap();
+    }
+
+    public void setVersionMetadata(Map<String, String> versionMetadata) {
+        this.versionMetadata = versionMetadata != null ? new HashMap<>(versionMetadata) : null;
     }
 
     public String getFullName() {

@@ -3,6 +3,8 @@ package com.contrastsecurity.deptrast.service;
 import com.contrastsecurity.deptrast.api.DepsDevClient;
 import com.contrastsecurity.deptrast.model.DependencyNode;
 import com.contrastsecurity.deptrast.model.Package;
+import com.contrastsecurity.deptrast.version.VersionInfo;
+import com.contrastsecurity.deptrast.version.VersionParser;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -55,6 +57,23 @@ public class DependencyGraphBuilder implements AutoCloseable {
         this.dependencyManagement = new HashMap<>();
         this.exclusions = new HashMap<>();
         this.rootNodes = new ArrayList<>();
+    }
+
+    /**
+     * Create a Package with version metadata.
+     *
+     * Parses vendor-specific version formats (like HeroDevs NES) and attaches
+     * metadata to the package for SBOM generation.
+     *
+     * @param system Package system (maven, npm, pypi)
+     * @param name Package name
+     * @param version Version string (may be vendor-specific format)
+     * @return Package instance with version_metadata populated
+     */
+    private Package createPackage(String system, String name, String version) {
+        VersionInfo versionInfo = VersionParser.parse(version);
+        Map<String, String> metadata = versionInfo.isHeroDevs() ? versionInfo.getMetadata() : null;
+        return new Package(system, name, version, "compile", metadata);
     }
 
     /**
@@ -130,7 +149,7 @@ public class DependencyGraphBuilder implements AutoCloseable {
 
             // Only add if not already in input packages
             if (!inputPackageNames.contains(fullName)) {
-                Package managedPkg = new Package("maven", groupId + ":" + artifactId, version);
+                Package managedPkg = createPackage("maven", groupId + ":" + artifactId, version);
                 packagesToFetch.add(managedPkg);
                 allPackages.put(fullName, managedPkg);
                 logger.info("Adding managed dependency version to fetch list: {}", fullName);
@@ -249,7 +268,7 @@ public class DependencyGraphBuilder implements AutoCloseable {
             String name = parts[1];
             String version = parts[2];
 
-            Package correctPkg = new Package(system, name, version);
+            Package correctPkg = createPackage(system, name, version);
 
             logger.info("Fetching managed version: {}", correctFullName);
 
@@ -310,12 +329,27 @@ public class DependencyGraphBuilder implements AutoCloseable {
             Set<String> inputPackageNames,
             Set<String> inputPackagesAppearingAsChildren,
             String treeRootName) {
+        findInputPackagesInTree(node, inputPackageNames, inputPackagesAppearingAsChildren, treeRootName, new HashSet<>());
+    }
+
+    private void findInputPackagesInTree(
+            DependencyNode node,
+            Set<String> inputPackageNames,
+            Set<String> inputPackagesAppearingAsChildren,
+            String treeRootName,
+            Set<String> visited) {
 
         if (node == null) {
             return;
         }
 
         String nodeName = node.getPackage().getFullName();
+
+        // Cycle detection - if we've already visited this node, stop
+        if (visited.contains(nodeName)) {
+            return;
+        }
+        visited.add(nodeName);
 
         // If this node is an input package (and not the tree root), mark it
         if (inputPackageNames.contains(nodeName) && !nodeName.equals(treeRootName)) {
@@ -324,7 +358,7 @@ public class DependencyGraphBuilder implements AutoCloseable {
 
         // Recurse into children
         for (DependencyNode child : node.getChildren()) {
-            findInputPackagesInTree(child, inputPackageNames, inputPackagesAppearingAsChildren, treeRootName);
+            findInputPackagesInTree(child, inputPackageNames, inputPackagesAppearingAsChildren, treeRootName, visited);
         }
     }
 
@@ -369,7 +403,7 @@ public class DependencyGraphBuilder implements AutoCloseable {
             JsonObject jsonObject = apiClient.getDependencyGraph(pkg);
 
             if (jsonObject == null) {
-                logger.warn("WARNING: Unknown component {}. Treating as root dependency.", pkg.getFullName());
+                logger.info("Unknown component {}. Treating as root dependency.", pkg.getFullName());
                 return new DependencyNode(pkg, false);
             }
 
@@ -413,7 +447,7 @@ public class DependencyGraphBuilder implements AutoCloseable {
             Package pkg = allPackages.get(fullName);
 
             if (pkg == null) {
-                pkg = new Package(system, name, version);
+                pkg = createPackage(system, name, version);
                 allPackages.put(fullName, pkg);
             }
 
@@ -913,6 +947,9 @@ public class DependencyGraphBuilder implements AutoCloseable {
                 }
 
                 // Add winner as child of parent (if not already present)
+                // IMPORTANT: We do NOT remove the loser from parent.children - we intentionally
+                // keep BOTH the loser and winner so the SBOM shows the full resolution story
+                // (original version + resolved version). The loser will be tagged as scope:excluded.
                 if (!parentNode.getChildren().contains(winnerNode)) {
                     parentNode.addChild(winnerNode);
                     // Update parent_map for the winner

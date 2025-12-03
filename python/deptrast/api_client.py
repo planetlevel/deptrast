@@ -7,6 +7,7 @@ from urllib.parse import quote
 import requests
 
 from .models import Package
+from .version_parser import VersionParser
 
 logger = logging.getLogger(__name__)
 
@@ -28,20 +29,30 @@ class DepsDevClient:
         """
         Get the dependency graph for a package from deps.dev API.
 
+        For vendor-patched versions (like HeroDevs NES), this uses the upstream
+        version for deps.dev queries since deps.dev only knows about the original
+        Maven Central versions.
+
         Args:
             package: The package to fetch dependencies for
 
         Returns:
             JSON response containing nodes and edges, or None if request fails
         """
+        # Parse version to handle vendor-specific formats (e.g., HeroDevs)
+        depsdev_version = VersionParser.get_depsdev_version(package.version)
+
         # URL-encode the package name to handle special characters like ':'
         encoded_name = quote(package.name, safe='')
         url = (
             f"{self.BASE_URL}/{package.system}/packages/{encoded_name}"
-            f"/versions/{package.version}:dependencies"
+            f"/versions/{depsdev_version}:dependencies"
         )
 
         logger.debug(f"Fetching dependency graph for {package.full_name}")
+        if depsdev_version != package.version:
+            logger.debug(f"  Original version: {package.version}")
+            logger.debug(f"  deps.dev version: {depsdev_version}")
         logger.debug(f"  URL: {url}")
 
         try:
@@ -49,7 +60,7 @@ class DepsDevClient:
             if response.status_code == 200:
                 return response.json()
             else:
-                logger.warning(
+                logger.info(
                     f"Failed to get dependency graph for {package.full_name}: "
                     f"HTTP {response.status_code}"
                 )

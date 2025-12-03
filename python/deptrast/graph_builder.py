@@ -6,6 +6,7 @@ from collections import defaultdict, deque
 
 from .models import Package, DependencyNode
 from .api_client import DepsDevClient
+from .version_parser import VersionParser
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +43,31 @@ class DependencyGraphBuilder:
         self.dependency_management: Dict[str, str] = {}  # name -> version
         self.exclusions: Dict[str, Set[str]] = {}  # parent_name -> Set[excluded_names]
         self.resolution_strategy: str = "highest"  # maven or highest
+
+    def _create_package(self, system: str, name: str, version: str) -> Package:
+        """
+        Create a Package with version metadata.
+
+        Parses vendor-specific version formats (like HeroDevs NES) and attaches
+        metadata to the package for SBOM generation.
+
+        Args:
+            system: Package system (maven, npm, pypi)
+            name: Package name
+            version: Version string (may be vendor-specific format)
+
+        Returns:
+            Package instance with version_metadata populated
+        """
+        version_info = VersionParser.parse(version)
+        metadata = version_info.metadata if version_info.is_herodevs else None
+
+        return Package(
+            system=system,
+            name=name,
+            version=version,
+            version_metadata=metadata
+        )
 
     def set_dependency_management(self, management: Dict[str, str]) -> None:
         """Set dependency management versions."""
@@ -164,7 +190,7 @@ class DependencyGraphBuilder:
                 continue
 
             system, name, version = parts
-            correct_pkg = Package(system=system, name=name, version=version)
+            correct_pkg = self._create_package(system, name, version)
 
             logger.info(f"Fetching managed version: {correct_full_name}")
 
@@ -243,6 +269,12 @@ class DependencyGraphBuilder:
             pkg = node.package
             base_key = self._get_base_key(pkg)
             winning_version = winning_versions.get(base_key)
+
+            # Skip nodes already excluded by dependency management override (Phase 1.5)
+            # Those nodes should keep their original edges only, not get winner edges added
+            if pkg.scope == "excluded":
+                logger.debug(f"Skipping {node_name} - already excluded by dependency management")
+                continue
 
             if winning_version and pkg.version != winning_version:
                 losers.add(node_name)
@@ -352,7 +384,7 @@ class DependencyGraphBuilder:
 
             # Only add if not already in input packages
             if full_name not in input_package_names:
-                managed_pkg = Package(system='maven', name=name, version=version)
+                managed_pkg = self._create_package('maven', name, version)
                 packages_to_fetch.append(managed_pkg)
                 self.all_packages[full_name] = managed_pkg
                 logger.info(f"Adding managed dependency version to fetch list: {full_name}")
@@ -381,7 +413,7 @@ class DependencyGraphBuilder:
         graph = self.api_client.get_dependency_graph(package)
 
         if not graph:
-            logger.warning(f"WARNING: Unknown component {package.full_name}. Treating as leaf node.")
+            logger.info(f"Unknown component {package.full_name}. Treating as leaf node.")
 
             # Check if we already have this node from another graph
             if package.full_name in self.all_nodes:
@@ -429,7 +461,7 @@ class DependencyGraphBuilder:
             # Create or reuse package
             full_name = f"{system.lower()}:{name}:{version}"
             if full_name not in self.all_packages:
-                self.all_packages[full_name] = Package(system=system, name=name, version=version)
+                self.all_packages[full_name] = self._create_package(system, name, version)
             pkg = self.all_packages[full_name]
 
             # Track name -> system mapping for dependency management lookup
@@ -836,6 +868,9 @@ class DependencyGraphBuilder:
                     continue
 
                 # Add winner as child of parent (if not already present)
+                # IMPORTANT: We do NOT remove the loser from parent.children - we intentionally
+                # keep BOTH the loser and winner so the SBOM shows the full resolution story
+                # (original version + resolved version). The loser will be tagged as scope:excluded.
                 if winner_node not in parent_node.children:
                     parent_node.add_child(winner_node)
                     # Update parent_map for the winner
