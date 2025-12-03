@@ -705,6 +705,7 @@
                     <button id="backButton" onclick="goBack()" disabled title="Go back (Alt + ←)">←</button>
                     <button id="forwardButton" onclick="goForward()" disabled title="Go forward (Alt + →)">→</button>
                 </div>
+                <button id="expandAllButton" onclick="expandAllTree()" title="Expand entire tree (only in explore mode)">🌲 Expand All</button>
             </div>
 
             <!-- Focus Selector -->
@@ -2942,6 +2943,68 @@
 
             expandAllChildren(currentPurl);
             drawConnectors();
+        }
+
+        // Expand entire tree from all root nodes
+        function expandAllTree() {
+            if (currentViewMode !== 'app') {
+                alert('Expand All only works in explore mode. Press Escape to return to explore mode.');
+                return;
+            }
+
+            if (columns.length === 0) return;
+
+            // Get all root nodes from the first column
+            const rootNodes = columns[0].nodes;
+
+            // Clear any existing selection and columns beyond root
+            selectedPath = [];
+            while (columns.length > 1) {
+                const removed = columns.pop();
+                removed.element.remove();
+            }
+
+            // Build complete tree level by level using BFS
+            let currentLevel = new Set(rootNodes);
+            const visited = new Set(rootNodes);
+            let depth = 1;
+            const maxDepth = 20; // Safety limit
+
+            while (currentLevel.size > 0 && depth < maxDepth) {
+                const nextLevel = new Set();
+                const nodesForThisLevel = new Set();
+
+                // Collect all children for current level
+                currentLevel.forEach(purl => {
+                    const deps = dependencyMap.get(purl) || [];
+                    const filteredDeps = filterNodesByScope(deps);
+
+                    filteredDeps.forEach(dep => {
+                        if (!visited.has(dep)) {
+                            visited.add(dep);
+                            nextLevel.add(dep);
+                            nodesForThisLevel.add(dep);
+                        }
+                    });
+                });
+
+                // Add column for this level if there are nodes
+                if (nodesForThisLevel.size > 0) {
+                    addColumn(Array.from(nodesForThisLevel), `Level ${depth}`);
+                }
+
+                currentLevel = nextLevel;
+                depth++;
+            }
+
+            // Redraw connectors and update keyboard focus
+            drawConnectors();
+            if (columns.length > 0) {
+                const firstColumn = columns[0];
+                const nodes = firstColumn.element.querySelectorAll('.node-item');
+                const middleIndex = Math.floor(nodes.length / 2);
+                setKeyboardFocus(0, middleIndex);
+            }
         }
 
         // Collapse everything back to root (leftmost column)
