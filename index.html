@@ -43,13 +43,67 @@
 
         .controls {
             display: flex;
-            gap: 10px;
+            gap: 20px;
             align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .control-group {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            padding: 0 12px;
+            border-left: 1px solid #e0e0e0;
+        }
+
+        .control-group:first-child {
+            border-left: none;
+            padding-left: 0;
+        }
+
+        .control-group label {
+            font-size: 13px;
+            color: #666;
+            font-weight: 500;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 0;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .button-group button {
+            border: none;
+            border-radius: 0;
+            border-right: 1px solid #e0e0e0;
+            margin: 0;
+        }
+
+        .button-group button:last-child {
+            border-right: none;
+        }
+
+        .button-group button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .button-group #zoomDisplay {
+            padding: 8px 12px;
+            font-size: 12px;
+            min-width: 50px;
+            text-align: center;
+            background: #fafafa;
+            border-right: 1px solid #e0e0e0;
+            font-weight: 500;
         }
 
         .view-selector {
             display: flex;
-            gap: 10px;
+            gap: 8px;
             align-items: center;
         }
 
@@ -183,7 +237,7 @@
         .scope-filters {
             display: flex;
             align-items: center;
-            gap: 15px;
+            gap: 12px;
         }
 
         .scope-checkbox {
@@ -197,6 +251,8 @@
 
         .scope-checkbox input[type="checkbox"] {
             cursor: pointer;
+            width: 16px;
+            height: 16px;
         }
 
         .scope-checkbox span {
@@ -204,18 +260,30 @@
         }
 
         button, .file-label {
-            background: #0078d4;
-            color: white;
-            border: none;
+            background: white;
+            color: #333;
+            border: 1px solid #ccc;
             padding: 8px 16px;
-            border-radius: 2px;
+            border-radius: 4px;
             cursor: pointer;
             font-size: 13px;
             font-weight: 500;
         }
 
         button:hover, .file-label:hover {
+            background: #f5f5f5;
+            border-color: #999;
+        }
+
+        button.primary-button {
+            background: #0078d4;
+            color: white;
+            border-color: #0078d4;
+        }
+
+        button.primary-button:hover {
             background: #106ebe;
+            border-color: #106ebe;
         }
 
         input[type="file"] {
@@ -629,11 +697,19 @@
         <h1>Deptrast SBOM Explorer</h1>
         <div class="controls" id="headerControls" style="display: none;">
             <input type="file" id="fileInput" style="display: none;">
-            <button onclick="document.getElementById('fileInput').click()">Load SBOM</button>
-            <button id="backButton" onclick="goBack()" disabled style="opacity: 0.5;">← Back</button>
-            <button id="forwardButton" onclick="goForward()" disabled style="opacity: 0.5;">Forward →</button>
-            <div class="view-selector" id="viewSelector" style="display: none; margin-left: 20px;">
-                <label style="font-size: 13px; color: #666;">Focus:</label>
+
+            <!-- File and Navigation -->
+            <div class="control-group">
+                <button onclick="document.getElementById('fileInput').click()" title="Load SBOM file (Ctrl/Cmd + O)">📂 Load</button>
+                <div class="button-group">
+                    <button id="backButton" onclick="goBack()" disabled title="Go back (Alt + ←)">←</button>
+                    <button id="forwardButton" onclick="goForward()" disabled title="Go forward (Alt + →)">→</button>
+                </div>
+            </div>
+
+            <!-- Focus Selector -->
+            <div class="control-group view-selector" id="viewSelector">
+                <label>Focus:</label>
                 <div class="custom-dropdown">
                     <div class="dropdown-selected" id="dropdownSelected" onclick="toggleDropdown()">
                         🌳 Application (Full Tree)
@@ -648,8 +724,10 @@
                     </div>
                 </div>
             </div>
-            <div class="scope-filters" id="scopeFilters" style="display: none; margin-left: 20px;">
-                <label style="font-size: 13px; color: #666; margin-right: 10px;">Scope:</label>
+
+            <!-- Scope Filters -->
+            <div class="control-group scope-filters" id="scopeFilters">
+                <label>Scope:</label>
                 <label class="scope-checkbox">
                     <input type="checkbox" id="scopeRequired" checked onchange="applyFilters()">
                     <span>Required</span>
@@ -663,12 +741,16 @@
                     <span>Excluded</span>
                 </label>
             </div>
-            <div style="margin-left: 20px; display: flex; gap: 5px; align-items: center;">
-                <button onclick="applyZoom(-0.1)" title="Zoom Out (Ctrl/Cmd + -)">🔍−</button>
-                <span id="zoomDisplay" style="font-size: 12px; min-width: 40px; text-align: center;">100%</span>
-                <button onclick="applyZoom(0.1)" title="Zoom In (Ctrl/Cmd + +)">🔍+</button>
-                <button onclick="resetZoom()" title="Reset Zoom (Ctrl/Cmd + 0)">⟲</button>
-                <button onclick="exportViewAsPNG()" title="Export as PNG (Ctrl/Cmd + E)" style="margin-left: 10px;">📷 Export</button>
+
+            <!-- Zoom and Export -->
+            <div class="control-group">
+                <div class="button-group">
+                    <button onclick="applyZoom(-0.1)" title="Zoom Out (Ctrl/Cmd + -)">−</button>
+                    <span id="zoomDisplay">100%</span>
+                    <button onclick="applyZoom(0.1)" title="Zoom In (Ctrl/Cmd + +)">+</button>
+                    <button onclick="resetZoom()" title="Reset Zoom (Ctrl/Cmd + 0)">⟲</button>
+                </div>
+                <button onclick="exportViewAsPNG()" title="Export as PNG (Ctrl/Cmd + E)" class="primary-button">📷 Export</button>
             </div>
         </div>
     </div>
