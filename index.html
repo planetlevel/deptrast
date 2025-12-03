@@ -358,6 +358,12 @@
             border-left-color: transparent;
         }
 
+        .node-item.keyboard-focused {
+            outline: 2px solid #0078d4;
+            outline-offset: -2px;
+            box-shadow: 0 0 0 3px rgba(0, 120, 212, 0.2);
+        }
+
         .node-item.scope-optional {
             background: #fff9e6;
         }
@@ -713,6 +719,9 @@
         let isNavigatingForward = false; // Flag to prevent adding to history during forward navigation
         let currentZoom = 1.0; // Zoom level for view
         let currentFileName = ''; // Track current file name for recent files
+        let focusedNodeElement = null; // Currently keyboard-focused node element
+        let focusedColumnIndex = 0; // Current column index
+        let focusedNodeIndex = 0; // Current node index within column
 
         // Recent files management
         function saveRecentFile(fileName, sbomData) {
@@ -814,31 +823,67 @@
             img.src = url;
         }
 
-        // Zoom controls
+        // Zoom controls - zoom the columns themselves to see more/less
         function applyZoom(delta) {
             currentZoom += delta;
-            currentZoom = Math.max(0.5, Math.min(2.0, currentZoom)); // Limit between 50% and 200%
+            currentZoom = Math.max(0.3, Math.min(2.0, currentZoom)); // Limit between 30% and 200%
 
-            const container = document.getElementById('columnsContainer');
-            container.style.transform = `scale(${currentZoom})`;
-            container.style.transformOrigin = 'top left';
+            // Apply zoom to all columns
+            document.querySelectorAll('.column').forEach(col => {
+                col.style.minWidth = `${320 * currentZoom}px`;
+                col.style.maxWidth = `${320 * currentZoom}px`;
+            });
 
-            // Update zoom display if exists
+            // Apply zoom to node items
+            document.querySelectorAll('.node-item').forEach(node => {
+                node.style.fontSize = `${13 * currentZoom}px`;
+                node.style.padding = `${8 * currentZoom}px ${12 * currentZoom}px`;
+            });
+
+            // Apply zoom to column headers
+            document.querySelectorAll('.column-header').forEach(header => {
+                header.style.fontSize = `${11 * currentZoom}px`;
+                header.style.padding = `${8 * currentZoom}px ${15 * currentZoom}px`;
+            });
+
+            // Update zoom display
             const zoomDisplay = document.getElementById('zoomDisplay');
             if (zoomDisplay) {
                 zoomDisplay.textContent = `${Math.round(currentZoom * 100)}%`;
             }
+
+            // Redraw connectors with new sizes
+            drawConnectors();
         }
 
         function resetZoom() {
             currentZoom = 1.0;
-            const container = document.getElementById('columnsContainer');
-            container.style.transform = '';
+
+            // Reset column widths
+            document.querySelectorAll('.column').forEach(col => {
+                col.style.minWidth = '320px';
+                col.style.maxWidth = '320px';
+            });
+
+            // Reset node items
+            document.querySelectorAll('.node-item').forEach(node => {
+                node.style.fontSize = '13px';
+                node.style.padding = '8px 12px';
+            });
+
+            // Reset column headers
+            document.querySelectorAll('.column-header').forEach(header => {
+                header.style.fontSize = '11px';
+                header.style.padding = '8px 15px';
+            });
 
             const zoomDisplay = document.getElementById('zoomDisplay');
             if (zoomDisplay) {
                 zoomDisplay.textContent = '100%';
             }
+
+            // Redraw connectors
+            drawConnectors();
         }
 
         // Display recent files on page load
@@ -1251,6 +1296,9 @@
             updateLastColumnHighlight();
             drawConnectors();
             document.getElementById('statsPanel').style.display = 'block';
+
+            // Initialize keyboard navigation
+            initializeKeyboardNavigation();
         }
 
         // Leaf View Mode: Show all reverse paths to a leaf node
@@ -2516,8 +2564,110 @@
             }
         }
 
+        // Arrow key navigation functions
+        function setKeyboardFocus(columnIndex, nodeIndex) {
+            // Remove previous focus
+            if (focusedNodeElement) {
+                focusedNodeElement.classList.remove('keyboard-focused');
+            }
+
+            // Validate indices
+            if (columnIndex < 0 || columnIndex >= columns.length) return;
+
+            const column = columns[columnIndex];
+            const nodes = column.element.querySelectorAll('.node-item');
+
+            if (nodeIndex < 0 || nodeIndex >= nodes.length) return;
+
+            // Set new focus
+            focusedColumnIndex = columnIndex;
+            focusedNodeIndex = nodeIndex;
+            focusedNodeElement = nodes[nodeIndex];
+            focusedNodeElement.classList.add('keyboard-focused');
+
+            // Scroll into view
+            focusedNodeElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        function navigateUp() {
+            if (focusedNodeIndex > 0) {
+                setKeyboardFocus(focusedColumnIndex, focusedNodeIndex - 1);
+            }
+        }
+
+        function navigateDown() {
+            const column = columns[focusedColumnIndex];
+            const nodes = column?.element.querySelectorAll('.node-item');
+            if (nodes && focusedNodeIndex < nodes.length - 1) {
+                setKeyboardFocus(focusedColumnIndex, focusedNodeIndex + 1);
+            }
+        }
+
+        function navigateLeft() {
+            if (focusedColumnIndex > 0) {
+                // Try to maintain similar vertical position
+                const targetColumn = columns[focusedColumnIndex - 1];
+                const targetNodes = targetColumn.element.querySelectorAll('.node-item');
+                const targetIndex = Math.min(focusedNodeIndex, targetNodes.length - 1);
+                setKeyboardFocus(focusedColumnIndex - 1, targetIndex);
+            }
+        }
+
+        function navigateRight() {
+            if (focusedColumnIndex < columns.length - 1) {
+                // Try to maintain similar vertical position
+                const targetColumn = columns[focusedColumnIndex + 1];
+                const targetNodes = targetColumn.element.querySelectorAll('.node-item');
+                const targetIndex = Math.min(focusedNodeIndex, targetNodes.length - 1);
+                setKeyboardFocus(focusedColumnIndex + 1, targetIndex);
+            }
+        }
+
+        function activateFocusedNode() {
+            if (focusedNodeElement && currentViewMode === 'app') {
+                focusedNodeElement.click();
+            }
+        }
+
+        // Initialize keyboard focus to first node when SBOM loads
+        function initializeKeyboardNavigation() {
+            if (columns.length > 0) {
+                setTimeout(() => setKeyboardFocus(0, 0), 100);
+            }
+        }
+
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
+            // Arrow key navigation (without modifiers)
+            if (!e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+                if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    navigateUp();
+                    return;
+                }
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    navigateDown();
+                    return;
+                }
+                if (e.key === 'ArrowLeft') {
+                    e.preventDefault();
+                    navigateLeft();
+                    return;
+                }
+                if (e.key === 'ArrowRight') {
+                    e.preventDefault();
+                    navigateRight();
+                    return;
+                }
+                // Enter: Activate focused node (drill down in explore mode)
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    activateFocusedNode();
+                    return;
+                }
+            }
+
             // Alt+Left: Back
             if (e.altKey && e.key === 'ArrowLeft') {
                 e.preventDefault();
