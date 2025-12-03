@@ -826,102 +826,38 @@
             img.src = url;
         }
 
-        // Zoom controls - zoom the columns themselves to see more/less
+        // Zoom controls - scale the entire view area
         function applyZoom(delta) {
             currentZoom += delta;
-            currentZoom = Math.max(0.3, Math.min(2.0, currentZoom)); // Limit between 30% and 200%
+            currentZoom = Math.max(0.5, Math.min(3.0, currentZoom)); // Limit between 50% and 300%
 
-            // Apply zoom to all columns
-            document.querySelectorAll('.column').forEach(col => {
-                col.style.setProperty('min-width', `${320 * currentZoom}px`, 'important');
-                col.style.setProperty('max-width', `${320 * currentZoom}px`, 'important');
-            });
+            const container = document.getElementById('columnsContainer');
+            container.style.transform = `scale(${currentZoom})`;
+            container.style.transformOrigin = 'top left';
 
-            // Apply zoom to node items - scale all the content
-            document.querySelectorAll('.node-item').forEach(node => {
-                node.style.setProperty('font-size', `${13 * currentZoom}px`, 'important');
-                const topBottom = 6 * currentZoom;
-                const right = 80 * currentZoom;
-                const left = 50 * currentZoom;
-                node.style.setProperty('padding', `${topBottom}px ${right}px ${topBottom}px ${left}px`, 'important');
-                node.style.setProperty('margin', `${4 * currentZoom}px ${8 * currentZoom}px`, 'important');
-            });
-
-            // Apply zoom to node group text
-            document.querySelectorAll('.node-group').forEach(group => {
-                group.style.setProperty('font-size', `${11 * currentZoom}px`, 'important');
-            });
-
-            // Apply zoom to node name text
-            document.querySelectorAll('.node-name').forEach(name => {
-                name.style.setProperty('font-size', `${13 * currentZoom}px`, 'important');
-            });
-
-            // Apply zoom to node version text
-            document.querySelectorAll('.node-version').forEach(version => {
-                version.style.setProperty('font-size', `${11 * currentZoom}px`, 'important');
-            });
-
-            // Apply zoom to column headers
-            document.querySelectorAll('.column-header').forEach(header => {
-                header.style.setProperty('font-size', `${11 * currentZoom}px`, 'important');
-                header.style.setProperty('padding', `${8 * currentZoom}px ${15 * currentZoom}px`, 'important');
-            });
-
-            // Apply zoom to icons
-            document.querySelectorAll('.node-type-icon, .scope-icon').forEach(icon => {
-                icon.style.setProperty('font-size', `${14 * currentZoom}px`, 'important');
-            });
+            // Adjust container width to account for scaling
+            // When zoomed in, content is bigger so we need more horizontal space
+            // When zoomed out, content is smaller so we can fit more
+            container.style.width = `${100 / currentZoom}%`;
 
             // Update zoom display
             const zoomDisplay = document.getElementById('zoomDisplay');
             if (zoomDisplay) {
                 zoomDisplay.textContent = `${Math.round(currentZoom * 100)}%`;
             }
-
-            // Redraw connectors with new sizes
-            drawConnectors();
         }
 
         function resetZoom() {
             currentZoom = 1.0;
 
-            // Reset column widths
-            document.querySelectorAll('.column').forEach(col => {
-                col.style.removeProperty('min-width');
-                col.style.removeProperty('max-width');
-            });
-
-            // Reset node items
-            document.querySelectorAll('.node-item').forEach(node => {
-                node.style.removeProperty('font-size');
-                node.style.removeProperty('padding');
-                node.style.removeProperty('margin');
-            });
-
-            // Reset text elements
-            document.querySelectorAll('.node-group, .node-name, .node-version').forEach(el => {
-                el.style.removeProperty('font-size');
-            });
-
-            // Reset column headers
-            document.querySelectorAll('.column-header').forEach(header => {
-                header.style.removeProperty('font-size');
-                header.style.removeProperty('padding');
-            });
-
-            // Reset icons
-            document.querySelectorAll('.node-type-icon, .scope-icon').forEach(icon => {
-                icon.style.removeProperty('font-size');
-            });
+            const container = document.getElementById('columnsContainer');
+            container.style.transform = '';
+            container.style.width = '';
 
             const zoomDisplay = document.getElementById('zoomDisplay');
             if (zoomDisplay) {
                 zoomDisplay.textContent = '100%';
             }
-
-            // Redraw connectors
-            drawConnectors();
         }
 
         // Display recent files on page load
