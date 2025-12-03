@@ -939,11 +939,12 @@
             currentZoom += delta;
             currentZoom = Math.max(0.5, Math.min(3.0, currentZoom)); // Limit between 50% and 300%
 
-            const container = document.getElementById('columnsContainer');
+            const mainContainer = document.querySelector('.main-container');
 
-            // Apply zoom using CSS zoom property instead of transform scale
-            // This properly scales the container and all its contents while maintaining layout
-            container.style.zoom = currentZoom;
+            // Use transform: scale() on the main container
+            // This scales everything including SVG arrows as one unit
+            mainContainer.style.transform = `scale(${currentZoom})`;
+            mainContainer.style.transformOrigin = 'top left';
 
             // Update zoom display
             const zoomDisplay = document.getElementById('zoomDisplay');
@@ -955,8 +956,9 @@
         function resetZoom() {
             currentZoom = 1.0;
 
-            const container = document.getElementById('columnsContainer');
-            container.style.zoom = '';
+            const mainContainer = document.querySelector('.main-container');
+            mainContainer.style.transform = '';
+            mainContainer.style.transformOrigin = '';
 
             const zoomDisplay = document.getElementById('zoomDisplay');
             if (zoomDisplay) {
