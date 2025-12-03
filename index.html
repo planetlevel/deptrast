@@ -2977,27 +2977,46 @@
                 selectNode(currentPurl, columnIndex);
             }
 
-            // Recursively expand all children
-            function expandAllChildren(purl, depth = 0, maxDepth = 10) {
-                if (depth >= maxDepth) return; // Prevent infinite loops
-
-                const children = dependencyMap.get(purl) || [];
-                const filteredChildren = filterNodesByScope(children);
-
-                if (filteredChildren.length > 0) {
-                    // Add column if it doesn't exist at this position
-                    if (!columns[selectedPath.length + depth]) {
-                        addColumn(filteredChildren, `Level ${depth + 1}`);
-                    }
-
-                    // Recursively expand each child
-                    filteredChildren.forEach(childPurl => {
-                        expandAllChildren(childPurl, depth + 1, maxDepth);
-                    });
-                }
+            // Remove any columns after the current selection
+            const currentColumnIndex = selectedPath.length - 1;
+            while (columns.length > currentColumnIndex + 1) {
+                const removed = columns.pop();
+                removed.element.remove();
             }
 
-            expandAllChildren(currentPurl);
+            // Build complete tree level by level using BFS (similar to expandAllTree)
+            let currentLevel = new Set([currentPurl]);
+            const visited = new Set([currentPurl]);
+            let depth = 1;
+            const maxDepth = 20; // Safety limit
+
+            while (currentLevel.size > 0 && depth < maxDepth) {
+                const nextLevel = new Set();
+                const nodesForThisLevel = new Set();
+
+                // Collect all children for current level
+                currentLevel.forEach(purl => {
+                    const deps = dependencyMap.get(purl) || [];
+                    const filteredDeps = filterNodesByScope(deps);
+
+                    filteredDeps.forEach(dep => {
+                        if (!visited.has(dep)) {
+                            visited.add(dep);
+                            nextLevel.add(dep);
+                            nodesForThisLevel.add(dep);
+                        }
+                    });
+                });
+
+                // Add column for this level if there are nodes
+                if (nodesForThisLevel.size > 0) {
+                    addColumn(Array.from(nodesForThisLevel), `Level ${depth}`);
+                }
+
+                currentLevel = nextLevel;
+                depth++;
+            }
+
             drawConnectors();
         }
 
