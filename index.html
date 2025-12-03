@@ -948,9 +948,6 @@
             container.style.width = `${100 / currentZoom}%`;
             container.style.height = `${100 / currentZoom}%`;
 
-            // Redraw connectors to adjust SVG canvas size for new zoom level
-            drawConnectors();
-
             // Update zoom display
             const zoomDisplay = document.getElementById('zoomDisplay');
             if (zoomDisplay) {
@@ -966,9 +963,6 @@
             container.style.transformOrigin = '';
             container.style.width = '';
             container.style.height = '';
-
-            // Redraw connectors to adjust SVG canvas size
-            drawConnectors();
 
             const zoomDisplay = document.getElementById('zoomDisplay');
             if (zoomDisplay) {
@@ -1975,8 +1969,9 @@
             });
 
             // Add padding to ensure arrows have room
-            const svgWidth = Math.max(container.scrollWidth, maxRight + 100);
-            const svgHeight = Math.max(container.scrollHeight, maxBottom + 100);
+            // Account for zoom: when zoomed out, we need more SVG space since container is larger
+            const svgWidth = Math.max(container.scrollWidth, maxRight + 100) / currentZoom;
+            const svgHeight = Math.max(container.scrollHeight, maxBottom + 100) / currentZoom;
 
             svg.setAttribute('width', svgWidth);
             svg.setAttribute('height', svgHeight);
