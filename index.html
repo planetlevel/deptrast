@@ -2729,12 +2729,32 @@
                     updateComponentDetails();
                 }
             } else if (currentViewMode === 'focus') {
-                // FOCUS MODE: Move to previous column
-                if (focusedColumnIndex > 0) {
+                // FOCUS MODE: Follow arrow back to find parent in previous column
+                if (focusedColumnIndex > 0 && focusedNodeElement) {
+                    const currentPurl = focusedNodeElement.dataset.purl;
                     const prevColumn = columns[focusedColumnIndex - 1];
                     const nodes = prevColumn.element.querySelectorAll('.node-item');
-                    const middleIndex = Math.floor(nodes.length / 2);
-                    setKeyboardFocus(focusedColumnIndex - 1, middleIndex);
+
+                    // Find which node in the previous column points to current node
+                    let foundIndex = -1;
+                    nodes.forEach((node, idx) => {
+                        const nodePurl = node.dataset.purl;
+                        const deps = dependencyMap.get(nodePurl) || [];
+                        const filteredDeps = filterNodesByScope(deps);
+
+                        // Check if this node depends on the current node
+                        if (filteredDeps.includes(currentPurl)) {
+                            foundIndex = idx;
+                        }
+                    });
+
+                    // If we found a parent, focus on it; otherwise go to middle
+                    if (foundIndex >= 0) {
+                        setKeyboardFocus(focusedColumnIndex - 1, foundIndex);
+                    } else {
+                        const middleIndex = Math.floor(nodes.length / 2);
+                        setKeyboardFocus(focusedColumnIndex - 1, middleIndex);
+                    }
                 }
             }
         }
@@ -2757,12 +2777,33 @@
                     }, 50);
                 }
             } else if (currentViewMode === 'focus') {
-                // FOCUS MODE: Move to next column
-                if (focusedColumnIndex < columns.length - 1) {
+                // FOCUS MODE: Follow arrow forward to find first child in next column
+                if (focusedColumnIndex < columns.length - 1 && focusedNodeElement) {
+                    const currentPurl = focusedNodeElement.dataset.purl;
+                    const deps = dependencyMap.get(currentPurl) || [];
+                    const filteredDeps = filterNodesByScope(deps);
+
                     const nextColumn = columns[focusedColumnIndex + 1];
                     const nodes = nextColumn.element.querySelectorAll('.node-item');
-                    const middleIndex = Math.floor(nodes.length / 2);
-                    setKeyboardFocus(focusedColumnIndex + 1, middleIndex);
+
+                    // Find the first child in the next column
+                    let foundIndex = -1;
+                    if (filteredDeps.length > 0) {
+                        const firstChildPurl = filteredDeps[0];
+                        nodes.forEach((node, idx) => {
+                            if (node.dataset.purl === firstChildPurl) {
+                                foundIndex = idx;
+                            }
+                        });
+                    }
+
+                    // If we found the first child, focus on it; otherwise go to middle
+                    if (foundIndex >= 0) {
+                        setKeyboardFocus(focusedColumnIndex + 1, foundIndex);
+                    } else {
+                        const middleIndex = Math.floor(nodes.length / 2);
+                        setKeyboardFocus(focusedColumnIndex + 1, middleIndex);
+                    }
                 }
             }
         }
