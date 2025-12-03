@@ -1,0 +1,32 @@
+{
+  "name": "SBOM Dependency Explorer",
+  "short_name": "SBOM Explorer",
+  "description": "Interactive SBOM dependency tree visualization and exploration tool",
+  "start_url": "/index.html",
+  "display": "standalone",
+  "background_color": "#f5f5f5",
+  "theme_color": "#0078d4",
+  "orientation": "landscape",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["development", "utilities", "productivity"],
+  "screenshots": [
+    {
+      "src": "screenshot.png",
+      "sizes": "1920x1080",
+      "type": "image/png"
+    }
+  ]
+}

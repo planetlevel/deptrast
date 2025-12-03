@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Background -->
+  <rect width="512" height="512" rx="80" fill="#0078d4"/>
+
+  <!-- Tree structure representing dependency graph -->
+  <!-- Root node -->
+  <circle cx="256" cy="120" r="35" fill="white" opacity="0.95"/>
+
+  <!-- First level - 3 nodes -->
+  <circle cx="150" cy="220" r="28" fill="white" opacity="0.85"/>
+  <circle cx="256" cy="220" r="28" fill="white" opacity="0.85"/>
+  <circle cx="362" cy="220" r="28" fill="white" opacity="0.85"/>
+
+  <!-- Second level - 4 nodes -->
+  <circle cx="120" cy="320" r="22" fill="white" opacity="0.75"/>
+  <circle cx="200" cy="320" r="22" fill="white" opacity="0.75"/>
+  <circle cx="312" cy="320" r="22" fill="white" opacity="0.75"/>
+  <circle cx="392" cy="320" r="22" fill="white" opacity="0.75"/>
+
+  <!-- Third level - 3 nodes -->
+  <circle cx="160" cy="400" r="18" fill="white" opacity="0.65"/>
+  <circle cx="256" cy="400" r="18" fill="white" opacity="0.65"/>
+  <circle cx="352" cy="400" r="18" fill="white" opacity="0.65"/>
+
+  <!-- Connecting lines -->
+  <g stroke="white" stroke-width="4" stroke-opacity="0.6" fill="none">
+    <!-- Root to level 1 -->
+    <line x1="256" y1="155" x2="150" y2="192"/>
+    <line x1="256" y1="155" x2="256" y2="192"/>
+    <line x1="256" y1="155" x2="362" y2="192"/>
+
+    <!-- Level 1 to level 2 -->
+    <line x1="150" y1="248" x2="120" y2="298"/>
+    <line x1="150" y1="248" x2="200" y2="298"/>
+    <line x1="256" y1="248" x2="312" y2="298"/>
+    <line x1="362" y1="248" x2="392" y2="298"/>
+
+    <!-- Level 2 to level 3 -->
+    <line x1="120" y1="342" x2="160" y2="382"/>
+    <line x1="200" y1="342" x2="256" y2="382"/>
+    <line x1="312" y1="342" x2="352" y2="382"/>
+  </g>
+
+  <!-- SBOM text -->
+  <text x="256" y="470" font-family="Arial, sans-serif" font-size="48" font-weight="bold" fill="white" text-anchor="middle">SBOM</text>
+</svg>
