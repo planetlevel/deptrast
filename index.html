@@ -1966,8 +1966,9 @@
             columns.forEach(col => {
                 const rect = col.element.getBoundingClientRect();
                 const containerRect = container.getBoundingClientRect();
-                const right = rect.right - containerRect.left + container.scrollLeft;
-                const bottom = rect.bottom - containerRect.top + container.scrollTop;
+                // Divide by currentZoom to get unscaled dimensions
+                const right = (rect.right - containerRect.left + container.scrollLeft) / currentZoom;
+                const bottom = (rect.bottom - containerRect.top + container.scrollTop) / currentZoom;
                 maxRight = Math.max(maxRight, right);
                 maxBottom = Math.max(maxBottom, bottom);
             });
@@ -2028,10 +2029,12 @@
                 const fromRect = fromItem.getBoundingClientRect();
                 const toRect = toItem.getBoundingClientRect();
 
-                const x1 = fromRect.right - containerRect.left + scrollLeft;
-                const y1 = fromRect.top + fromRect.height / 2 - containerRect.top + scrollTop;
-                const x2 = toRect.left - containerRect.left + scrollLeft - 6;
-                const y2 = toRect.top + toRect.height / 2 - containerRect.top + scrollTop;
+                // getBoundingClientRect returns scaled coordinates (after transform)
+                // Divide by currentZoom to get original coordinates for SVG drawing
+                const x1 = (fromRect.right - containerRect.left + scrollLeft) / currentZoom;
+                const y1 = (fromRect.top + fromRect.height / 2 - containerRect.top + scrollTop) / currentZoom;
+                const x2 = (toRect.left - containerRect.left + scrollLeft - 6) / currentZoom;
+                const y2 = (toRect.top + toRect.height / 2 - containerRect.top + scrollTop) / currentZoom;
 
                 const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
                 const midX = (x1 + x2) / 2;
