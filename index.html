@@ -939,13 +939,10 @@
             currentZoom = Math.max(0.5, Math.min(3.0, currentZoom)); // Limit between 50% and 300%
 
             const container = document.getElementById('columnsContainer');
-            container.style.transform = `scale(${currentZoom})`;
-            container.style.transformOrigin = 'top left';
 
-            // Adjust container width to account for scaling
-            // When zoomed in, content is bigger so we need more horizontal space
-            // When zoomed out, content is smaller so we can fit more
-            container.style.width = `${100 / currentZoom}%`;
+            // Apply zoom using CSS zoom property instead of transform scale
+            // This properly scales the container and all its contents while maintaining layout
+            container.style.zoom = currentZoom;
 
             // Update zoom display
             const zoomDisplay = document.getElementById('zoomDisplay');
@@ -958,8 +955,7 @@
             currentZoom = 1.0;
 
             const container = document.getElementById('columnsContainer');
-            container.style.transform = '';
-            container.style.width = '';
+            container.style.zoom = '';
 
             const zoomDisplay = document.getElementById('zoomDisplay');
             if (zoomDisplay) {
