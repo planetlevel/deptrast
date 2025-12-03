@@ -2696,8 +2696,11 @@
 
         function navigateLeft() {
             if (currentViewMode === 'app') {
-                // EXPLORE MODE: Go back (remove last column, select item in previous column)
+                // EXPLORE MODE: Go back (remove last column, return to previously selected item)
                 if (columns.length > 1) {
+                    // Capture the current selection BEFORE removing it
+                    const previousSelection = selectedPath.length > 0 ? selectedPath[selectedPath.length - 1] : null;
+
                     // Remove the last column
                     const lastColumn = columns.pop();
                     lastColumn.element.remove();
@@ -2707,21 +2710,31 @@
                         selectedPath.pop();
                     }
 
-                    // Update focus to last item in path (now in last visible column)
-                    if (selectedPath.length > 0 && columns.length > 0) {
-                        // Find the selected node in the new last column
-                        const lastPurl = selectedPath[selectedPath.length - 1];
+                    // Update focus to the item we just came from
+                    if (previousSelection && columns.length > 0) {
+                        // Find the previously selected node in the current last column
                         const lastColumn = columns[columns.length - 1];
                         const nodes = lastColumn.element.querySelectorAll('.node-item');
 
+                        let found = false;
                         nodes.forEach((node, idx) => {
-                            if (node.dataset.purl === lastPurl) {
+                            if (node.dataset.purl === previousSelection) {
                                 setKeyboardFocus(columns.length - 1, idx);
+                                found = true;
                             }
                         });
+
+                        // If not found (shouldn't happen), default to middle
+                        if (!found) {
+                            const middleIndex = Math.floor(nodes.length / 2);
+                            setKeyboardFocus(columns.length - 1, middleIndex);
+                        }
                     } else {
-                        // Back to root - focus first item in first column
-                        setKeyboardFocus(0, 0);
+                        // Back to root - focus middle item in first column
+                        const firstColumn = columns[0];
+                        const nodes = firstColumn.element.querySelectorAll('.node-item');
+                        const middleIndex = Math.floor(nodes.length / 2);
+                        setKeyboardFocus(0, middleIndex);
                     }
 
                     updateSelectionUI();
