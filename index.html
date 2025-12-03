@@ -2643,19 +2643,27 @@
                 // Click the focused node to select and expand it
                 focusedNodeElement.click();
 
-                // After click, if a new column was added, focus on first item in that new column
+                // After click, if a new column was added, focus on middle item in that new column
                 setTimeout(() => {
                     if (columns.length > focusedColumnIndex + 1) {
-                        setKeyboardFocus(focusedColumnIndex + 1, 0);
+                        const nextColumn = columns[focusedColumnIndex + 1];
+                        const nodes = nextColumn.element.querySelectorAll('.node-item');
+                        const middleIndex = Math.floor(nodes.length / 2);
+                        setKeyboardFocus(focusedColumnIndex + 1, middleIndex);
                     }
                 }, 50);
             }
         }
 
-        // Initialize keyboard focus to first node when SBOM loads
+        // Initialize keyboard focus to middle node when SBOM loads
         function initializeKeyboardNavigation() {
             if (columns.length > 0) {
-                setTimeout(() => setKeyboardFocus(0, 0), 100);
+                setTimeout(() => {
+                    const firstColumn = columns[0];
+                    const nodes = firstColumn.element.querySelectorAll('.node-item');
+                    const middleIndex = Math.floor(nodes.length / 2);
+                    setKeyboardFocus(0, middleIndex);
+                }, 100);
             }
         }
 
@@ -2787,8 +2795,11 @@
             // Clear selected path
             selectedPath = [];
 
-            // Focus on first item in first column
-            setKeyboardFocus(0, 0);
+            // Focus on middle item in first column
+            const firstColumn = columns[0];
+            const nodes = firstColumn.element.querySelectorAll('.node-item');
+            const middleIndex = Math.floor(nodes.length / 2);
+            setKeyboardFocus(0, middleIndex);
 
             updateSelectionUI();
             drawConnectors();
