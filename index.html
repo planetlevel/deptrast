@@ -948,6 +948,9 @@
             container.style.width = `${100 / currentZoom}%`;
             container.style.height = `${100 / currentZoom}%`;
 
+            // Redraw connectors to adjust SVG canvas size for new zoom level
+            drawConnectors();
+
             // Update zoom display
             const zoomDisplay = document.getElementById('zoomDisplay');
             if (zoomDisplay) {
@@ -963,6 +966,9 @@
             container.style.transformOrigin = '';
             container.style.width = '';
             container.style.height = '';
+
+            // Redraw connectors to adjust SVG canvas size
+            drawConnectors();
 
             const zoomDisplay = document.getElementById('zoomDisplay');
             if (zoomDisplay) {
