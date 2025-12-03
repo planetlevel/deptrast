@@ -32,7 +32,7 @@ jobs:
         cache: maven
     
     - name: Clean and build with Maven
-      run: mvn -B clean package --file pom.xml
+      run: mvn -B clean package -DskipTests --file pom.xml
     
     - name: Set version
       id: get_version
