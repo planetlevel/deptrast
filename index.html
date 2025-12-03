@@ -45,19 +45,125 @@
             align-items: center;
         }
 
-        .view-selector select {
+        .custom-dropdown {
+            position: relative;
+            min-width: 350px;
+        }
+
+        .dropdown-selected {
             padding: 8px 12px;
             border: 1px solid #ccc;
             border-radius: 2px;
             font-size: 13px;
             background: white;
             cursor: pointer;
-            min-width: 300px;
+            user-select: none;
         }
 
-        .view-selector select:focus {
+        .dropdown-selected:hover {
+            background: #f5f5f5;
+        }
+
+        .dropdown-menu {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1px solid #ccc;
+            border-top: none;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            z-index: 1000;
+        }
+
+        .dropdown-menu.open {
+            display: block;
+        }
+
+        .dropdown-search {
+            padding: 8px;
+            border-bottom: 1px solid #e0e0e0;
+            background: white;
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }
+
+        .dropdown-search input {
+            width: 100%;
+            padding: 6px 10px;
+            border: 1px solid #ccc;
+            border-radius: 2px;
+            font-size: 13px;
             outline: none;
+        }
+
+        .dropdown-search input:focus {
             border-color: #0078d4;
+        }
+
+        .dropdown-items-container {
+            max-height: 450px;
+            overflow-y: auto;
+        }
+
+        .dropdown-item {
+            padding: 8px 12px;
+            font-size: 13px;
+            cursor: pointer;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .dropdown-item:hover {
+            background: #f5f5f5;
+        }
+
+        .dropdown-item.selected {
+            background: #e8f4f8;
+            font-weight: 500;
+        }
+
+        .dropdown-group {
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .dropdown-group-header {
+            padding: 8px 12px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            background: #fafafa;
+            user-select: none;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .dropdown-group-header:hover {
+            background: #f0f0f0;
+        }
+
+        .dropdown-group-header .expand-icon {
+            font-size: 10px;
+            transition: transform 0.2s;
+        }
+
+        .dropdown-group-header.expanded .expand-icon {
+            transform: rotate(90deg);
+        }
+
+        .dropdown-group-items {
+            display: none;
+            background: white;
+        }
+
+        .dropdown-group-items.open {
+            display: block;
+        }
+
+        .dropdown-group-items .dropdown-item {
+            padding-left: 24px;
         }
 
         .focused-component {
@@ -265,33 +371,7 @@
             border-left-color: #f44336;
         }
 
-        .column.last-column .node-item {
-            background: #e3f2fd;
-        }
-
-        .column.last-column .node-item.selected {
-            background: #bbdefb;
-            border-left-color: #0078d4;
-        }
-
-        /* Scope colors should override last-column highlighting */
-        .column.last-column .node-item.scope-optional {
-            background: #fff9e6;
-        }
-
-        .column.last-column .node-item.scope-optional.selected {
-            background: #ffe8a1;
-            border-left-color: #ffc107;
-        }
-
-        .column.last-column .node-item.scope-excluded {
-            background: #ffe6e6;
-        }
-
-        .column.last-column .node-item.scope-excluded.selected {
-            background: #ffb3b3;
-            border-left-color: #f44336;
-        }
+        /* Last column styling removed - keep white background */
 
         .node-group {
             font-size: 11px;
@@ -533,9 +613,19 @@
             <button id="forwardButton" onclick="goForward()" disabled style="opacity: 0.5;">Forward →</button>
             <div class="view-selector" id="viewSelector" style="display: none; margin-left: 20px;">
                 <label style="font-size: 13px; color: #666;">Focus:</label>
-                <select id="componentSelector" onchange="changeView()">
-                    <option value="__app__">Application (Explore Mode)</option>
-                </select>
+                <div class="custom-dropdown">
+                    <div class="dropdown-selected" id="dropdownSelected" onclick="toggleDropdown()">
+                        🌳 Application (Full Tree)
+                    </div>
+                    <div class="dropdown-menu" id="dropdownMenu">
+                        <div class="dropdown-search">
+                            <input type="text" id="dropdownSearch" placeholder="Type to search..." autocomplete="off">
+                        </div>
+                        <div class="dropdown-items-container" id="dropdownItemsContainer">
+                            <!-- Populated by JavaScript -->
+                        </div>
+                    </div>
+                </div>
             </div>
             <button onclick="resetView()">🔍 Focus on App</button>
             <div class="scope-filters" id="scopeFilters" style="display: none; margin-left: 20px;">
@@ -687,115 +777,250 @@
         }
 
         function populateComponentSelector() {
-            const selector = document.getElementById('componentSelector');
-            selector.innerHTML = '<option value="__app__">🌳 Application (Full Tree)</option>';
+            const container = document.getElementById('dropdownItemsContainer');
+            container.innerHTML = '';
 
-            // Group components by type (root, leaf, inner)
-            const roots = findRootNodes();
-            const rootSet = new Set(roots);
-            const leafNodes = [];
-            const innerNodes = [];
-            const rootInnerNodes = [];
+            // Clear search box
+            const searchBox = document.getElementById('dropdownSearch');
+            if (searchBox) {
+                searchBox.value = '';
+            }
 
-            componentMap.forEach((comp, purl) => {
-                const deps = dependencyMap.get(purl) || [];
-                const reverseDeps = reverseDependencyMap.get(purl) || [];
-                const isRoot = rootSet.has(purl);
+            // Add "Application" option
+            const appItem = document.createElement('div');
+            appItem.className = 'dropdown-item';
+            appItem.dataset.value = '__app__';
+            appItem.dataset.searchtext = 'application full tree';
+            appItem.textContent = '🌳 Application (Full Tree)';
+            appItem.onclick = () => selectDropdownItem('__app__', '🌳 Application (Full Tree)');
+            container.appendChild(appItem);
 
-                if (deps.length === 0 && reverseDeps.length > 0) {
-                    // Leaf: has parents, no children
-                    leafNodes.push({ purl, comp, isRoot });
-                } else if (deps.length > 0 && reverseDeps.length === 0) {
-                    // True root: has children, no parents
-                    rootInnerNodes.push({ purl, comp, isRoot: true });
-                } else if (deps.length > 0 && reverseDeps.length > 0) {
-                    // Inner: has both parents and children
-                    if (isRoot) {
-                        rootInnerNodes.push({ purl, comp, isRoot });
-                    } else {
-                        innerNodes.push({ purl, comp, isRoot });
-                    }
-                }
-            });
-
-            // Sort all groups alphabetically by name
-            leafNodes.sort((a, b) => (a.comp.name || a.purl).localeCompare(b.comp.name || b.purl));
-            innerNodes.sort((a, b) => (a.comp.name || a.purl).localeCompare(b.comp.name || b.purl));
-            rootInnerNodes.sort((a, b) => (a.comp.name || a.purl).localeCompare(b.comp.name || b.purl));
+            // Check excluded filter state
+            const excludedCheckbox = document.getElementById('scopeExcluded');
+            const showExcluded = excludedCheckbox ? excludedCheckbox.checked : false;
 
             // Helper function to get scope icon
             function getScopeIcon(comp) {
                 const scope = (comp.scope || 'required').toLowerCase();
                 if (scope === 'optional') {
-                    return '🟡'; // Yellow for optional
+                    return '🟡';
                 } else if (scope === 'excluded') {
-                    return '🔴'; // Red for excluded
+                    return '🔴';
                 } else {
-                    return '🟢'; // Green for required
+                    return '🟢';
                 }
             }
 
-            // Add root inner nodes (roots that have children)
-            if (rootInnerNodes.length > 0) {
-                const rootGroup = document.createElement('optgroup');
-                rootGroup.label = '🌱 Root Dependencies (starting points)';
-                rootInnerNodes.forEach(({purl, comp}) => {
-                    const option = document.createElement('option');
-                    option.value = purl;
-                    const icon = getScopeIcon(comp);
-                    option.textContent = `${icon} ${comp.name || purl} ${comp.version || ''}`.trim();
-                    rootGroup.appendChild(option);
-                });
-                selector.appendChild(rootGroup);
-            }
+            // Group components by full name (group:artifact for Maven, just name for others)
+            const componentsByName = new Map();
 
-            // Add inner nodes
-            if (innerNodes.length > 0) {
-                const innerGroup = document.createElement('optgroup');
-                innerGroup.label = '🔗 Inner Dependencies (has parents & children)';
-                innerNodes.forEach(({purl, comp}) => {
-                    const option = document.createElement('option');
-                    option.value = purl;
-                    const icon = getScopeIcon(comp);
-                    option.textContent = `${icon} ${comp.name || purl} ${comp.version || ''}`.trim();
-                    innerGroup.appendChild(option);
-                });
-                selector.appendChild(innerGroup);
-            }
+            componentMap.forEach((comp, purl) => {
+                const scope = (comp.scope || 'required').toLowerCase();
 
-            // Add leaf nodes
-            if (leafNodes.length > 0) {
-                const leafGroup = document.createElement('optgroup');
-                leafGroup.label = '📍 Leaf Dependencies (no children)';
-                leafNodes.forEach(({purl, comp}) => {
-                    const option = document.createElement('option');
-                    option.value = purl;
+                // Filter out excluded components if checkbox is unchecked
+                if (scope === 'excluded' && !showExcluded) {
+                    return;
+                }
+
+                // Use group:name for Maven packages, just name for others
+                const fullName = comp.group ? `${comp.group}:${comp.name}` : (comp.name || purl);
+                if (!componentsByName.has(fullName)) {
+                    componentsByName.set(fullName, []);
+                }
+                componentsByName.get(fullName).push({ purl, comp });
+            });
+
+            // Sort by display name (artifact name) for alphabetical menu
+            const sortedNames = Array.from(componentsByName.keys()).sort((a, b) => {
+                // Extract display name (artifact name) from full name for sorting
+                const getDisplayName = (fullName) => {
+                    const parts = fullName.split(':');
+                    return parts.length > 1 ? parts[parts.length - 1] : fullName;
+                };
+                const displayA = getDisplayName(a).toLowerCase();
+                const displayB = getDisplayName(b).toLowerCase();
+                return displayA.localeCompare(displayB);
+            });
+
+            // Build dropdown with collapsible groups for multiple versions
+            sortedNames.forEach(fullName => {
+                const versions = componentsByName.get(fullName);
+                const firstComp = versions[0].comp;
+                const displayName = firstComp.name || fullName;
+
+                if (versions.length === 1) {
+                    // Single version - add as regular item
+                    const {purl, comp} = versions[0];
+                    const item = document.createElement('div');
+                    item.className = 'dropdown-item';
+                    item.dataset.value = purl;
+                    item.dataset.searchtext = `${displayName} ${comp.version || ''} ${comp.group || ''}`.toLowerCase();
                     const icon = getScopeIcon(comp);
-                    option.textContent = `${icon} ${comp.name || purl} ${comp.version || ''}`.trim();
-                    leafGroup.appendChild(option);
+                    const text = `${icon} ${displayName} ${comp.version || ''}`.trim();
+                    item.textContent = text;
+                    item.onclick = () => selectDropdownItem(purl, text);
+                    container.appendChild(item);
+                } else {
+                    // Multiple versions - create collapsible group
+                    const group = document.createElement('div');
+                    group.className = 'dropdown-group';
+                    group.dataset.searchtext = `${displayName} ${firstComp.group || ''}`.toLowerCase();
+
+                    const header = document.createElement('div');
+                    header.className = 'dropdown-group-header';
+                    const icon = getScopeIcon(firstComp);
+                    header.innerHTML = `<span>${icon} ${displayName} (${versions.length} versions)</span><span class="expand-icon">▶</span>`;
+
+                    const itemsContainer = document.createElement('div');
+                    itemsContainer.className = 'dropdown-group-items';
+
+                    // Sort versions descending
+                    versions.sort((a, b) => (b.comp.version || '').localeCompare(a.comp.version || ''));
+
+                    versions.forEach(({purl, comp}) => {
+                        const item = document.createElement('div');
+                        item.className = 'dropdown-item';
+                        item.dataset.value = purl;
+                        item.dataset.searchtext = `${displayName} ${comp.version || ''}`.toLowerCase();
+                        const versionIcon = getScopeIcon(comp);
+                        const text = `${versionIcon} ${displayName} ${comp.version || 'unknown'}`;
+                        item.textContent = text;
+                        item.onclick = () => selectDropdownItem(purl, text);
+                        itemsContainer.appendChild(item);
+                    });
+
+                    header.onclick = (e) => {
+                        e.stopPropagation();
+                        header.classList.toggle('expanded');
+                        itemsContainer.classList.toggle('open');
+                    };
+
+                    group.appendChild(header);
+                    group.appendChild(itemsContainer);
+                    container.appendChild(group);
+                }
+            });
+
+            // Setup search functionality
+            setupDropdownSearch();
+        }
+
+        function setupDropdownSearch() {
+            const searchBox = document.getElementById('dropdownSearch');
+            if (!searchBox) return;
+
+            // Remove old listener if exists
+            searchBox.onkeyup = null;
+
+            // Add search listener
+            searchBox.onkeyup = (e) => {
+                const searchTerm = searchBox.value.toLowerCase().trim();
+                const container = document.getElementById('dropdownItemsContainer');
+                const items = container.querySelectorAll('.dropdown-item, .dropdown-group');
+
+                items.forEach(item => {
+                    const searchText = item.dataset.searchtext || '';
+                    const matches = searchText.includes(searchTerm);
+
+                    if (item.classList.contains('dropdown-group')) {
+                        // For groups, check if group or any child matches
+                        const groupMatches = matches;
+                        const childItems = item.querySelectorAll('.dropdown-item');
+                        const anyChildMatches = Array.from(childItems).some(child => {
+                            const childText = child.dataset.searchtext || '';
+                            return childText.includes(searchTerm);
+                        });
+
+                        if (groupMatches || anyChildMatches) {
+                            item.style.display = '';
+                            // Auto-expand if searching and has matches
+                            if (searchTerm && anyChildMatches) {
+                                const header = item.querySelector('.dropdown-group-header');
+                                const itemsContainer = item.querySelector('.dropdown-group-items');
+                                if (header && itemsContainer && !itemsContainer.classList.contains('open')) {
+                                    header.classList.add('expanded');
+                                    itemsContainer.classList.add('open');
+                                }
+                            }
+
+                            // Show/hide individual child items based on match
+                            childItems.forEach(child => {
+                                const childText = child.dataset.searchtext || '';
+                                child.style.display = childText.includes(searchTerm) ? '' : 'none';
+                            });
+                        } else {
+                            item.style.display = 'none';
+                        }
+                    } else {
+                        // Regular item
+                        item.style.display = matches ? '' : 'none';
+                    }
                 });
-                selector.appendChild(leafGroup);
+            };
+
+            // Focus search box when dropdown opens
+            searchBox.onclick = (e) => {
+                e.stopPropagation();
+            };
+        }
+
+        function toggleDropdown() {
+            const menu = document.getElementById('dropdownMenu');
+            const searchBox = document.getElementById('dropdownSearch');
+
+            menu.classList.toggle('open');
+
+            // Focus search box when opening
+            if (menu.classList.contains('open') && searchBox) {
+                setTimeout(() => searchBox.focus(), 50);
             }
         }
 
+        function selectDropdownItem(value, text) {
+            currentSelectedComponent = value;
+            document.getElementById('dropdownSelected').textContent = text;
+            document.getElementById('dropdownMenu').classList.remove('open');
+
+            // Update selection highlighting
+            document.querySelectorAll('.dropdown-item').forEach(item => {
+                item.classList.remove('selected');
+                if (item.dataset.value === value) {
+                    item.classList.add('selected');
+                }
+            });
+
+            changeView();
+        }
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', (e) => {
+            const dropdown = document.querySelector('.custom-dropdown');
+            const menu = document.getElementById('dropdownMenu');
+            if (dropdown && !dropdown.contains(e.target)) {
+                menu.classList.remove('open');
+            }
+        });
+
+        // Track previous component for history
+        let previousSelectedComponent = '__app__';
+
         function changeView() {
-            const selector = document.getElementById('componentSelector');
-            const selected = selector.value;
+            const selected = currentSelectedComponent;
 
             console.log(`🎯 changeView() called. Selected: ${selected.substring(selected.lastIndexOf('/') + 1)}`);
-            console.log(`   Current: ${currentSelectedComponent.substring(currentSelectedComponent.lastIndexOf('/') + 1)}`);
+            console.log(`   Previous: ${previousSelectedComponent.substring(previousSelectedComponent.lastIndexOf('/') + 1)}`);
             console.log(`   isNavigatingBack: ${isNavigatingBack}, isNavigatingForward: ${isNavigatingForward}`);
             console.log(`   History length before: ${navigationHistory.length}`);
 
-            // Add current state to history before changing (unless we're navigating back/forward)
-            if (!isNavigatingBack && !isNavigatingForward && currentSelectedComponent !== selected) {
+            // Add previous state to history before changing (unless we're navigating back/forward)
+            if (!isNavigatingBack && !isNavigatingForward && previousSelectedComponent !== selected) {
                 // Save focus mode state
                 const currentState = {
                     mode: 'focus',
-                    component: currentSelectedComponent
+                    component: previousSelectedComponent
                 };
                 navigationHistory.push(currentState);
-                console.log(`   ✅ Added to history: ${currentSelectedComponent.substring(currentSelectedComponent.lastIndexOf('/') + 1)}`);
+                console.log(`   ✅ Added to history: ${previousSelectedComponent.substring(previousSelectedComponent.lastIndexOf('/') + 1)}`);
                 console.log(`   History length after: ${navigationHistory.length}`);
                 // Clear forward history when making a new navigation
                 navigationForward = [];
@@ -804,7 +1029,7 @@
             isNavigatingBack = false;
             isNavigatingForward = false;
 
-            currentSelectedComponent = selected;
+            previousSelectedComponent = selected;
 
             if (selected === '__app__') {
                 // App view: explore mode with click-to-drill
@@ -862,6 +1087,7 @@
             // Add first column as "Root Dependencies"
             addColumn(nodes, 'Root Dependencies');
             updateLastColumnHighlight();
+            drawConnectors();
             document.getElementById('statsPanel').style.display = 'block';
         }
 
@@ -892,8 +1118,9 @@
                     const nextLevel = new Set();
 
                     for (const purl of currentLevel) {
-                        const parents = reverseDependencyMap.get(purl) || [];
-                        console.log(`    🔗 ${purl.substring(purl.lastIndexOf('/') + 1)}: ${parents.length} parents total`);
+                        const allParents = reverseDependencyMap.get(purl) || [];
+                        const parents = filterNodesByScope(allParents);
+                        console.log(`    🔗 ${purl.substring(purl.lastIndexOf('/') + 1)}: ${parents.length} parents (filtered from ${allParents.length} total)`);
 
                         for (const parent of parents) {
                             // Only continue traversing if we haven't seen this node yet
@@ -945,8 +1172,9 @@
                     const nextLevel = new Set();
 
                     for (const purl of currentLevel) {
-                        const children = dependencyMap.get(purl) || [];
-                        console.log(`    🔗 ${purl.substring(purl.lastIndexOf('/') + 1)}: ${children.length} children total`);
+                        const allChildren = dependencyMap.get(purl) || [];
+                        const children = filterNodesByScope(allChildren);
+                        console.log(`    🔗 ${purl.substring(purl.lastIndexOf('/') + 1)}: ${children.length} children (filtered from ${allChildren.length} total)`);
 
                         for (const child of children) {
                             // Only continue traversing if we haven't seen this node yet
@@ -1398,15 +1626,7 @@
         }
 
         function updateLastColumnHighlight() {
-            // Remove last-column class from all columns
-            document.querySelectorAll('.column').forEach(col => {
-                col.classList.remove('last-column');
-            });
-
-            // Add to the actual last column
-            if (columns.length > 0) {
-                columns[columns.length - 1].element.classList.add('last-column');
-            }
+            // Disabled - last column highlighting removed per user request
         }
 
         function updateSelectionUI() {
@@ -1588,7 +1808,9 @@
                     // For each pair of nodes, check if there's a dependency relationship
                     fromItems.forEach((fromItem) => {
                         const fromPurl = fromItem.dataset.purl;
-                        const children = dependencyMap.get(fromPurl) || [];
+                        const allChildren = dependencyMap.get(fromPurl) || [];
+                        // Apply scope filtering to match what's actually visible in columns
+                        const children = filterNodesByScope(allChildren);
 
                         toItems.forEach((toItem) => {
                             const toPurl = toItem.dataset.purl;
@@ -1769,8 +1991,11 @@
 
             console.log(`Filters updated: required=${activeFilters.required}, optional=${activeFilters.optional}, excluded=${activeFilters.excluded}`);
 
-            // Rebuild current view with filtered nodes
+            // Rebuild component selector dropdown (to show/hide excluded items)
             if (sbomData) {
+                populateComponentSelector();
+
+                // Rebuild current view with filtered nodes
                 changeView();
             }
         }
@@ -1797,11 +2022,7 @@
         function resetView() {
             if (sbomData) {
                 // Reset to app view
-                document.getElementById('componentSelector').value = '__app__';
-                currentSelectedComponent = '__app__';
-                const rootNodes = findRootNodes();
-                const filteredRoots = filterNodesByScope(rootNodes);
-                initializeAppView(filteredRoots);
+                selectDropdownItem('__app__', '🌳 Application (Full Tree)');
             }
         }
 
@@ -1842,15 +2063,12 @@
         }
 
         function analyzeComponent(purl) {
-            // Update the component selector dropdown to this component
-            const selector = document.getElementById('componentSelector');
-            selector.value = purl;
+            // Find the component info for display text
+            const comp = componentMap.get(purl);
+            const displayText = comp ? `${comp.name} ${comp.version || ''}`.trim() : purl;
 
-            // Don't set currentSelectedComponent here - let changeView() handle it
-            // so the history tracking works correctly
-
-            // Trigger view change to show this component's context
-            changeView();
+            // Update dropdown and trigger view change
+            selectDropdownItem(purl, displayText);
         }
 
         function goBack() {
@@ -1876,9 +2094,8 @@
                 // Set flag to prevent adding current component to history again
                 isNavigatingBack = true;
 
-                // Update the selector and trigger view change
-                const selector = document.getElementById('componentSelector');
-                selector.value = previousState;
+                // Update currentSelectedComponent and trigger view change
+                currentSelectedComponent = previousState;
                 changeView();
             } else if (previousState.mode === 'focus') {
                 // Focus mode: component switching
@@ -1893,9 +2110,8 @@
                 // Set flag to prevent adding current component to history again
                 isNavigatingBack = true;
 
-                // Update the selector and trigger view change
-                const selector = document.getElementById('componentSelector');
-                selector.value = previousState.component;
+                // Update currentSelectedComponent and trigger view change
+                currentSelectedComponent = previousState.component;
                 changeView();
             } else if (previousState.mode === 'explore') {
                 // New style: explore mode with path restoration
@@ -1962,9 +2178,8 @@
                 // Set flag to prevent adding current component to history again
                 isNavigatingForward = true;
 
-                // Update the selector and trigger view change
-                const selector = document.getElementById('componentSelector');
-                selector.value = nextState;
+                // Update currentSelectedComponent and trigger view change
+                currentSelectedComponent = nextState;
                 changeView();
             } else if (nextState.mode === 'focus') {
                 // Focus mode: component switching
@@ -1979,9 +2194,8 @@
                 // Set flag to prevent adding current component to history again
                 isNavigatingForward = true;
 
-                // Update the selector and trigger view change
-                const selector = document.getElementById('componentSelector');
-                selector.value = nextState.component;
+                // Update currentSelectedComponent and trigger view change
+                currentSelectedComponent = nextState.component;
                 changeView();
             } else if (nextState.mode === 'explore') {
                 // New style: explore mode with path restoration
