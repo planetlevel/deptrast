@@ -8,7 +8,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="SBOM Explorer">
-    <title>SBOM Dependency Explorer</title>
+    <title>Deptrast SBOM Explorer</title>
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
     <link rel="apple-touch-icon" href="icon-192.png">
@@ -620,8 +620,8 @@
 </head>
 <body>
     <div class="header">
-        <h1>SBOM Dependency Explorer</h1>
-        <div class="controls">
+        <h1>Deptrast SBOM Explorer</h1>
+        <div class="controls" id="headerControls" style="display: none;">
             <input type="file" id="fileInput" style="display: none;">
             <button onclick="document.getElementById('fileInput').click()">Load SBOM</button>
             <button id="backButton" onclick="goBack()" disabled style="opacity: 0.5;">← Back</button>
@@ -667,7 +667,7 @@
             <div class="loading-message" id="emptyState">
                 <div class="empty-state">
                     <p style="font-size: 48px; margin-bottom: 20px; text-align: center;">📊</p>
-                    <p style="font-size: 18px; font-weight: 600; margin-bottom: 10px; text-align: center;">SBOM Dependency Explorer</p>
+                    <p style="font-size: 18px; font-weight: 600; margin-bottom: 10px; text-align: center;">Deptrast SBOM Explorer</p>
                     <p style="font-size: 14px; color: #666; margin-bottom: 30px; text-align: center;">Visualize and explore CycloneDX SBOM dependency trees</p>
                     <div style="text-align: center;">
                         <button onclick="document.getElementById('fileInput').click()" style="background: #0078d4; color: white; border: none; padding: 12px 24px; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500; margin-bottom: 15px;">Choose SBOM File</button>
@@ -757,6 +757,9 @@
 
             // Populate component selector dropdown
             populateComponentSelector();
+
+            // Show header controls when SBOM is loaded
+            document.getElementById('headerControls').style.display = 'flex';
 
             // Always show scope filters when SBOM is loaded
             const scopeFiltersDiv = document.getElementById('scopeFilters');

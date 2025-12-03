@@ -1,6 +1,6 @@
 {
-  "name": "SBOM Dependency Explorer",
-  "short_name": "SBOM Explorer",
+  "name": "Deptrast SBOM Explorer",
+  "short_name": "Deptrast",
   "description": "Interactive SBOM dependency tree visualization and exploration tool",
   "start_url": "/index.html",
   "display": "standalone",
