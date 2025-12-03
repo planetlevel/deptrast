@@ -2959,11 +2959,23 @@
             }
         });
 
-        // Expand entire tree from currently selected node
+        // Expand entire tree from currently focused node
         function expandEntireTreeFromCurrent() {
-            if (selectedPath.length === 0) return;
+            // Get the purl from either selected path or keyboard focus
+            let currentPurl = null;
+            if (selectedPath.length > 0) {
+                currentPurl = selectedPath[selectedPath.length - 1];
+            } else if (focusedNodeElement) {
+                currentPurl = focusedNodeElement.dataset.purl;
+            }
 
-            const currentPurl = selectedPath[selectedPath.length - 1];
+            if (!currentPurl) return;
+
+            // If we're expanding from a focused (but not selected) node, select it first
+            if (selectedPath.length === 0 && focusedNodeElement) {
+                const columnIndex = parseInt(focusedNodeElement.dataset.columnIndex);
+                selectNode(currentPurl, columnIndex);
+            }
 
             // Recursively expand all children
             function expandAllChildren(purl, depth = 0, maxDepth = 10) {
