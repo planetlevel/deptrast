@@ -833,20 +833,44 @@
 
             // Apply zoom to all columns
             document.querySelectorAll('.column').forEach(col => {
-                col.style.minWidth = `${320 * currentZoom}px`;
-                col.style.maxWidth = `${320 * currentZoom}px`;
+                col.style.setProperty('min-width', `${320 * currentZoom}px`, 'important');
+                col.style.setProperty('max-width', `${320 * currentZoom}px`, 'important');
             });
 
-            // Apply zoom to node items
+            // Apply zoom to node items - scale all the content
             document.querySelectorAll('.node-item').forEach(node => {
-                node.style.fontSize = `${13 * currentZoom}px`;
-                node.style.padding = `${8 * currentZoom}px ${12 * currentZoom}px`;
+                node.style.setProperty('font-size', `${13 * currentZoom}px`, 'important');
+                const topBottom = 6 * currentZoom;
+                const right = 80 * currentZoom;
+                const left = 50 * currentZoom;
+                node.style.setProperty('padding', `${topBottom}px ${right}px ${topBottom}px ${left}px`, 'important');
+                node.style.setProperty('margin', `${4 * currentZoom}px ${8 * currentZoom}px`, 'important');
+            });
+
+            // Apply zoom to node group text
+            document.querySelectorAll('.node-group').forEach(group => {
+                group.style.setProperty('font-size', `${11 * currentZoom}px`, 'important');
+            });
+
+            // Apply zoom to node name text
+            document.querySelectorAll('.node-name').forEach(name => {
+                name.style.setProperty('font-size', `${13 * currentZoom}px`, 'important');
+            });
+
+            // Apply zoom to node version text
+            document.querySelectorAll('.node-version').forEach(version => {
+                version.style.setProperty('font-size', `${11 * currentZoom}px`, 'important');
             });
 
             // Apply zoom to column headers
             document.querySelectorAll('.column-header').forEach(header => {
-                header.style.fontSize = `${11 * currentZoom}px`;
-                header.style.padding = `${8 * currentZoom}px ${15 * currentZoom}px`;
+                header.style.setProperty('font-size', `${11 * currentZoom}px`, 'important');
+                header.style.setProperty('padding', `${8 * currentZoom}px ${15 * currentZoom}px`, 'important');
+            });
+
+            // Apply zoom to icons
+            document.querySelectorAll('.node-type-icon, .scope-icon').forEach(icon => {
+                icon.style.setProperty('font-size', `${14 * currentZoom}px`, 'important');
             });
 
             // Update zoom display
@@ -864,20 +888,31 @@
 
             // Reset column widths
             document.querySelectorAll('.column').forEach(col => {
-                col.style.minWidth = '320px';
-                col.style.maxWidth = '320px';
+                col.style.removeProperty('min-width');
+                col.style.removeProperty('max-width');
             });
 
             // Reset node items
             document.querySelectorAll('.node-item').forEach(node => {
-                node.style.fontSize = '13px';
-                node.style.padding = '8px 12px';
+                node.style.removeProperty('font-size');
+                node.style.removeProperty('padding');
+                node.style.removeProperty('margin');
+            });
+
+            // Reset text elements
+            document.querySelectorAll('.node-group, .node-name, .node-version').forEach(el => {
+                el.style.removeProperty('font-size');
             });
 
             // Reset column headers
             document.querySelectorAll('.column-header').forEach(header => {
-                header.style.fontSize = '11px';
-                header.style.padding = '8px 15px';
+                header.style.removeProperty('font-size');
+                header.style.removeProperty('padding');
+            });
+
+            // Reset icons
+            document.querySelectorAll('.node-type-icon, .scope-icon').forEach(icon => {
+                icon.style.removeProperty('font-size');
             });
 
             const zoomDisplay = document.getElementById('zoomDisplay');
