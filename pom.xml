@@ -5,7 +5,7 @@
 
     <groupId>com.contrastsecurity</groupId>
     <artifactId>deptrast</artifactId>
-    <version>4.1.0</version>
+    <version>4.1.1</version>
     <name>deptrast</name>
     <description>The ultimate dependency tree converter, enhancer, and streamliner - converts between SBOM, pom.xml, gradle, requirements.txt and enriches dependency graphs</description>
     <url>https://github.com/planetlevel/deptrast</url>
