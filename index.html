@@ -741,7 +741,30 @@
             const trimmed = filtered.slice(0, 5);
             localStorage.setItem('recentSBOMs', JSON.stringify(trimmed));
 
+            // Store the actual SBOM data separately (namespaced by filename)
+            try {
+                localStorage.setItem(`sbom_data_${fileName}`, JSON.stringify(sbomData));
+            } catch (e) {
+                console.warn('Failed to save SBOM data to localStorage (may be too large):', e);
+            }
+
             displayRecentFiles();
+        }
+
+        function loadRecentFile(fileName) {
+            try {
+                const sbomDataStr = localStorage.getItem(`sbom_data_${fileName}`);
+                if (sbomDataStr) {
+                    const sbomData = JSON.parse(sbomDataStr);
+                    currentFileName = fileName;
+                    loadSBOM(sbomData);
+                } else {
+                    alert('SBOM data not found in cache. Please reload the file.');
+                }
+            } catch (e) {
+                console.error('Failed to load SBOM from localStorage:', e);
+                alert('Failed to load SBOM from cache. Please reload the file.');
+            }
         }
 
         function displayRecentFiles() {
@@ -761,8 +784,10 @@
             recentFiles.forEach(file => {
                 const date = new Date(file.timestamp);
                 const timeAgo = getTimeAgo(date);
-                html += `<div style="padding: 8px 12px; border: 1px solid #e0e0e0; border-radius: 4px; margin-bottom: 8px; cursor: pointer; hover:background: #f5f5f5;"
-                         onclick="alert('Recent file loading from localStorage not yet implemented. Please use file picker.')">
+                html += `<div style="padding: 8px 12px; border: 1px solid #e0e0e0; border-radius: 4px; margin-bottom: 8px; cursor: pointer;"
+                         onmouseover="this.style.background='#f5f5f5'"
+                         onmouseout="this.style.background='white'"
+                         onclick="loadRecentFile('${escapeHtml(file.name)}')">
                     <div style="font-size: 13px; font-weight: 500; color: #333;">${escapeHtml(file.name)}</div>
                     <div style="font-size: 11px; color: #999; margin-top: 2px;">${file.componentCount} components • ${timeAgo}</div>
                 </div>`;
