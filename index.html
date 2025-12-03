@@ -805,6 +805,7 @@
         let focusedNodeElement = null; // Currently keyboard-focused node element
         let focusedColumnIndex = 0; // Current column index
         let focusedNodeIndex = 0; // Current node index within column
+        let isExpandedView = false; // Flag to indicate we're in expanded tree view (draw all arrows)
 
         // Recent files management
         function saveRecentFile(fileName, sbomData) {
@@ -1883,6 +1884,9 @@
         function selectNode(purl, columnIndex) {
             console.log(`🖱️ selectNode() called. purl: ${purl.substring(purl.lastIndexOf('/') + 1)}, columnIndex: ${columnIndex}`);
 
+            // Clear expanded view flag when doing normal navigation
+            isExpandedView = false;
+
             // ALWAYS save current state to history before any state change
             // This captures every single click in explore mode
             const currentState = {
@@ -2049,7 +2053,7 @@
             if (currentViewMode === 'app') {
                 // APP MODE: Draw arrows based on selectedPath OR all arrows if expanded all
 
-                if (selectedPath.length === 0 && columns.length > 1) {
+                if ((selectedPath.length === 0 || isExpandedView) && columns.length > 1) {
                     // EXPANDED ALL MODE: Draw ALL arrows between adjacent columns
                     for (let colIdx = 0; colIdx < columns.length - 1; colIdx++) {
                         const fromColumn = columns[colIdx];
@@ -2984,6 +2988,9 @@
                 removed.element.remove();
             }
 
+            // Set flag to draw all arrows
+            isExpandedView = true;
+
             // Build complete tree level by level using BFS (similar to expandAllTree)
             let currentLevel = new Set([currentPurl]);
             const visited = new Set([currentPurl]);
@@ -3039,6 +3046,9 @@
                 removed.element.remove();
             }
 
+            // Set flag to draw all arrows
+            isExpandedView = true;
+
             // Build complete tree level by level using BFS
             let currentLevel = new Set(rootNodes);
             const visited = new Set(rootNodes);
@@ -3085,6 +3095,9 @@
         // Collapse everything back to root (leftmost column)
         function collapseToRoot() {
             if (columns.length <= 1) return; // Already at root
+
+            // Clear expanded view flag
+            isExpandedView = false;
 
             // Remove all columns except the first one
             while (columns.length > 1) {
