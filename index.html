@@ -2700,6 +2700,19 @@
                 e.preventDefault();
                 expandEntireTreeFromCurrent();
             }
+            // Shift+Left: Collapse everything and go back to leftmost column (explore mode only)
+            if (e.shiftKey && e.key === 'ArrowLeft' && currentViewMode === 'app') {
+                e.preventDefault();
+                collapseToRoot();
+            }
+            // Enter: Pin focused node and switch to focus mode
+            if (e.key === 'Enter' && focusedNodeElement && currentViewMode === 'app') {
+                e.preventDefault();
+                const purl = focusedNodeElement.dataset.purl;
+                if (purl) {
+                    analyzeComponent(purl);
+                }
+            }
             // Escape: Reset to app view
             if (e.key === 'Escape') {
                 resetView();
@@ -2734,6 +2747,27 @@
 
             expandAllChildren(currentPurl);
             drawConnectors();
+        }
+
+        // Collapse everything back to root (leftmost column)
+        function collapseToRoot() {
+            if (columns.length <= 1) return; // Already at root
+
+            // Remove all columns except the first one
+            while (columns.length > 1) {
+                const removed = columns.pop();
+                removed.element.remove();
+            }
+
+            // Clear selected path
+            selectedPath = [];
+
+            // Focus on first item in first column
+            setKeyboardFocus(0, 0);
+
+            updateSelectionUI();
+            drawConnectors();
+            updateComponentDetails();
         }
 
         // Register service worker for PWA
