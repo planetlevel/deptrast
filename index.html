@@ -657,6 +657,13 @@
                     <span>Excluded</span>
                 </label>
             </div>
+            <div style="margin-left: 20px; display: flex; gap: 5px; align-items: center;">
+                <button onclick="applyZoom(-0.1)" title="Zoom Out (Ctrl/Cmd + -)">🔍−</button>
+                <span id="zoomDisplay" style="font-size: 12px; min-width: 40px; text-align: center;">100%</span>
+                <button onclick="applyZoom(0.1)" title="Zoom In (Ctrl/Cmd + +)">🔍+</button>
+                <button onclick="resetZoom()" title="Reset Zoom (Ctrl/Cmd + 0)">⟲</button>
+                <button onclick="exportViewAsPNG()" title="Export as PNG (Ctrl/Cmd + E)" style="margin-left: 10px;">📷 Export</button>
+            </div>
         </div>
     </div>
 
@@ -672,6 +679,7 @@
                         <button onclick="document.getElementById('fileInput').click()" style="background: #0078d4; color: white; border: none; padding: 12px 24px; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500; margin-bottom: 15px;">Choose SBOM File</button>
                     </div>
                     <p style="font-size: 13px; color: #999; text-align: center;">or drag and drop a .json file here</p>
+                    <div id="recentFiles" style="margin-top: 30px; text-align: left; max-width: 400px; margin-left: auto; margin-right: auto;"></div>
                 </div>
             </div>
         </div>
@@ -703,17 +711,151 @@
         let navigationForward = []; // Stack of future states (forward navigation)
         let isNavigatingBack = false; // Flag to prevent adding to history during back navigation
         let isNavigatingForward = false; // Flag to prevent adding to history during forward navigation
+        let currentZoom = 1.0; // Zoom level for view
+        let currentFileName = ''; // Track current file name for recent files
+
+        // Recent files management
+        function saveRecentFile(fileName, sbomData) {
+            const recentFiles = JSON.parse(localStorage.getItem('recentSBOMs') || '[]');
+            const fileEntry = {
+                name: fileName,
+                timestamp: Date.now(),
+                componentCount: sbomData.components ? sbomData.components.length : 0,
+                metadata: sbomData.metadata
+            };
+
+            // Remove duplicate if exists
+            const filtered = recentFiles.filter(f => f.name !== fileName);
+            filtered.unshift(fileEntry);
+
+            // Keep only last 5
+            const trimmed = filtered.slice(0, 5);
+            localStorage.setItem('recentSBOMs', JSON.stringify(trimmed));
+
+            displayRecentFiles();
+        }
+
+        function displayRecentFiles() {
+            const recentFiles = JSON.parse(localStorage.getItem('recentSBOMs') || '[]');
+            const container = document.getElementById('recentFiles');
+
+            if (recentFiles.length === 0) {
+                container.innerHTML = '';
+                return;
+            }
+
+            let html = '<div style="border-top: 1px solid #e0e0e0; padding-top: 20px;"><p style="font-size: 12px; color: #999; text-transform: uppercase; font-weight: 600; margin-bottom: 10px;">Recent Files</p>';
+
+            recentFiles.forEach(file => {
+                const date = new Date(file.timestamp);
+                const timeAgo = getTimeAgo(date);
+                html += `<div style="padding: 8px 12px; border: 1px solid #e0e0e0; border-radius: 4px; margin-bottom: 8px; cursor: pointer; hover:background: #f5f5f5;"
+                         onclick="alert('Recent file loading from localStorage not yet implemented. Please use file picker.')">
+                    <div style="font-size: 13px; font-weight: 500; color: #333;">${escapeHtml(file.name)}</div>
+                    <div style="font-size: 11px; color: #999; margin-top: 2px;">${file.componentCount} components • ${timeAgo}</div>
+                </div>`;
+            });
+
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        function getTimeAgo(date) {
+            const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+            if (seconds < 60) return 'just now';
+            const minutes = Math.floor(seconds / 60);
+            if (minutes < 60) return `${minutes}m ago`;
+            const hours = Math.floor(minutes / 60);
+            if (hours < 24) return `${hours}h ago`;
+            const days = Math.floor(hours / 24);
+            return `${days}d ago`;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Export view as PNG
+        function exportViewAsPNG() {
+            const container = document.getElementById('columnsContainer');
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+
+            // Set canvas size to container size
+            canvas.width = container.scrollWidth;
+            canvas.height = container.scrollHeight;
+
+            // Fill white background
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw SVG connectors first
+            const svg = document.getElementById('connectorsCanvas');
+            const svgData = new XMLSerializer().serializeToString(svg);
+            const img = new Image();
+            const blob = new Blob([svgData], {type: 'image/svg+xml;charset=utf-8'});
+            const url = URL.createObjectURL(blob);
+
+            img.onload = function() {
+                ctx.drawImage(img, 0, 0);
+                URL.revokeObjectURL(url);
+
+                // Export canvas as PNG
+                canvas.toBlob(function(blob) {
+                    const link = document.createElement('a');
+                    link.download = `sbom-view-${currentFileName || 'export'}-${Date.now()}.png`;
+                    link.href = URL.createObjectURL(blob);
+                    link.click();
+                });
+            };
+
+            img.src = url;
+        }
+
+        // Zoom controls
+        function applyZoom(delta) {
+            currentZoom += delta;
+            currentZoom = Math.max(0.5, Math.min(2.0, currentZoom)); // Limit between 50% and 200%
+
+            const container = document.getElementById('columnsContainer');
+            container.style.transform = `scale(${currentZoom})`;
+            container.style.transformOrigin = 'top left';
+
+            // Update zoom display if exists
+            const zoomDisplay = document.getElementById('zoomDisplay');
+            if (zoomDisplay) {
+                zoomDisplay.textContent = `${Math.round(currentZoom * 100)}%`;
+            }
+        }
+
+        function resetZoom() {
+            currentZoom = 1.0;
+            const container = document.getElementById('columnsContainer');
+            container.style.transform = '';
+
+            const zoomDisplay = document.getElementById('zoomDisplay');
+            if (zoomDisplay) {
+                zoomDisplay.textContent = '100%';
+            }
+        }
+
+        // Display recent files on page load
+        window.addEventListener('load', displayRecentFiles);
 
         // No auto-open file picker - wait for user action
 
         document.getElementById('fileInput').addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (file) {
+                currentFileName = file.name;
                 const reader = new FileReader();
                 reader.onload = function(e) {
                     try {
                         const json = JSON.parse(e.target.result);
                         loadSBOM(json);
+                        saveRecentFile(file.name, json);
                     } catch (error) {
                         alert('Error parsing SBOM file: ' + error.message);
                     }
@@ -2391,11 +2533,66 @@
                 e.preventDefault();
                 document.getElementById('fileInput').click();
             }
+            // Ctrl/Cmd+E: Export as PNG
+            if ((e.ctrlKey || e.metaKey) && e.key === 'e') {
+                e.preventDefault();
+                if (sbomData) exportViewAsPNG();
+            }
+            // Ctrl/Cmd+Plus: Zoom in
+            if ((e.ctrlKey || e.metaKey) && (e.key === '=' || e.key === '+')) {
+                e.preventDefault();
+                applyZoom(0.1);
+            }
+            // Ctrl/Cmd+Minus: Zoom out
+            if ((e.ctrlKey || e.metaKey) && e.key === '-') {
+                e.preventDefault();
+                applyZoom(-0.1);
+            }
+            // Ctrl/Cmd+0: Reset zoom
+            if ((e.ctrlKey || e.metaKey) && e.key === '0') {
+                e.preventDefault();
+                resetZoom();
+            }
+            // Shift+Right: Expand entire tree from current node (explore mode only)
+            if (e.shiftKey && e.key === 'ArrowRight' && currentViewMode === 'app') {
+                e.preventDefault();
+                expandEntireTreeFromCurrent();
+            }
             // Escape: Reset to app view
             if (e.key === 'Escape') {
                 resetView();
             }
         });
+
+        // Expand entire tree from currently selected node
+        function expandEntireTreeFromCurrent() {
+            if (selectedPath.length === 0) return;
+
+            const currentPurl = selectedPath[selectedPath.length - 1];
+
+            // Recursively expand all children
+            function expandAllChildren(purl, depth = 0, maxDepth = 10) {
+                if (depth >= maxDepth) return; // Prevent infinite loops
+
+                const children = dependencyMap.get(purl) || [];
+                const filteredChildren = filterNodesByScope(children);
+
+                if (filteredChildren.length > 0) {
+                    // Add column if it doesn't exist at this position
+                    if (!columns[selectedPath.length + depth]) {
+                        addColumn(filteredChildren, `Level ${depth + 1}`);
+                    }
+
+                    // Recursively expand each child
+                    filteredChildren.forEach(childPurl => {
+                        expandAllChildren(childPurl, depth + 1, maxDepth);
+                    });
+                }
+            }
+
+            expandAllChildren(currentPurl);
+            drawConnectors();
+        }
 
         // Register service worker for PWA
         if ('serviceWorker' in navigator) {
