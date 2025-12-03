@@ -748,6 +748,9 @@
             const recentFiles = JSON.parse(localStorage.getItem('recentSBOMs') || '[]');
             const container = document.getElementById('recentFiles');
 
+            // Container only exists on welcome screen
+            if (!container) return;
+
             if (recentFiles.length === 0) {
                 container.innerHTML = '';
                 return;
