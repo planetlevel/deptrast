@@ -1463,6 +1463,16 @@
             // Highlight the selected node
             highlightComponentInView(innerPurl);
 
+            // Initialize keyboard focus on the selected component column
+            setTimeout(() => {
+                // Find the column containing the selected component (marked with 'selected' type)
+                const selectedColumnIndex = columns.findIndex(col => col.type === 'selected');
+                if (selectedColumnIndex >= 0) {
+                    // Focus on the only item in that column (the selected component)
+                    setKeyboardFocus(selectedColumnIndex, 0);
+                }
+            }, 50);
+
             // Draw connectors after layout completes
             setTimeout(() => {
                 drawConnectors();
@@ -2603,55 +2613,75 @@
         }
 
         function navigateLeft() {
-            // Left = Go back (remove last column, select item in previous column)
-            if (currentViewMode === 'app' && columns.length > 1) {
-                // Remove the last column
-                const lastColumn = columns.pop();
-                lastColumn.element.remove();
+            if (currentViewMode === 'app') {
+                // EXPLORE MODE: Go back (remove last column, select item in previous column)
+                if (columns.length > 1) {
+                    // Remove the last column
+                    const lastColumn = columns.pop();
+                    lastColumn.element.remove();
 
-                // Also remove from selected path
-                if (selectedPath.length > 0) {
-                    selectedPath.pop();
+                    // Also remove from selected path
+                    if (selectedPath.length > 0) {
+                        selectedPath.pop();
+                    }
+
+                    // Update focus to last item in path (now in last visible column)
+                    if (selectedPath.length > 0 && columns.length > 0) {
+                        // Find the selected node in the new last column
+                        const lastPurl = selectedPath[selectedPath.length - 1];
+                        const lastColumn = columns[columns.length - 1];
+                        const nodes = lastColumn.element.querySelectorAll('.node-item');
+
+                        nodes.forEach((node, idx) => {
+                            if (node.dataset.purl === lastPurl) {
+                                setKeyboardFocus(columns.length - 1, idx);
+                            }
+                        });
+                    } else {
+                        // Back to root - focus first item in first column
+                        setKeyboardFocus(0, 0);
+                    }
+
+                    updateSelectionUI();
+                    drawConnectors();
+                    updateComponentDetails();
                 }
-
-                // Update focus to last item in path (now in last visible column)
-                if (selectedPath.length > 0 && columns.length > 0) {
-                    // Find the selected node in the new last column
-                    const lastPurl = selectedPath[selectedPath.length - 1];
-                    const lastColumn = columns[columns.length - 1];
-                    const nodes = lastColumn.element.querySelectorAll('.node-item');
-
-                    nodes.forEach((node, idx) => {
-                        if (node.dataset.purl === lastPurl) {
-                            setKeyboardFocus(columns.length - 1, idx);
-                        }
-                    });
-                } else {
-                    // Back to root - focus first item in first column
-                    setKeyboardFocus(0, 0);
+            } else if (currentViewMode === 'focus') {
+                // FOCUS MODE: Move to previous column
+                if (focusedColumnIndex > 0) {
+                    const prevColumn = columns[focusedColumnIndex - 1];
+                    const nodes = prevColumn.element.querySelectorAll('.node-item');
+                    const middleIndex = Math.floor(nodes.length / 2);
+                    setKeyboardFocus(focusedColumnIndex - 1, middleIndex);
                 }
-
-                updateSelectionUI();
-                drawConnectors();
-                updateComponentDetails();
             }
         }
 
         function navigateRight() {
-            // Right = Select focused node and expand (show its children in next column)
-            if (focusedNodeElement && currentViewMode === 'app') {
-                // Click the focused node to select and expand it
-                focusedNodeElement.click();
+            if (currentViewMode === 'app') {
+                // EXPLORE MODE: Select focused node and expand (show its children in next column)
+                if (focusedNodeElement) {
+                    // Click the focused node to select and expand it
+                    focusedNodeElement.click();
 
-                // After click, if a new column was added, focus on middle item in that new column
-                setTimeout(() => {
-                    if (columns.length > focusedColumnIndex + 1) {
-                        const nextColumn = columns[focusedColumnIndex + 1];
-                        const nodes = nextColumn.element.querySelectorAll('.node-item');
-                        const middleIndex = Math.floor(nodes.length / 2);
-                        setKeyboardFocus(focusedColumnIndex + 1, middleIndex);
-                    }
-                }, 50);
+                    // After click, if a new column was added, focus on middle item in that new column
+                    setTimeout(() => {
+                        if (columns.length > focusedColumnIndex + 1) {
+                            const nextColumn = columns[focusedColumnIndex + 1];
+                            const nodes = nextColumn.element.querySelectorAll('.node-item');
+                            const middleIndex = Math.floor(nodes.length / 2);
+                            setKeyboardFocus(focusedColumnIndex + 1, middleIndex);
+                        }
+                    }, 50);
+                }
+            } else if (currentViewMode === 'focus') {
+                // FOCUS MODE: Move to next column
+                if (focusedColumnIndex < columns.length - 1) {
+                    const nextColumn = columns[focusedColumnIndex + 1];
+                    const nodes = nextColumn.element.querySelectorAll('.node-item');
+                    const middleIndex = Math.floor(nodes.length / 2);
+                    setKeyboardFocus(focusedColumnIndex + 1, middleIndex);
+                }
             }
         }
 
