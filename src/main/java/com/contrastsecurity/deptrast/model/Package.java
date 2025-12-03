@@ -18,6 +18,7 @@ public class Package {
     private final String system;
     private final String version;
     private String scope;  // Maven scope: compile, runtime, test, provided, system, optional, excluded
+    private final String originalMavenScope;  // Original Maven scope before any transformations (immutable)
     private String scopeReason;  // Reason for scope assignment (e.g., "conflict-resolution-loser", "not-observed-at-runtime")
     private String winningVersion;  // If this is a losing version, what version won?
     private String scopeStrategy;  // Conflict resolution strategy used: "maven" or "highest"
@@ -38,6 +39,7 @@ public class Package {
         this.name = name;
         this.version = version;
         this.scope = scope != null ? scope : "compile";
+        this.originalMavenScope = this.scope;  // Capture original scope at creation time
         this.scopeReason = null;
         this.winningVersion = null;
         this.scopeStrategy = null;
@@ -64,6 +66,10 @@ public class Package {
 
     public void setScope(String scope) {
         this.scope = scope;
+    }
+
+    public String getOriginalMavenScope() {
+        return originalMavenScope;
     }
 
     public String getScopeReason() {

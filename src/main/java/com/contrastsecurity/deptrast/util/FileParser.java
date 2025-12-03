@@ -226,6 +226,7 @@ public class FileParser {
     public static PomParseResult parsePomFileWithManagement(String filePath, String scopeFilter, boolean includeOptional) {
         List<Package> packages = new ArrayList<>();
         Map<String, String> dependencyManagement = new HashMap<>();
+        Map<String, String> managedScopes = new HashMap<>(); // package name -> managed scope
         Map<String, Set<String>> exclusions = new HashMap<>(); // package name -> excluded dependencies
 
         try {
@@ -251,15 +252,18 @@ public class FileParser {
 
             // Parse dependencyManagement from parent hierarchy (oldest first)
             for (Document pomDoc : parentData.pomHierarchy) {
-                Map<String, String> pomDepMgmt = parseDependencyManagement(pomDoc, properties);
-                dependencyManagement.putAll(pomDepMgmt);
+                DependencyManagementResult pomDepMgmt = parseDependencyManagement(pomDoc, properties);
+                dependencyManagement.putAll(pomDepMgmt.versions);
+                managedScopes.putAll(pomDepMgmt.scopes);
             }
 
             // Parse dependency management from current POM (overrides parents)
-            Map<String, String> currentDepMgmt = parseDependencyManagement(doc, properties);
-            dependencyManagement.putAll(currentDepMgmt);
+            DependencyManagementResult currentDepMgmt = parseDependencyManagement(doc, properties);
+            dependencyManagement.putAll(currentDepMgmt.versions);
+            managedScopes.putAll(currentDepMgmt.scopes);
 
             logger.info("Total {} managed dependency versions (re-evaluated with final properties)", dependencyManagement.size());
+            logger.info("Total {} managed dependency scopes", managedScopes.size());
 
             // Find all <dependency> elements
             NodeList dependencyNodes = doc.getElementsByTagName("dependency");
@@ -288,54 +292,51 @@ public class FileParser {
                         continue;
                     }
 
+                    // Get groupId and artifactId first (needed for scope inheritance)
+                    String groupId = getElementText(element, "groupId");
+                    String artifactId = getElementText(element, "artifactId");
+                    String key = groupId + ":" + artifactId;
+
                     // Apply scope filtering
                     String scope = getElementText(element, "scope");
-                    // Default scope is compile if not specified
+                    // If no explicit scope, check if managed scope exists, otherwise default to compile
                     if (scope == null || scope.isEmpty()) {
-                        scope = "compile";
+                        scope = managedScopes.get(key);
+                        if (scope != null) {
+                            logger.debug("Inherited scope {} for {}:{} from dependencyManagement", scope, groupId, artifactId);
+                        } else {
+                            scope = "compile"; // Maven default
+                        }
                     }
 
-                    logger.debug("Dependency {}:{} has scope: {}",
-                            getElementText(element, "groupId"),
-                            getElementText(element, "artifactId"),
-                            scope);
+                    logger.debug("Dependency {}:{} has scope: {}", groupId, artifactId, scope);
 
                     // Skip provided scope dependencies unless includeOptional is true
                     if (!includeOptional && "provided".equalsIgnoreCase(scope)) {
-                        logger.info("Skipping provided scope dependency: {}:{}",
-                                getElementText(element, "groupId"),
-                                getElementText(element, "artifactId"));
+                        logger.info("Skipping provided scope dependency: {}:{}", groupId, artifactId);
                         continue;
                     }
 
                     // Skip optional dependencies unless includeOptional is true
                     String optional = getElementText(element, "optional");
                     if (!includeOptional && "true".equalsIgnoreCase(optional)) {
-                        logger.info("Skipping optional dependency: {}:{}",
-                                getElementText(element, "groupId"),
-                                getElementText(element, "artifactId"));
+                        logger.info("Skipping optional dependency: {}:{}", groupId, artifactId);
                         continue;
                     }
 
                     // Skip dependencies that don't match the scope filter
                     if (!shouldIncludeScope(scope, scopeFilter)) {
                         logger.info("Skipping {} scope dependency: {}:{} (filter: {})",
-                                scope,
-                                getElementText(element, "groupId"),
-                                getElementText(element, "artifactId"),
-                                scopeFilter);
+                                scope, groupId, artifactId, scopeFilter);
                         continue;
                     }
 
-                    String groupId = getElementText(element, "groupId");
-                    String artifactId = getElementText(element, "artifactId");
                     String version = getElementText(element, "version");
 
                     // Parse exclusions for this dependency
                     Set<String> depExclusions = parseExclusions(element);
 
                     if (groupId != null && artifactId != null) {
-                        String key = groupId + ":" + artifactId;
                         String declaredVersion = version;
 
                         // If version is not specified, try to get it from dependency management
@@ -389,7 +390,7 @@ public class FileParser {
             logger.error("Error parsing pom.xml file {}: {}", filePath, e.getMessage());
         }
 
-        return new PomParseResult(packages, dependencyManagement, exclusions);
+        return new PomParseResult(packages, dependencyManagement, managedScopes, exclusions);
     }
 
     /**
@@ -657,11 +658,13 @@ public class FileParser {
     public static class PomParseResult {
         private final List<Package> packages;
         private final Map<String, String> dependencyManagement;
+        private final Map<String, String> managedScopes; // package name -> managed scope
         private final Map<String, Set<String>> exclusions; // package name -> set of excluded "groupId:artifactId"
 
-        public PomParseResult(List<Package> packages, Map<String, String> dependencyManagement, Map<String, Set<String>> exclusions) {
+        public PomParseResult(List<Package> packages, Map<String, String> dependencyManagement, Map<String, String> managedScopes, Map<String, Set<String>> exclusions) {
             this.packages = packages;
             this.dependencyManagement = dependencyManagement;
+            this.managedScopes = managedScopes;
             this.exclusions = exclusions;
         }
 
@@ -671,6 +674,10 @@ public class FileParser {
 
         public Map<String, String> getDependencyManagement() {
             return dependencyManagement;
+        }
+
+        public Map<String, String> getManagedScopes() {
+            return managedScopes;
         }
 
         public Map<String, Set<String>> getExclusions() {
@@ -919,26 +926,34 @@ public class FileParser {
     }
 
     /**
+     * Result class for dependency management parsing
+     */
+    private static class DependencyManagementResult {
+        Map<String, String> versions = new HashMap<>();
+        Map<String, String> scopes = new HashMap<>();
+    }
+
+    /**
      * Parse dependencyManagement section from a POM document
      *
      * @param doc the POM document
      * @param properties properties map for resolving versions
-     * @return map of groupId:artifactId to version
+     * @return DependencyManagementResult with versions and scopes maps
      */
-    private static Map<String, String> parseDependencyManagement(Document doc, Map<String, String> properties) {
-        Map<String, String> managedVersions = new HashMap<>();
+    private static DependencyManagementResult parseDependencyManagement(Document doc, Map<String, String> properties) {
+        DependencyManagementResult result = new DependencyManagementResult();
 
         try {
             NodeList managementNodes = doc.getElementsByTagName("dependencyManagement");
             if (managementNodes.getLength() == 0) {
-                return managedVersions;
+                return result;
             }
 
             Element managementElement = (Element) managementNodes.item(0);
             NodeList dependenciesLists = managementElement.getElementsByTagName("dependencies");
 
             if (dependenciesLists.getLength() == 0) {
-                return managedVersions;
+                return result;
             }
 
             Element dependenciesElement = (Element) dependenciesLists.item(0);
@@ -980,9 +995,10 @@ public class FileParser {
 
                                 if (bomDoc != null) {
                                     // Recursively parse the imported BOM's dependencyManagement
-                                    Map<String, String> importedVersions = parseDependencyManagement(bomDoc, properties);
-                                    managedVersions.putAll(importedVersions);
-                                    logger.info("Imported {} managed versions from BOM {}:{}", importedVersions.size(), groupId, artifactId);
+                                    DependencyManagementResult importedResult = parseDependencyManagement(bomDoc, properties);
+                                    result.versions.putAll(importedResult.versions);
+                                    result.scopes.putAll(importedResult.scopes);
+                                    logger.info("Imported {} managed versions from BOM {}:{}", importedResult.versions.size(), groupId, artifactId);
                                 } else {
                                     logger.warn("Failed to download BOM: {}:{}:{}", groupId, artifactId, version);
                                 }
@@ -1006,17 +1022,22 @@ public class FileParser {
                         }
 
                         String key = groupId + ":" + artifactId;
-                        managedVersions.put(key, version);
+                        result.versions.put(key, version);
+
+                        // Store managed scope if present
+                        if (scope != null && !scope.isEmpty()) {
+                            result.scopes.put(key, scope);
+                        }
                     }
                 }
             }
 
-            logger.info("Parsed {} managed dependency versions from dependencyManagement", managedVersions.size());
+            logger.info("Parsed {} managed dependency versions from dependencyManagement", result.versions.size());
         } catch (Exception e) {
             logger.warn("Error parsing dependencyManagement: {}", e.getMessage());
         }
 
-        return managedVersions;
+        return result;
     }
 
     /**

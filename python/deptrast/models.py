@@ -12,6 +12,7 @@ class Package:
     name: str
     version: str
     scope: str = "compile"  # Maven scope: compile, runtime, test, provided, system, optional, excluded
+    original_maven_scope: Optional[str] = None  # Original Maven scope before any transformations (immutable)
     scope_reason: Optional[str] = None  # Reason for scope assignment (e.g., "conflict-resolution", "not-observed-at-runtime")
     winning_version: Optional[str] = None  # If this is a losing version, what version won?
     scope_strategy: Optional[str] = None  # Conflict resolution strategy used: "maven" or "highest"
@@ -25,6 +26,9 @@ class Package:
         # Default to compile if scope is None or empty
         if not self.scope:
             self.scope = "compile"
+        # Capture original scope if not already set
+        if self.original_maven_scope is None:
+            self.original_maven_scope = self.scope
 
     @property
     def full_name(self) -> str:

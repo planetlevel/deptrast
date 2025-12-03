@@ -466,6 +466,10 @@ class OutputFormatter:
             if pkg.version_metadata.get('herodevs:nes') == 'true':
                 tags.append("herodevs-nes")
 
+        # Add original Maven scope tag (before any transformations)
+        if pkg.original_maven_scope:
+            tags.append(f"original-scope:{pkg.original_maven_scope}")
+
         component = Component(
             name=name,
             version=pkg.version,

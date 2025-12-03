@@ -712,8 +712,21 @@ public class DependencyGraphBuilder implements AutoCloseable {
         }
 
         // Step 5: Mark loser subtrees as excluded (unless other incoming links)
-        int excludedSubtreeCount = markLoserSubtreesExcluded(losers);
-        logger.info("Marked {} subtree nodes as excluded", excludedSubtreeCount);
+        // Run in multiple passes until no more nodes can be excluded
+        // Each pass adds newly excluded nodes to the losers set for the next pass
+        Set<String> excludedNodes = new HashSet<>(losers);
+        int excludedSubtreeCount = 0;
+        int passCount = 0;
+        int passExclusions;
+        do {
+            passCount++;
+            Set<String> newlyExcluded = new HashSet<>();
+            passExclusions = markLoserSubtreesExcluded(excludedNodes, newlyExcluded);
+            excludedSubtreeCount += passExclusions;
+            excludedNodes.addAll(newlyExcluded);
+            logger.debug("Subtree pruning pass {}: marked {} nodes", passCount, passExclusions);
+        } while (passExclusions > 0);
+        logger.info("Marked {} subtree nodes as excluded in {} passes", excludedSubtreeCount, passCount - 1);
 
         logger.info("=== Conflict resolution complete: {} losers, {} redirects, {} subtree exclusions ===",
                 conflictsFound, redirectCount, excludedSubtreeCount);
@@ -967,19 +980,22 @@ public class DependencyGraphBuilder implements AutoCloseable {
      * Mark nodes in loser subtrees as excluded, UNLESS they have other incoming links
      * from non-excluded nodes.
      * Returns count of nodes marked as excluded.
+     *
+     * @param excludedParents Set of excluded parent nodes (losers + previously excluded subtrees)
+     * @param newlyExcluded Output set that will contain newly excluded nodes from this pass
      */
-    private int markLoserSubtreesExcluded(Set<String> losers) {
+    private int markLoserSubtreesExcluded(Set<String> excludedParents, Set<String> newlyExcluded) {
         int excludedCount = 0;
         Set<String> visited = new HashSet<>();
 
-        for (String loserName : losers) {
+        for (String loserName : excludedParents) {
             DependencyNode loserNode = allNodes.get(loserName);
             if (loserNode == null) {
                 continue;
             }
 
             // Recursively mark children (if they don't have other incoming links)
-            excludedCount += markSubtreeExcludedRecursive(loserNode, visited, losers);
+            excludedCount += markSubtreeExcludedRecursive(loserNode, visited, excludedParents, newlyExcluded);
         }
 
         return excludedCount;
@@ -987,11 +1003,14 @@ public class DependencyGraphBuilder implements AutoCloseable {
 
     /**
      * Recursively mark children as excluded if ALL their parents are excluded.
+     *
+     * @param newlyExcluded Output set that accumulates newly excluded nodes from this pass
      */
     private int markSubtreeExcludedRecursive(
             DependencyNode node,
             Set<String> visited,
-            Set<String> excludedParents) {
+            Set<String> excludedParents,
+            Set<String> newlyExcluded) {
         int count = 0;
 
         for (DependencyNode child : node.getChildren()) {
@@ -1022,13 +1041,14 @@ public class DependencyGraphBuilder implements AutoCloseable {
                 child.getPackage().setScope("excluded");
                 child.getPackage().setScopeReason("conflict-resolution-subtree");
                 count++;
+                newlyExcluded.add(childName);  // Track newly excluded node
                 logger.debug("Marked subtree node as excluded: {}", childName);
 
                 // Recursively mark its children
                 // Add this child to excludedParents for recursive call
                 Set<String> newExcluded = new HashSet<>(excludedParents);
                 newExcluded.add(childName);
-                count += markSubtreeExcludedRecursive(child, visited, newExcluded);
+                count += markSubtreeExcludedRecursive(child, visited, newExcluded, newlyExcluded);
             }
         }
 

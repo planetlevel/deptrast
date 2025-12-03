@@ -199,17 +199,22 @@ def parse_parent_pom_data(root: ET.Element, current_file_path: str, ns: Dict[str
     return properties, pom_hierarchy
 
 
-def parse_dependency_management(root: ET.Element, properties: Dict[str, str], ns: Dict[str, str]) -> Dict[str, str]:
-    """Parse <dependencyManagement> section including BOM imports."""
+def parse_dependency_management(root: ET.Element, properties: Dict[str, str], ns: Dict[str, str]) -> Tuple[Dict[str, str], Dict[str, str]]:
+    """Parse <dependencyManagement> section including BOM imports.
+
+    Returns:
+        Tuple of (managed_versions, managed_scopes) where both are dicts mapping groupId:artifactId to version/scope
+    """
     managed_versions = {}
+    managed_scopes = {}
 
     mgmt_elem = root.find('m:dependencyManagement', ns)
     if mgmt_elem is None:
-        return managed_versions
+        return managed_versions, managed_scopes
 
     deps_elem = mgmt_elem.find('m:dependencies', ns)
     if deps_elem is None:
-        return managed_versions
+        return managed_versions, managed_scopes
 
     for dep in deps_elem.findall('m:dependency', ns):
         group_id = get_element_text(dep, 'groupId', ns)
@@ -236,8 +241,9 @@ def parse_dependency_management(root: ET.Element, properties: Dict[str, str], ns
                 bom_root = download_pom_from_maven_central(group_id, artifact_id, version)
                 if bom_root:
                     # Recursively parse BOM's dependencyManagement
-                    imported_versions = parse_dependency_management(bom_root, properties, ns)
+                    imported_versions, imported_scopes = parse_dependency_management(bom_root, properties, ns)
                     managed_versions.update(imported_versions)
+                    managed_scopes.update(imported_scopes)
                     logger.info(f"Imported {len(imported_versions)} managed versions from BOM {group_id}:{artifact_id}")
                 else:
                     logger.warn(f"Failed to download BOM: {group_id}:{artifact_id}:{version}")
@@ -257,8 +263,12 @@ def parse_dependency_management(root: ET.Element, properties: Dict[str, str], ns
             key = f"{group_id}:{artifact_id}"
             managed_versions[key] = version
 
+            # Store managed scope if present
+            if scope:
+                managed_scopes[key] = scope
+
     logger.info(f"Parsed {len(managed_versions)} managed dependency versions from dependencyManagement")
-    return managed_versions
+    return managed_versions, managed_scopes
 
 
 def parse_exclusions(dep_elem: ET.Element, ns: Dict[str, str]) -> Set[str]:
@@ -457,34 +467,38 @@ class FileParser:
     
         packages = []
         dependency_management = {}
+        managed_scopes = {}
         exclusions_map = {}
         ns = {'m': 'http://maven.apache.org/POM/4.0.0'}
-    
+
         try:
             tree = ET.parse(file_path)
             root = tree.getroot()
-    
+
             # Load parent POM data (properties and hierarchy)
             parent_properties, pom_hierarchy = parse_parent_pom_data(root, file_path, ns)
-    
+
             logger.info(f"Loaded {len(parent_properties)} properties from parent POM hierarchy")
-    
+
             # Parse properties from current POM (override parent)
             current_properties = parse_properties(root, ns)
             all_properties = {**parent_properties, **current_properties}
             logger.info(f"Loaded {len(all_properties)} properties total ({len(current_properties)} from current pom.xml)")
-    
+
             # Parse ALL dependencyManagement sections with FINAL merged properties
             # Parse from parent hierarchy first (oldest first)
             for pom_root in pom_hierarchy:
-                pom_dep_mgmt = parse_dependency_management(pom_root, all_properties, ns)
-                dependency_management.update(pom_dep_mgmt)
-    
+                pom_dep_mgmt_vers, pom_dep_mgmt_scopes = parse_dependency_management(pom_root, all_properties, ns)
+                dependency_management.update(pom_dep_mgmt_vers)
+                managed_scopes.update(pom_dep_mgmt_scopes)
+
             # Parse dependency management from current POM (overrides parents)
-            current_dep_mgmt = parse_dependency_management(root, all_properties, ns)
-            dependency_management.update(current_dep_mgmt)
-    
+            current_dep_mgmt_vers, current_dep_mgmt_scopes = parse_dependency_management(root, all_properties, ns)
+            dependency_management.update(current_dep_mgmt_vers)
+            managed_scopes.update(current_dep_mgmt_scopes)
+
             logger.info(f"Total {len(dependency_management)} managed dependency versions")
+            logger.info(f"Total {len(managed_scopes)} managed dependency scopes")
     
             # Find root <dependencies> section (not from <dependencyManagement> or <build>)
             # Look for <project><dependencies> directly
@@ -502,29 +516,37 @@ class FileParser:
     
             # Parse dependencies
             for dep in dependency_nodes:
-                # Get scope
-                scope = get_element_text(dep, 'scope', ns) or 'compile'
-    
-                logger.debug(f"Dependency {get_element_text(dep, 'groupId', ns)}:{get_element_text(dep, 'artifactId', ns)} has scope: {scope}")
-    
+                # Get groupId and artifactId first (needed for scope inheritance)
+                group_id = get_element_text(dep, 'groupId', ns)
+                artifact_id = get_element_text(dep, 'artifactId', ns)
+                key = f"{group_id}:{artifact_id}"
+
+                # Get scope - check managed scopes before defaulting to 'compile'
+                scope = get_element_text(dep, 'scope', ns)
+                if not scope:
+                    scope = managed_scopes.get(key)
+                    if scope:
+                        logger.debug(f"Inherited scope {scope} for {group_id}:{artifact_id} from dependencyManagement")
+                    else:
+                        scope = 'compile'  # Maven default
+
+                logger.debug(f"Dependency {group_id}:{artifact_id} has scope: {scope}")
+
                 # Skip provided scope unless includeOptional
                 if not include_optional and scope == 'provided':
-                    logger.info(f"Skipping provided scope dependency: {get_element_text(dep, 'groupId', ns)}:{get_element_text(dep, 'artifactId', ns)}")
+                    logger.info(f"Skipping provided scope dependency: {group_id}:{artifact_id}")
                     continue
-    
+
                 # Skip optional unless includeOptional
                 optional = get_element_text(dep, 'optional', ns)
                 if not include_optional and optional == 'true':
-                    logger.info(f"Skipping optional dependency: {get_element_text(dep, 'groupId', ns)}:{get_element_text(dep, 'artifactId', ns)}")
+                    logger.info(f"Skipping optional dependency: {group_id}:{artifact_id}")
                     continue
-    
+
                 # Apply scope filtering
                 if not should_include_scope(scope, scope_filter):
-                    logger.info(f"Skipping {scope} scope dependency: {get_element_text(dep, 'groupId', ns)}:{get_element_text(dep, 'artifactId', ns)} (filter: {scope_filter})")
+                    logger.info(f"Skipping {scope} scope dependency: {group_id}:{artifact_id} (filter: {scope_filter})")
                     continue
-    
-                group_id = get_element_text(dep, 'groupId', ns)
-                artifact_id = get_element_text(dep, 'artifactId', ns)
                 version = get_element_text(dep, 'version', ns)
     
                 # Parse exclusions for this dependency
@@ -533,7 +555,6 @@ class FileParser:
                 if group_id and artifact_id:
                     # If version not specified, get from dependency management
                     if not version:
-                        key = f"{group_id}:{artifact_id}"
                         version = dependency_management.get(key)
                         if version:
                             logger.info(f"Resolved version for {group_id}:{artifact_id} from dependencyManagement: {version}")

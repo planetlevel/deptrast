@@ -1574,6 +1574,11 @@ public class DependencyTreeGenerator {
                     }
                 }
 
+                // Add original Maven scope tag (before any transformations)
+                if (pkg.getOriginalMavenScope() != null && !pkg.getOriginalMavenScope().isEmpty()) {
+                    tagList.add("original-scope:" + pkg.getOriginalMavenScope());
+                }
+
                 if (!tagList.isEmpty()) {
                     // Sort tags alphabetically for consistency with Python output
                     Collections.sort(tagList);
