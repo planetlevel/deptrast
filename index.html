@@ -2089,20 +2089,26 @@
             // This counters the parent container's CSS zoom that scales everything UP
             svg.setAttribute('viewBox', `0 0 ${baseWidth * currentZoom} ${baseHeight * currentZoom}`);
 
-            // Add arrowhead marker definitions
+            // Add arrowhead marker definitions (scale with zoom)
             const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+
+            // Scale arrowhead size with zoom level
+            const arrowSize = 8 * currentZoom;
+            const arrowHeight = 5 * currentZoom;
+            const arrowLength = 6 * currentZoom;
+            const arrowMid = 2.5 * currentZoom;
 
             const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
             marker.setAttribute('id', 'arrowhead');
-            marker.setAttribute('markerWidth', '8');
-            marker.setAttribute('markerHeight', '8');
+            marker.setAttribute('markerWidth', arrowSize);
+            marker.setAttribute('markerHeight', arrowSize);
             marker.setAttribute('refX', '0');
-            marker.setAttribute('refY', '2.5');
+            marker.setAttribute('refY', arrowMid);
             marker.setAttribute('orient', 'auto');
             marker.setAttribute('markerUnits', 'strokeWidth');
 
             const path1 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-            path1.setAttribute('d', 'M0,0 L0,5 L6,2.5 z');
+            path1.setAttribute('d', `M0,0 L0,${arrowHeight} L${arrowLength},${arrowMid} z`);
             path1.setAttribute('fill', '#0078d4');
             path1.setAttribute('opacity', '0.3');
             marker.appendChild(path1);
@@ -2110,15 +2116,15 @@
 
             const markerActive = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
             markerActive.setAttribute('id', 'arrowhead-active');
-            markerActive.setAttribute('markerWidth', '8');
-            markerActive.setAttribute('markerHeight', '8');
+            markerActive.setAttribute('markerWidth', arrowSize);
+            markerActive.setAttribute('markerHeight', arrowSize);
             markerActive.setAttribute('refX', '0');
-            markerActive.setAttribute('refY', '2.5');
+            markerActive.setAttribute('refY', arrowMid);
             markerActive.setAttribute('orient', 'auto');
             markerActive.setAttribute('markerUnits', 'strokeWidth');
 
             const path2 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-            path2.setAttribute('d', 'M0,0 L0,5 L6,2.5 z');
+            path2.setAttribute('d', `M0,0 L0,${arrowHeight} L${arrowLength},${arrowMid} z`);
             path2.setAttribute('fill', '#0078d4');
             path2.setAttribute('opacity', '0.8');
             markerActive.appendChild(path2);
@@ -2137,11 +2143,11 @@
                 const fromRect = fromItem.getBoundingClientRect();
                 const toRect = toItem.getBoundingClientRect();
 
-                // Use logical coordinates directly - viewBox scaling handles the rest
-                const x1 = fromRect.right - containerRect.left + scrollLeft;
-                const y1 = fromRect.top + fromRect.height / 2 - containerRect.top + scrollTop;
-                const x2 = toRect.left - containerRect.left + scrollLeft - 6;
-                const y2 = toRect.top + toRect.height / 2 - containerRect.top + scrollTop;
+                // Calculate coordinates: rect positions are unzoomed, scroll needs to be scaled for viewBox
+                const x1 = (fromRect.right - containerRect.left) + (scrollLeft * currentZoom);
+                const y1 = (fromRect.top + fromRect.height / 2 - containerRect.top) + (scrollTop * currentZoom);
+                const x2 = (toRect.left - containerRect.left - 6) + (scrollLeft * currentZoom);
+                const y2 = (toRect.top + toRect.height / 2 - containerRect.top) + (scrollTop * currentZoom);
 
                 const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
                 const midX = (x1 + x2) / 2;
