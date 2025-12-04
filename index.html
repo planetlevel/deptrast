@@ -899,41 +899,108 @@
             return div.innerHTML;
         }
 
-        // Export view as PNG
+        // Export view as PNG using html2canvas-like approach
         function exportViewAsPNG() {
             const container = document.getElementById('columnsContainer');
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
 
-            // Set canvas size to container size
-            canvas.width = container.scrollWidth;
-            canvas.height = container.scrollHeight;
+            // Save current transform and remove it temporarily for cleaner export
+            const savedTransform = container.style.transform;
+            const savedTransformOrigin = container.style.transformOrigin;
+            const savedWidth = container.style.width;
+            const savedHeight = container.style.height;
 
-            // Fill white background
-            ctx.fillStyle = 'white';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            container.style.transform = '';
+            container.style.transformOrigin = '';
+            container.style.width = '';
+            container.style.height = '';
 
-            // Draw SVG connectors first
-            const svg = document.getElementById('connectorsCanvas');
-            const svgData = new XMLSerializer().serializeToString(svg);
-            const img = new Image();
-            const blob = new Blob([svgData], {type: 'image/svg+xml;charset=utf-8'});
-            const url = URL.createObjectURL(blob);
+            // Wait for layout to settle
+            setTimeout(() => {
+                // Use foreignObject to render HTML in SVG
+                const containerRect = container.getBoundingClientRect();
+                const width = container.scrollWidth;
+                const height = container.scrollHeight;
 
-            img.onload = function() {
-                ctx.drawImage(img, 0, 0);
-                URL.revokeObjectURL(url);
+                // Create SVG with foreignObject containing the HTML
+                const svgWrapper = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                svgWrapper.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+                svgWrapper.setAttribute('width', width);
+                svgWrapper.setAttribute('height', height);
 
-                // Export canvas as PNG
-                canvas.toBlob(function(blob) {
-                    const link = document.createElement('a');
-                    link.download = `sbom-view-${currentFileName || 'export'}-${Date.now()}.png`;
-                    link.href = URL.createObjectURL(blob);
-                    link.click();
-                });
-            };
+                const foreignObject = document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject');
+                foreignObject.setAttribute('width', width);
+                foreignObject.setAttribute('height', height);
 
-            img.src = url;
+                // Clone the container content
+                const clonedContainer = container.cloneNode(true);
+                clonedContainer.style.width = width + 'px';
+                clonedContainer.style.height = height + 'px';
+                clonedContainer.style.transform = '';
+                clonedContainer.style.overflow = 'visible';
+
+                // Add styles inline
+                const styles = document.createElement('style');
+                styles.textContent = Array.from(document.styleSheets)
+                    .filter(sheet => !sheet.href || sheet.href.startsWith(window.location.origin))
+                    .map(sheet => {
+                        try {
+                            return Array.from(sheet.cssRules).map(rule => rule.cssText).join('\n');
+                        } catch (e) {
+                            return '';
+                        }
+                    })
+                    .join('\n');
+
+                const div = document.createElement('div');
+                div.appendChild(styles);
+                div.appendChild(clonedContainer);
+
+                foreignObject.appendChild(div);
+                svgWrapper.appendChild(foreignObject);
+
+                // Serialize and convert to image
+                const svgData = new XMLSerializer().serializeToString(svgWrapper);
+                const svgBlob = new Blob([svgData], {type: 'image/svg+xml;charset=utf-8'});
+                const url = URL.createObjectURL(svgBlob);
+
+                const img = new Image();
+                img.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+
+                    ctx.fillStyle = 'white';
+                    ctx.fillRect(0, 0, width, height);
+                    ctx.drawImage(img, 0, 0);
+
+                    URL.revokeObjectURL(url);
+
+                    // Restore transform
+                    container.style.transform = savedTransform;
+                    container.style.transformOrigin = savedTransformOrigin;
+                    container.style.width = savedWidth;
+                    container.style.height = savedHeight;
+
+                    canvas.toBlob(function(blob) {
+                        const link = document.createElement('a');
+                        link.download = `sbom-view-${currentFileName || 'export'}-${Date.now()}.png`;
+                        link.href = URL.createObjectURL(blob);
+                        link.click();
+                    });
+                };
+
+                img.onerror = function() {
+                    // Restore transform even on error
+                    container.style.transform = savedTransform;
+                    container.style.transformOrigin = savedTransformOrigin;
+                    container.style.width = savedWidth;
+                    container.style.height = savedHeight;
+                    alert('Export failed. This may be due to browser security restrictions.');
+                };
+
+                img.src = url;
+            }, 100);
         }
 
         // Zoom controls - scale the entire view area
