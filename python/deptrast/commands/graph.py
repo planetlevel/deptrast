@@ -176,6 +176,51 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         .highlight {{
             background: #515c6a;
         }}
+        .url-loader {{
+            background: #252526;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            border: 1px solid #3e3e42;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }}
+        .url-input {{
+            flex: 1;
+            padding: 10px;
+            background: #3c3c3c;
+            border: 1px solid #3e3e42;
+            border-radius: 4px;
+            color: #d4d4d4;
+            font-size: 14px;
+        }}
+        .url-input:focus {{
+            outline: none;
+            border-color: #0e639c;
+        }}
+        .load-button {{
+            background: #0e639c;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            white-space: nowrap;
+        }}
+        .load-button:hover {{
+            background: #1177bb;
+        }}
+        .load-button:disabled {{
+            background: #555;
+            cursor: not-allowed;
+        }}
+        .error-message {{
+            color: #f48771;
+            font-size: 12px;
+            margin-top: 5px;
+        }}
     </style>
 </head>
 <body>
@@ -207,6 +252,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             </div>
         </div>
     </div>
+
+    <div class="url-loader">
+        <input type="text" class="url-input" id="urlInput" placeholder="Load SBOM from URL (e.g., https://example.com/sbom.json)">
+        <button class="load-button" onclick="loadFromUrl()">Load URL</button>
+    </div>
+    <div id="errorContainer"></div>
 
     <input type="text" class="search-box" id="searchBox" placeholder="Search dependencies...">
 
@@ -455,6 +506,79 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                     node.classList.add('highlight');
                 }} else {{
                     node.classList.remove('highlight');
+                }}
+            }});
+        }});
+
+        async function loadFromUrl() {{
+            const urlInput = document.getElementById('urlInput');
+            const loadButton = document.querySelector('.load-button');
+            const errorContainer = document.getElementById('errorContainer');
+            const url = urlInput.value.trim();
+
+            // Clear previous errors
+            errorContainer.innerHTML = '';
+
+            if (!url) {{
+                errorContainer.innerHTML = '<div class="error-message">Please enter a URL</div>';
+                return;
+            }}
+
+            // Validate URL format
+            try {{
+                new URL(url);
+            }} catch (e) {{
+                errorContainer.innerHTML = '<div class="error-message">Invalid URL format</div>';
+                return;
+            }}
+
+            // Disable button and show loading
+            loadButton.disabled = true;
+            loadButton.textContent = 'Loading...';
+
+            try {{
+                const response = await fetch(url);
+
+                if (!response.ok) {{
+                    throw new Error(`HTTP error! status: ${{response.status}}`);
+                }}
+
+                const data = await response.json();
+
+                // Validate it's a CycloneDX SBOM
+                if (!data.bomFormat || !data.components) {{
+                    throw new Error('Invalid SBOM format - missing required fields');
+                }}
+
+                // Replace the global sbomData and reinitialize
+                Object.assign(sbomData, data);
+                componentMap.clear();
+                expandedState.clear();
+                rootNodeSet.clear();
+
+                // Update page title
+                document.querySelector('h1').textContent = `SBOM Dependency Tree - ${{url.split('/').pop()}}`;
+
+                // Reinitialize the visualization
+                init();
+
+                // Clear the URL input on success
+                urlInput.value = '';
+
+            }} catch (error) {{
+                errorContainer.innerHTML = `<div class="error-message">Failed to load SBOM: ${{error.message}}</div>`;
+            }} finally {{
+                loadButton.disabled = false;
+                loadButton.textContent = 'Load URL';
+            }}
+        }}
+
+        // Allow Enter key to trigger load
+        document.addEventListener('DOMContentLoaded', function() {{
+            const urlInput = document.getElementById('urlInput');
+            urlInput.addEventListener('keypress', function(e) {{
+                if (e.key === 'Enter') {{
+                    loadFromUrl();
                 }}
             }});
         }});
