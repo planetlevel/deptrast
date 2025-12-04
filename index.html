@@ -2669,6 +2669,22 @@
             // Update UI selection
             updateSelectionUI();
 
+            // Check if this node creates a cycle (already in the path)
+            const previousOccurrence = selectedPath.slice(0, -1).indexOf(purl);
+            if (previousOccurrence >= 0) {
+                // Cycle detected! Mark all nodes in the cycle as cyclic
+                console.log(`   🔄 CYCLE DETECTED: ${purl.substring(purl.lastIndexOf('/') + 1)} already at index ${previousOccurrence}`);
+                for (let i = previousOccurrence; i < selectedPath.length; i++) {
+                    cyclicNodes.add(selectedPath[i]);
+                    console.log(`      Marked as cyclic: ${selectedPath[i].substring(selectedPath[i].lastIndexOf('/') + 1)}`);
+                }
+                // Don't add children column - cycle stops here
+                drawConnectors();
+                updateComponentDetails();
+                alert(`⚠️ Cycle detected!\n\nThis component creates a circular dependency back to a component earlier in the path.\n\nCycle: ${selectedPath.slice(previousOccurrence).map(p => componentMap.get(p)?.name || p.split('/').pop()).join(' → ')}`);
+                return;
+            }
+
             // Get dependencies and add new column (filtered by scope)
             const deps = dependencyMap.get(purl) || [];
             const filteredDeps = filterNodesByScope(deps);
