@@ -693,6 +693,107 @@
         ::-webkit-scrollbar-thumb:hover {
             background: #a0a0a0;
         }
+
+        /* Share Modal */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            max-width: 600px;
+            width: 90%;
+            max-height: 90vh;
+            overflow: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 25px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .modal-header h2 {
+            margin: 0;
+            font-size: 20px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .modal-close {
+            font-size: 32px;
+            font-weight: 300;
+            color: #999;
+            cursor: pointer;
+            line-height: 1;
+            transition: color 0.2s;
+        }
+
+        .modal-close:hover {
+            color: #333;
+        }
+
+        .modal-body {
+            padding: 25px;
+        }
+
+        .modal-body p {
+            margin: 0 0 15px 0;
+            color: #666;
+            font-size: 14px;
+        }
+
+        .share-url-container {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .share-url-container input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 13px;
+            font-family: monospace;
+            background: #f9f9f9;
+        }
+
+        .copy-button {
+            padding: 10px 20px;
+            background: #0078d4;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            white-space: nowrap;
+        }
+
+        .copy-button:hover {
+            background: #106ebe;
+        }
+
+        .copy-feedback {
+            color: #4caf50;
+            font-size: 13px;
+            min-height: 20px;
+            font-weight: 500;
+        }
     </style>
 </head>
 <body>
@@ -754,6 +855,7 @@
                     <button onclick="applyZoom(0.1)" title="Zoom In (Ctrl/Cmd + +)">+</button>
                     <button onclick="resetZoom()" title="Reset Zoom (Ctrl/Cmd + 0)">⟲</button>
                 </div>
+                <button onclick="showShareDialog()" title="Share current view (Ctrl/Cmd + S)" class="primary-button">🔗 Share</button>
                 <button onclick="exportViewAsPNG()" title="Export as PNG (Ctrl/Cmd + E)" class="primary-button">📷 Export</button>
             </div>
         </div>
@@ -787,6 +889,24 @@
             <h2>Component Details</h2>
             <div id="componentDetails">
                 <em>Click a component to see details</em>
+            </div>
+        </div>
+    </div>
+
+    <!-- Share Dialog Modal -->
+    <div id="shareModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>🔗 Share Current View</h2>
+                <span class="modal-close" onclick="closeShareDialog()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <p>Copy this URL to share your current view (SBOM source, focused component, and filters):</p>
+                <div class="share-url-container">
+                    <input type="text" id="shareUrlInput" readonly onclick="this.select()">
+                    <button onclick="copyShareUrl()" class="copy-button">📋 Copy</button>
+                </div>
+                <div id="shareCopyFeedback" class="copy-feedback"></div>
             </div>
         </div>
     </div>
@@ -1143,6 +1263,86 @@
             }
         }
 
+        // Share dialog functions
+        function generateShareableUrl() {
+            if (!sbomData) return null;
+
+            const params = new URLSearchParams();
+
+            // Add SBOM URL if loaded from URL
+            if (currentFileName && currentFileName.startsWith('http')) {
+                params.set('url', currentFileName);
+            }
+
+            // Add focused component (if not app view)
+            if (currentSelectedComponent && currentSelectedComponent !== '__app__') {
+                params.set('component', currentSelectedComponent);
+            }
+
+            // Add filter state (only if non-default)
+            if (!activeFilters.required || !activeFilters.optional || activeFilters.excluded) {
+                const filters = [];
+                if (activeFilters.required) filters.push('required');
+                if (activeFilters.optional) filters.push('optional');
+                if (activeFilters.excluded) filters.push('excluded');
+                params.set('filters', filters.join(','));
+            }
+
+            // Generate full URL
+            const baseUrl = window.location.origin + window.location.pathname;
+            return params.toString() ? `${baseUrl}?${params.toString()}` : baseUrl;
+        }
+
+        function showShareDialog() {
+            if (!sbomData) {
+                alert('Please load an SBOM first');
+                return;
+            }
+
+            const shareUrl = generateShareableUrl();
+            document.getElementById('shareUrlInput').value = shareUrl;
+            document.getElementById('shareCopyFeedback').textContent = '';
+            document.getElementById('shareModal').style.display = 'flex';
+
+            // Auto-select the URL for easy copying
+            setTimeout(() => {
+                document.getElementById('shareUrlInput').select();
+            }, 100);
+        }
+
+        function closeShareDialog() {
+            document.getElementById('shareModal').style.display = 'none';
+        }
+
+        async function copyShareUrl() {
+            const shareUrlInput = document.getElementById('shareUrlInput');
+            const feedback = document.getElementById('shareCopyFeedback');
+
+            try {
+                await navigator.clipboard.writeText(shareUrlInput.value);
+                feedback.textContent = '✓ URL copied to clipboard!';
+                setTimeout(() => {
+                    feedback.textContent = '';
+                }, 3000);
+            } catch (err) {
+                // Fallback for older browsers
+                shareUrlInput.select();
+                document.execCommand('copy');
+                feedback.textContent = '✓ URL copied to clipboard!';
+                setTimeout(() => {
+                    feedback.textContent = '';
+                }, 3000);
+            }
+        }
+
+        // Close modal when clicking outside
+        document.addEventListener('click', (e) => {
+            const modal = document.getElementById('shareModal');
+            if (e.target === modal) {
+                closeShareDialog();
+            }
+        });
+
         // Zoom controls - scale the entire view area
         function applyZoom(delta) {
             currentZoom += delta;
@@ -1291,9 +1491,9 @@
                         throw new Error('Invalid SBOM format - missing required fields');
                     }
 
-                    currentFileName = url.split('/').pop() || 'sbom.json';
+                    currentFileName = url; // Store full URL for shareable links
                     loadSBOM(json);
-                    saveRecentFile(currentFileName, json, url);
+                    saveRecentFile(url.split('/').pop() || 'sbom.json', json, url);
                     urlInput.value = '';
 
                     loadButton.disabled = false;
@@ -1308,12 +1508,12 @@
                     throw new Error('Invalid SBOM format - missing required fields');
                 }
 
-                // Extract filename from URL
-                currentFileName = url.split('/').pop() || 'sbom.json';
+                // Store full URL for shareable links
+                currentFileName = url;
 
                 // Load the SBOM
                 loadSBOM(json);
-                saveRecentFile(currentFileName, json, url);  // Pass URL as third parameter
+                saveRecentFile(url.split('/').pop() || 'sbom.json', json, url);  // Pass URL as third parameter
 
                 // Clear the URL input on success
                 urlInput.value = '';
@@ -1390,7 +1590,63 @@
             // Filter root nodes by scope before initializing
             const filteredRoots = filterNodesByScope(rootNodes);
 
-            // Initialize app view (no app column, just root -> transitive)
+            // Check if we should restore view from URL parameters
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.has('component') || urlParams.has('filters')) {
+                // Restore view state from URL
+                restoreViewFromUrl();
+            } else {
+                // Initialize default app view (no app column, just root -> transitive)
+                initializeAppView(filteredRoots);
+            }
+        }
+
+        // Restore view state from URL parameters (for shareable links)
+        function restoreViewFromUrl() {
+            const urlParams = new URLSearchParams(window.location.search);
+
+            // Restore filter state
+            const filtersParam = urlParams.get('filters');
+            if (filtersParam) {
+                const filters = filtersParam.split(',');
+                activeFilters.required = filters.includes('required');
+                activeFilters.optional = filters.includes('optional');
+                activeFilters.excluded = filters.includes('excluded');
+
+                // Update checkbox UI
+                document.getElementById('scopeRequired').checked = activeFilters.required;
+                document.getElementById('scopeOptional').checked = activeFilters.optional;
+                document.getElementById('scopeExcluded').checked = activeFilters.excluded;
+            }
+
+            // Restore component focus
+            const componentParam = urlParams.get('component');
+            if (componentParam && componentParam !== '__app__') {
+                // Find the component in the map
+                const comp = componentMap.get(componentParam);
+                if (comp) {
+                    const displayText = `${comp.name} ${comp.version || ''}`.trim();
+                    // Don't call selectDropdownItem (triggers changeView), just set state
+                    currentSelectedComponent = componentParam;
+                    document.getElementById('dropdownSelected').textContent = displayText;
+
+                    // Update selection highlighting in dropdown
+                    document.querySelectorAll('.dropdown-item').forEach(item => {
+                        item.classList.remove('selected');
+                        if (item.dataset.value === componentParam) {
+                            item.classList.add('selected');
+                        }
+                    });
+
+                    // Trigger the view change
+                    changeView();
+                    return; // Exit early, changeView already called
+                }
+            }
+
+            // If we got here, no component to focus, just apply filters and show default view
+            const rootNodes = findRootNodes();
+            const filteredRoots = filterNodesByScope(rootNodes);
             initializeAppView(filteredRoots);
         }
 
@@ -3284,6 +3540,11 @@
             if ((e.ctrlKey || e.metaKey) && e.key === 'o') {
                 e.preventDefault();
                 document.getElementById('fileInput').click();
+            }
+            // Ctrl/Cmd+S: Share current view
+            if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                e.preventDefault();
+                if (sbomData) showShareDialog();
             }
             // Ctrl/Cmd+E: Export as PNG
             if ((e.ctrlKey || e.metaKey) && e.key === 'e') {
