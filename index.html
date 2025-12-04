@@ -1707,8 +1707,11 @@
                 }
 
                 // Determine node type icon (chain link style)
-                const hasDeps = deps.length > 0;
-                const hasParents = (reverseDependencyMap.get(purl) || []).length > 0;
+                // Use filtered dependencies to determine if node has visible children
+                const hasDeps = filteredDeps.length > 0;
+                const allParents = reverseDependencyMap.get(purl) || [];
+                const filteredParents = filterNodesByScope(allParents);
+                const hasParents = filteredParents.length > 0;
                 let nodeTypeIcon = '';
 
                 if (!hasParents && hasDeps) {
