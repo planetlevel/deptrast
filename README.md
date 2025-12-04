@@ -8,6 +8,11 @@
 
 2) SBOM Explorer -- Load any CycloneDX SBOM and explore your dependency tree with our free interactive visualization tool. Works entirely in your browser - your data never leaves your machine!  Try it now - no installation required!  **[Launch Interactive SBOM Viewer](https://planetlevel.github.io/deptrast/index.html)**
 
+You can also load SBOMs directly from URLs - just upload a file, paste a URL, or use a direct link:
+```
+https://planetlevel.github.io/deptrast/index.html?url=https://example.com/your-sbom.json
+```
+
 ![Interactive SBOM Visualization](deptrast-sbom.png)
 
 ## Supported input sources
