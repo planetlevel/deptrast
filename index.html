@@ -2081,12 +2081,13 @@
             const baseWidth = Math.max(container.scrollWidth, maxRight + 100);
             const baseHeight = Math.max(container.scrollHeight, maxBottom + 100);
 
-            // Set physical size to counter parent zoom
-            svg.setAttribute('width', baseWidth * currentZoom);
-            svg.setAttribute('height', baseHeight * currentZoom);
+            // Physical size matches the actual content dimensions
+            svg.setAttribute('width', baseWidth);
+            svg.setAttribute('height', baseHeight);
 
-            // Set viewBox to establish logical coordinate system matching unzoomed space
-            svg.setAttribute('viewBox', `0 0 ${baseWidth} ${baseHeight}`);
+            // ViewBox is LARGER than physical size (multiply by zoom) so content scales DOWN
+            // This counters the parent container's CSS zoom that scales everything UP
+            svg.setAttribute('viewBox', `0 0 ${baseWidth * currentZoom} ${baseHeight * currentZoom}`);
 
             // Add arrowhead marker definitions
             const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
@@ -2136,7 +2137,7 @@
                 const fromRect = fromItem.getBoundingClientRect();
                 const toRect = toItem.getBoundingClientRect();
 
-                // Use logical coordinates directly - viewBox handles the scaling
+                // Use logical coordinates directly - viewBox scaling handles the rest
                 const x1 = fromRect.right - containerRect.left + scrollLeft;
                 const y1 = fromRect.top + fromRect.height / 2 - containerRect.top + scrollTop;
                 const x2 = toRect.left - containerRect.left + scrollLeft - 6;
