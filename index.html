@@ -1274,9 +1274,15 @@
                 params.set('url', currentFileName);
             }
 
-            // Add focused component (if not app view)
-            if (currentSelectedComponent && currentSelectedComponent !== '__app__') {
-                params.set('component', currentSelectedComponent);
+            // Add view mode and state
+            if (currentViewMode === 'focus') {
+                // Focus mode: include focused component
+                if (currentSelectedComponent && currentSelectedComponent !== '__app__') {
+                    params.set('component', currentSelectedComponent);
+                }
+            } else if (currentViewMode === 'app' && selectedPath.length > 0) {
+                // Explore mode: include the full navigation path
+                params.set('path', selectedPath.join(','));
             }
 
             // Add filter state (only if non-default)
@@ -1592,7 +1598,7 @@
 
             // Check if we should restore view from URL parameters
             const urlParams = new URLSearchParams(window.location.search);
-            if (urlParams.has('component') || urlParams.has('filters')) {
+            if (urlParams.has('component') || urlParams.has('filters') || urlParams.has('path')) {
                 // Restore view state from URL
                 restoreViewFromUrl();
             } else {
@@ -1619,7 +1625,16 @@
                 document.getElementById('scopeExcluded').checked = activeFilters.excluded;
             }
 
-            // Restore component focus
+            // Check for path parameter (explore mode with navigation path)
+            const pathParam = urlParams.get('path');
+            if (pathParam) {
+                // Restore explore mode path
+                const purls = pathParam.split(',').filter(p => p.trim());
+                restoreExplorePath(purls);
+                return;
+            }
+
+            // Check for component parameter (focus mode)
             const componentParam = urlParams.get('component');
             if (componentParam && componentParam !== '__app__') {
                 // Find the component in the map
@@ -1648,6 +1663,68 @@
             const rootNodes = findRootNodes();
             const filteredRoots = filterNodesByScope(rootNodes);
             initializeAppView(filteredRoots);
+        }
+
+        // Restore explore mode navigation path
+        function restoreExplorePath(purls) {
+            if (purls.length === 0) {
+                // No path, show default view
+                const rootNodes = findRootNodes();
+                const filteredRoots = filterNodesByScope(rootNodes);
+                initializeAppView(filteredRoots);
+                return;
+            }
+
+            // Validate all purls exist in the component map
+            const validPurls = purls.filter(purl => componentMap.has(purl));
+            if (validPurls.length === 0) {
+                console.warn('No valid components found in path, showing default view');
+                const rootNodes = findRootNodes();
+                const filteredRoots = filterNodesByScope(rootNodes);
+                initializeAppView(filteredRoots);
+                return;
+            }
+
+            // Initialize with root nodes in first column
+            const rootNodes = findRootNodes();
+            const filteredRoots = filterNodesByScope(rootNodes);
+            initializeAppView(filteredRoots);
+
+            // Rebuild the path by selecting each component in sequence
+            // This will add columns as we navigate through the path
+            validPurls.forEach((purl, index) => {
+                // Find which column this purl should be in
+                const columnIndex = index;
+
+                // Simulate clicking on this node to expand it
+                if (columnIndex < columns.length) {
+                    const column = columns[columnIndex];
+                    const nodeIndex = column.nodes.indexOf(purl);
+
+                    if (nodeIndex >= 0) {
+                        // Update selectedPath and add next column
+                        selectedPath = validPurls.slice(0, index + 1);
+
+                        // Only add next column if this isn't the last item
+                        if (index < validPurls.length - 1) {
+                            const deps = dependencyMap.get(purl) || [];
+                            const filteredDeps = filterNodesByScope(deps);
+                            if (filteredDeps.length > 0) {
+                                addColumn(filteredDeps);
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Update UI to reflect the restored path
+            updateSelectionUI();
+            updateLastColumnHighlight();
+            drawConnectors();
+            updateComponentDetails();
+
+            // Initialize keyboard navigation
+            initializeKeyboardNavigation();
         }
 
         function buildReverseDependencyMap() {
