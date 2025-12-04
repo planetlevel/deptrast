@@ -2967,26 +2967,29 @@
         function expandEntireTreeFromCurrent() {
             // Get the purl from either selected path or keyboard focus
             let currentPurl = null;
+            let currentColumnIndex = -1;
+
             if (selectedPath.length > 0) {
                 currentPurl = selectedPath[selectedPath.length - 1];
+                currentColumnIndex = selectedPath.length - 1;
             } else if (focusedNodeElement) {
                 currentPurl = focusedNodeElement.dataset.purl;
+                currentColumnIndex = parseInt(focusedNodeElement.dataset.columnIndex);
+                // Add to selected path without calling selectNode (which would add children column)
+                selectedPath = selectedPath.slice(0, currentColumnIndex);
+                selectedPath.push(currentPurl);
             }
 
             if (!currentPurl) return;
 
-            // If we're expanding from a focused (but not selected) node, select it first
-            if (selectedPath.length === 0 && focusedNodeElement) {
-                const columnIndex = parseInt(focusedNodeElement.dataset.columnIndex);
-                selectNode(currentPurl, columnIndex);
-            }
-
             // Remove any columns after the current selection
-            const currentColumnIndex = selectedPath.length - 1;
             while (columns.length > currentColumnIndex + 1) {
                 const removed = columns.pop();
                 removed.element.remove();
             }
+
+            // Update UI selection
+            updateSelectionUI();
 
             // Set flag to draw all arrows
             isExpandedView = true;
