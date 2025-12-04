@@ -1667,8 +1667,10 @@
 
         // Restore explore mode navigation path
         function restoreExplorePath(purls) {
+            console.log('🔄 restoreExplorePath called with', purls.length, 'purls');
+
             if (purls.length === 0) {
-                // No path, show default view
+                console.log('  ❌ Empty path, showing default view');
                 const rootNodes = findRootNodes();
                 const filteredRoots = filterNodesByScope(rootNodes);
                 initializeAppView(filteredRoots);
@@ -1677,8 +1679,10 @@
 
             // Validate all purls exist in the component map
             const validPurls = purls.filter(purl => componentMap.has(purl));
+            console.log('  ✅ Valid purls:', validPurls.length, 'of', purls.length);
+
             if (validPurls.length === 0) {
-                console.warn('No valid components found in path, showing default view');
+                console.warn('  ❌ No valid components found in path, showing default view');
                 const rootNodes = findRootNodes();
                 const filteredRoots = filterNodesByScope(rootNodes);
                 initializeAppView(filteredRoots);
@@ -1688,34 +1692,53 @@
             // Initialize with root nodes in first column
             const rootNodes = findRootNodes();
             const filteredRoots = filterNodesByScope(rootNodes);
+            console.log('  📊 Initializing with', filteredRoots.length, 'root nodes');
             initializeAppView(filteredRoots);
 
-            // Rebuild the path by selecting each component in sequence
-            // This will add columns as we navigate through the path
-            validPurls.forEach((purl, index) => {
-                // Find which column this purl should be in
-                const columnIndex = index;
+            // Now rebuild the path by expanding each node in sequence
+            console.log('  🔨 Starting path reconstruction...');
+            selectedPath = [];
 
-                // Simulate clicking on this node to expand it
-                if (columnIndex < columns.length) {
-                    const column = columns[columnIndex];
-                    const nodeIndex = column.nodes.indexOf(purl);
+            validPurls.forEach((purl, pathIndex) => {
+                console.log(`    [${pathIndex}] Processing purl:`, purl.substring(purl.lastIndexOf('/') + 1));
 
-                    if (nodeIndex >= 0) {
-                        // Update selectedPath and add next column
-                        selectedPath = validPurls.slice(0, index + 1);
+                // The current column should be at index pathIndex
+                if (pathIndex >= columns.length) {
+                    console.log(`      ⚠️ Column ${pathIndex} doesn't exist yet (only have ${columns.length} columns)`);
+                    return;
+                }
 
-                        // Only add next column if this isn't the last item
-                        if (index < validPurls.length - 1) {
-                            const deps = dependencyMap.get(purl) || [];
-                            const filteredDeps = filterNodesByScope(deps);
-                            if (filteredDeps.length > 0) {
-                                addColumn(filteredDeps);
-                            }
+                const column = columns[pathIndex];
+                const nodeIndexInColumn = column.nodes.indexOf(purl);
+
+                console.log(`      📍 Looking for purl in column ${pathIndex}, found at index:`, nodeIndexInColumn);
+
+                if (nodeIndexInColumn >= 0) {
+                    // Found the node in this column - add it to selectedPath
+                    selectedPath.push(purl);
+                    console.log(`      ✅ Added to selectedPath (now length: ${selectedPath.length})`);
+
+                    // If this isn't the last item in the path, add the next column
+                    if (pathIndex < validPurls.length - 1) {
+                        const deps = dependencyMap.get(purl) || [];
+                        const filteredDeps = filterNodesByScope(deps);
+                        console.log(`      🔗 Node has ${filteredDeps.length} filtered dependencies`);
+
+                        if (filteredDeps.length > 0) {
+                            addColumn(filteredDeps);
+                            console.log(`      ➕ Added column ${columns.length - 1}`);
+                        } else {
+                            console.log(`      ⚠️ No dependencies to expand - path stops here`);
                         }
                     }
+                } else {
+                    console.log(`      ❌ PURL not found in column ${pathIndex}!`);
+                    console.log(`      Available nodes:`, column.nodes.map(p => p.substring(p.lastIndexOf('/') + 1)));
                 }
             });
+
+            console.log('  ✅ Path reconstruction complete. Final selectedPath length:', selectedPath.length);
+            console.log('  📊 Total columns:', columns.length);
 
             // Update UI to reflect the restored path
             updateSelectionUI();
