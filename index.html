@@ -1033,9 +1033,20 @@
 
             const container = document.getElementById('columnsContainer');
 
+            // Temporarily remove transform to measure natural size
+            const savedTransform = container.style.transform;
+            container.style.transform = '';
+            const naturalWidth = container.scrollWidth;
+            const naturalHeight = container.scrollHeight;
+
             // Apply zoom using transform scale
             container.style.transform = `scale(${currentZoom})`;
             container.style.transformOrigin = 'top left';
+
+            // Set container dimensions to accommodate scaled content
+            // When zoomed out (e.g., 0.5), content appears smaller, so we need MORE layout space
+            container.style.width = `${naturalWidth / currentZoom}px`;
+            container.style.height = `${naturalHeight / currentZoom}px`;
 
             // Redraw connectors with new zoom
             drawConnectors();
@@ -1053,6 +1064,8 @@
             const container = document.getElementById('columnsContainer');
             container.style.transform = '';
             container.style.transformOrigin = '';
+            container.style.width = '';
+            container.style.height = '';
 
             // Redraw connectors at 100%
             drawConnectors();
