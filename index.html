@@ -1178,81 +1178,6 @@
             }
         }
 
-        // Update browser URL with current view state (shareable links)
-        function updateUrlState() {
-            if (!sbomData) return;
-
-            const params = new URLSearchParams();
-
-            // Add SBOM URL if loaded from URL
-            if (currentFileName && currentFileName.startsWith('http')) {
-                params.set('url', currentFileName);
-            }
-
-            // Add focused component (if not app view)
-            if (currentSelectedComponent && currentSelectedComponent !== '__app__') {
-                params.set('component', currentSelectedComponent);
-            }
-
-            // Add filter state (only if non-default)
-            if (!activeFilters.required || !activeFilters.optional || activeFilters.excluded) {
-                const filters = [];
-                if (activeFilters.required) filters.push('required');
-                if (activeFilters.optional) filters.push('optional');
-                if (activeFilters.excluded) filters.push('excluded');
-                params.set('filters', filters.join(','));
-            }
-
-            // Update browser URL without reloading page
-            const newUrl = params.toString() ? `${window.location.pathname}?${params.toString()}` : window.location.pathname;
-            window.history.replaceState({}, '', newUrl);
-        }
-
-        // Restore view state from URL parameters
-        function restoreViewFromUrl() {
-            if (!sbomData) return;
-
-            const urlParams = new URLSearchParams(window.location.search);
-
-            // Restore filter state
-            const filtersParam = urlParams.get('filters');
-            if (filtersParam) {
-                const filters = filtersParam.split(',');
-                activeFilters.required = filters.includes('required');
-                activeFilters.optional = filters.includes('optional');
-                activeFilters.excluded = filters.includes('excluded');
-
-                // Update checkbox UI
-                document.getElementById('scopeRequired').checked = activeFilters.required;
-                document.getElementById('scopeOptional').checked = activeFilters.optional;
-                document.getElementById('scopeExcluded').checked = activeFilters.excluded;
-            }
-
-            // Restore component focus
-            const componentParam = urlParams.get('component');
-            if (componentParam && componentParam !== '__app__') {
-                // Find the component in the map
-                const comp = componentMap.get(componentParam);
-                if (comp) {
-                    const displayText = `${comp.name} ${comp.version || ''}`.trim();
-                    // Don't call selectDropdownItem (triggers changeView), just set state
-                    currentSelectedComponent = componentParam;
-                    document.getElementById('dropdownSelected').textContent = displayText;
-
-                    // Update selection highlighting
-                    document.querySelectorAll('.dropdown-item').forEach(item => {
-                        item.classList.remove('selected');
-                        if (item.dataset.value === componentParam) {
-                            item.classList.add('selected');
-                        }
-                    });
-                }
-            }
-
-            // Apply the restored state
-            changeView();
-        }
-
         // Check for URL parameter and auto-load SBOM
         function checkUrlParameter() {
             const urlParams = new URLSearchParams(window.location.search);
@@ -1366,9 +1291,9 @@
                         throw new Error('Invalid SBOM format - missing required fields');
                     }
 
-                    currentFileName = url; // Store full URL for shareable links
+                    currentFileName = url.split('/').pop() || 'sbom.json';
                     loadSBOM(json);
-                    saveRecentFile(url.split('/').pop() || 'sbom.json', json, url);
+                    saveRecentFile(currentFileName, json, url);
                     urlInput.value = '';
 
                     loadButton.disabled = false;
@@ -1383,12 +1308,12 @@
                     throw new Error('Invalid SBOM format - missing required fields');
                 }
 
-                // Store full URL for shareable links
-                currentFileName = url;
+                // Extract filename from URL
+                currentFileName = url.split('/').pop() || 'sbom.json';
 
                 // Load the SBOM
                 loadSBOM(json);
-                saveRecentFile(url.split('/').pop() || 'sbom.json', json, url);  // Pass URL as third parameter
+                saveRecentFile(currentFileName, json, url);  // Pass URL as third parameter
 
                 // Clear the URL input on success
                 urlInput.value = '';
@@ -1465,15 +1390,8 @@
             // Filter root nodes by scope before initializing
             const filteredRoots = filterNodesByScope(rootNodes);
 
-            // Check if we should restore view from URL parameters
-            const urlParams = new URLSearchParams(window.location.search);
-            if (urlParams.has('component') || urlParams.has('filters')) {
-                // Restore view state from URL
-                restoreViewFromUrl();
-            } else {
-                // Initialize default app view (no app column, just root -> transitive)
-                initializeAppView(filteredRoots);
-            }
+            // Initialize app view (no app column, just root -> transitive)
+            initializeAppView(filteredRoots);
         }
 
         function buildReverseDependencyMap() {
@@ -1762,9 +1680,6 @@
                 initializeFocusView(selected);
             }
             console.log(`  → currentViewMode is now: ${currentViewMode}`);
-
-            // Update URL to reflect current view state
-            updateUrlState();
         }
 
         function findRootNodes() {
@@ -2799,7 +2714,7 @@
             if (sbomData) {
                 populateComponentSelector();
 
-                // Rebuild current view with filtered nodes (this will call updateUrlState)
+                // Rebuild current view with filtered nodes
                 changeView();
             }
         }
