@@ -1029,16 +1029,7 @@
                             ctx.fillText(nameText, itemX + 50, itemY + 38);
                         }
 
-                        // Draw metadata (dependency count)
-                        const metaEl = item.querySelector('.node-meta');
-                        if (metaEl) {
-                            const countEl = metaEl.querySelector('.node-count');
-                            if (countEl) {
-                                ctx.fillStyle = '#666';
-                                ctx.font = '10px "Segoe UI", sans-serif';
-                                ctx.fillText(countEl.textContent, itemX + itemRect.width - 40, itemY + itemRect.height / 2);
-                            }
-                        }
+                        // Skip drawing metadata (dependency count) - cleaner export without numbers
                     });
                 }
 
