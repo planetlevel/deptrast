@@ -916,6 +916,7 @@
         let componentMap = new Map(); // Maps bom-ref -> component object
         let dependencyMap = new Map(); // Maps bom-ref -> array of bom-refs it depends on
         let reverseDependencyMap = new Map(); // Maps bom-ref -> array of bom-refs that depend on it
+        let cyclicNodes = new Set(); // Tracks bom-refs that are part of cycles
         let columns = [];
         let selectedPath = [];
         let availableScopes = new Set();
@@ -2453,9 +2454,12 @@
                 // Determine node type icon (chain link style)
                 const hasDeps = deps.length > 0;
                 const hasParents = (reverseDependencyMap.get(purl) || []).length > 0;
+                const isCyclic = cyclicNodes.has(purl);
                 let nodeTypeIcon = '';
 
-                if (!hasParents && hasDeps) {
+                if (isCyclic) {
+                    nodeTypeIcon = '*>'; // Cyclic: part of a dependency cycle
+                } else if (!hasParents && hasDeps) {
                     nodeTypeIcon = '|>'; // Root: no parents, has children
                 } else if (!hasDeps && hasParents) {
                     nodeTypeIcon = '<|'; // Leaf: has parents, no children
@@ -3754,6 +3758,9 @@
             // Update UI selection
             updateSelectionUI();
 
+            // Clear cyclic node tracking
+            cyclicNodes.clear();
+
             // Set flag to draw all arrows
             isExpandedView = true;
 
@@ -3781,6 +3788,9 @@
                         if (!visited.has(dep)) {
                             visited.add(dep);
                             nextLevel.add(dep);
+                        } else {
+                            // Mark as cyclic - this node was already visited
+                            cyclicNodes.add(dep);
                         }
                     });
                 });
@@ -3811,6 +3821,7 @@
 
             // Clear any existing selection and columns beyond root
             selectedPath = [];
+            cyclicNodes.clear(); // Clear cyclic node tracking
             while (columns.length > 1) {
                 const removed = columns.pop();
                 removed.element.remove();
@@ -3842,6 +3853,9 @@
                         if (!visited.has(dep)) {
                             visited.add(dep);
                             nextLevel.add(dep);
+                        } else {
+                            // Mark as cyclic - this node was already visited
+                            cyclicNodes.add(dep);
                         }
                     });
                 });
