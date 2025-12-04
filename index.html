@@ -3008,14 +3008,19 @@
             let depth = 1;
             const maxDepth = 20; // Safety limit
 
+            console.log(`🔍 Starting BFS from ${currentPurl.substring(currentPurl.lastIndexOf('/') + 1)}`);
+
             while (currentLevel.size > 0 && depth < maxDepth) {
                 const nextLevel = new Set();
                 const nodesForThisLevel = new Set();
+
+                console.log(`  📊 Depth ${depth}: Processing ${currentLevel.size} nodes`);
 
                 // Collect all children for current level
                 currentLevel.forEach(purl => {
                     const deps = dependencyMap.get(purl) || [];
                     const filteredDeps = filterNodesByScope(deps);
+                    console.log(`    ${purl.substring(purl.lastIndexOf('/') + 1)}: ${filteredDeps.length} deps`);
 
                     filteredDeps.forEach(dep => {
                         if (!visited.has(dep)) {
@@ -3026,6 +3031,8 @@
                     });
                 });
 
+                console.log(`  ✅ Depth ${depth}: Found ${nodesForThisLevel.size} new nodes for column`);
+
                 // Add column for this level if there are nodes
                 if (nodesForThisLevel.size > 0) {
                     addColumn(Array.from(nodesForThisLevel), `Level ${depth}`);
@@ -3034,6 +3041,8 @@
                 currentLevel = nextLevel;
                 depth++;
             }
+
+            console.log(`🏁 BFS complete: ${depth - 1} levels, ${visited.size} total nodes`);
 
             drawConnectors();
         }
