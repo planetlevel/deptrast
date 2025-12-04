@@ -2963,19 +2963,16 @@
             }
         });
 
-        // Expand entire tree from currently focused node
+        // Expand entire tree from currently keyboard-focused node
         function expandEntireTreeFromCurrent() {
-            // Get the purl from either selected path or keyboard focus
+            // Always use the keyboard-focused node (outlined), not the selected path
             let currentPurl = null;
             let currentColumnIndex = -1;
 
-            if (selectedPath.length > 0) {
-                currentPurl = selectedPath[selectedPath.length - 1];
-                currentColumnIndex = selectedPath.length - 1;
-            } else if (focusedNodeElement) {
+            if (focusedNodeElement) {
                 currentPurl = focusedNodeElement.dataset.purl;
                 currentColumnIndex = parseInt(focusedNodeElement.dataset.columnIndex);
-                // Add to selected path without calling selectNode (which would add children column)
+                // Update selected path to match keyboard focus
                 selectedPath = selectedPath.slice(0, currentColumnIndex);
                 selectedPath.push(currentPurl);
             }
