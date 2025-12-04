@@ -1216,7 +1216,7 @@
             const urlInput = document.getElementById('urlInput');
             const loadButton = document.getElementById('urlLoadButton');
             const errorDiv = document.getElementById('urlError');
-            const url = urlInput.value.trim();
+            let url = urlInput.value.trim();
 
             // Clear previous errors
             errorDiv.textContent = '';
@@ -1232,6 +1232,14 @@
             } catch (e) {
                 errorDiv.textContent = 'Invalid URL format';
                 return;
+            }
+
+            // Convert GitHub blob URLs to raw URLs
+            if (url.includes('github.com') && url.includes('/blob/')) {
+                url = url.replace('github.com', 'raw.githubusercontent.com').replace('/blob/', '/');
+                console.log('Converted GitHub blob URL to raw URL:', url);
+                // Update the input field with the converted URL
+                urlInput.value = url;
             }
 
             // Disable button and show loading
