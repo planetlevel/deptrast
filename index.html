@@ -1037,10 +1037,8 @@
             container.style.transform = `scale(${currentZoom})`;
             container.style.transformOrigin = 'top left';
 
-            // Keep full width/height so content remains scrollable
-            // The parent container will handle the scaled dimensions
-            container.style.width = '';
-            container.style.height = '';
+            // Redraw connectors with new zoom
+            drawConnectors();
 
             // Update zoom display
             const zoomDisplay = document.getElementById('zoomDisplay');
@@ -1055,10 +1053,9 @@
             const container = document.getElementById('columnsContainer');
             container.style.transform = '';
             container.style.transformOrigin = '';
-            container.style.width = '';
-            container.style.height = '';
 
-            // Don't redraw - let SVG scale naturally with transform
+            // Redraw connectors at 100%
+            drawConnectors();
 
             const zoomDisplay = document.getElementById('zoomDisplay');
             if (zoomDisplay) {
