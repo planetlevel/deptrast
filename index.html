@@ -2604,6 +2604,12 @@
                 // Add click handler - always allow clicking to show details
                 item.addEventListener('click', () => {
                     if (currentViewMode === 'app') {
+                        // Check if this is a cyclic node - if so, don't allow navigation
+                        if (cyclicNodes.has(purl)) {
+                            console.log(`⚠️ Cannot expand cyclic node: ${purl}`);
+                            alert('⚠️ This component is part of a circular dependency and cannot be expanded further.');
+                            return;
+                        }
                         // APP mode: navigate through dependencies
                         selectNode(purl, columnIndex);
                         // Also move keyboard focus to the clicked item
@@ -2669,27 +2675,37 @@
             // Update UI selection
             updateSelectionUI();
 
-            // Check if this node creates a cycle (already in the path)
-            const previousOccurrence = selectedPath.slice(0, -1).indexOf(purl);
-            if (previousOccurrence >= 0) {
-                // Cycle detected! Mark all nodes in the cycle as cyclic
-                console.log(`   🔄 CYCLE DETECTED: ${purl.substring(purl.lastIndexOf('/') + 1)} already at index ${previousOccurrence}`);
-                for (let i = previousOccurrence; i < selectedPath.length; i++) {
-                    cyclicNodes.add(selectedPath[i]);
-                    console.log(`      Marked as cyclic: ${selectedPath[i].substring(selectedPath[i].lastIndexOf('/') + 1)}`);
-                }
-                // Don't add children column - cycle stops here
-                drawConnectors();
-                updateComponentDetails();
-                alert(`⚠️ Cycle detected!\n\nThis component creates a circular dependency back to a component earlier in the path.\n\nCycle: ${selectedPath.slice(previousOccurrence).map(p => componentMap.get(p)?.name || p.split('/').pop()).join(' → ')}`);
-                return;
-            }
-
-            // Get dependencies and add new column (filtered by scope)
+            // Get dependencies for this node
             const deps = dependencyMap.get(purl) || [];
             const filteredDeps = filterNodesByScope(deps);
+
+            // Check if ANY of the children would create a cycle
+            const cyclicDeps = filteredDeps.filter(dep => selectedPath.includes(dep));
+            if (cyclicDeps.length > 0) {
+                // Mark cyclic dependencies
+                cyclicDeps.forEach(dep => {
+                    const cycleStartIndex = selectedPath.indexOf(dep);
+                    console.log(`   🔄 CYCLE DETECTED: ${dep.substring(dep.lastIndexOf('/') + 1)} found at index ${cycleStartIndex}`);
+                    // Mark all nodes from cycle start to current node
+                    for (let i = cycleStartIndex; i < selectedPath.length; i++) {
+                        cyclicNodes.add(selectedPath[i]);
+                    }
+                    // Also mark the cyclic dep itself
+                    cyclicNodes.add(dep);
+                });
+            }
+
+            // Add new column with dependencies (including cyclic ones, but marked)
             if (filteredDeps.length > 0) {
                 addColumn(filteredDeps);
+            }
+
+            // Show alert if cycles were detected
+            if (cyclicDeps.length > 0) {
+                const cycleNames = cyclicDeps.map(dep => componentMap.get(dep)?.name || dep.split('/').pop()).join(', ');
+                setTimeout(() => {
+                    alert(`⚠️ Cycle detected!\n\nThe following dependencies create circular references back to earlier components in the path:\n\n${cycleNames}\n\nThese nodes are marked with the *> icon and cannot be expanded further.`);
+                }, 100);
             }
 
             // Always redraw connectors after removing/adding columns
