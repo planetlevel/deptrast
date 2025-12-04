@@ -648,7 +648,9 @@
             left: 0;
             pointer-events: none;
             z-index: 100;
+            transform-origin: top left;
             /* Width and height set dynamically via JavaScript */
+            /* Transform set dynamically to counter parent zoom */
         }
 
         .connector-line {
@@ -2062,6 +2064,9 @@
             // Update SVG dimensions to cover the entire scrollable area
             const container = document.getElementById('columnsContainer');
 
+            // Counter-zoom the SVG to cancel out parent's CSS zoom
+            svg.style.transform = `scale(${1 / currentZoom})`;
+
             // Calculate actual dimensions by looking at all columns
             let maxRight = 0;
             let maxBottom = 0;
@@ -2077,8 +2082,9 @@
             });
 
             // Add padding to ensure arrows have room
-            const baseWidth = Math.max(container.scrollWidth, maxRight + 100);
-            const baseHeight = Math.max(container.scrollHeight, maxBottom + 100);
+            // Multiply by currentZoom because SVG is counter-scaled
+            const baseWidth = Math.max(container.scrollWidth, maxRight + 100) * currentZoom;
+            const baseHeight = Math.max(container.scrollHeight, maxBottom + 100) * currentZoom;
 
             svg.setAttribute('width', baseWidth);
             svg.setAttribute('height', baseHeight);
@@ -2131,12 +2137,12 @@
                 const fromRect = fromItem.getBoundingClientRect();
                 const toRect = toItem.getBoundingClientRect();
 
-                // With CSS zoom, getBoundingClientRect returns unzoomed logical coordinates
-                // Use them directly for SVG (which is also in the zoomed container)
-                const x1 = fromRect.right - containerRect.left + scrollLeft;
-                const y1 = fromRect.top + fromRect.height / 2 - containerRect.top + scrollTop;
-                const x2 = toRect.left - containerRect.left + scrollLeft - 6;
-                const y2 = toRect.top + toRect.height / 2 - containerRect.top + scrollTop;
+                // SVG is counter-scaled, so multiply coordinates by currentZoom
+                // getBoundingClientRect returns logical coordinates, scale them up for the counter-scaled SVG
+                const x1 = (fromRect.right - containerRect.left + scrollLeft) * currentZoom;
+                const y1 = (fromRect.top + fromRect.height / 2 - containerRect.top + scrollTop) * currentZoom;
+                const x2 = (toRect.left - containerRect.left + scrollLeft - 6) * currentZoom;
+                const y2 = (toRect.top + toRect.height / 2 - containerRect.top + scrollTop) * currentZoom;
 
                 const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
                 const midX = (x1 + x2) / 2;
