@@ -1033,14 +1033,14 @@
 
             const container = document.getElementById('columnsContainer');
 
-            // Use transform: scale() on columns container (includes SVG)
-            // Adjust width/height to compensate for scaling so it fills available space
+            // Apply zoom using transform scale
             container.style.transform = `scale(${currentZoom})`;
             container.style.transformOrigin = 'top left';
-            container.style.width = `${100 / currentZoom}%`;
-            container.style.height = `${100 / currentZoom}%`;
 
-            // Don't redraw - let SVG scale naturally with transform
+            // Keep full width/height so content remains scrollable
+            // The parent container will handle the scaled dimensions
+            container.style.width = '';
+            container.style.height = '';
 
             // Update zoom display
             const zoomDisplay = document.getElementById('zoomDisplay');
