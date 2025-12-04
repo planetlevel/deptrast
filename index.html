@@ -905,19 +905,13 @@
         function exportViewAsPNG() {
             const container = document.getElementById('columnsContainer');
 
-            // Save current transform and zoom level
-            const savedTransform = container.style.transform;
-            const savedTransformOrigin = container.style.transformOrigin;
-            const savedWidth = container.style.width;
-            const savedHeight = container.style.height;
+            // Save current zoom level and CSS zoom
             const savedZoom = currentZoom;
+            const savedCSSZoom = container.style.zoom;
 
             // Reset zoom to 1.0 for accurate measurement
             currentZoom = 1.0;
-            container.style.transform = '';
-            container.style.transformOrigin = '';
-            container.style.width = '';
-            container.style.height = '';
+            container.style.zoom = '';
 
             // Redraw connectors at 1:1 scale
             drawConnectors();
@@ -954,7 +948,7 @@
                 const clonedContainer = container.cloneNode(true);
                 clonedContainer.style.width = width + 'px';
                 clonedContainer.style.height = height + 'px';
-                clonedContainer.style.transform = '';
+                clonedContainer.style.zoom = '';
                 clonedContainer.style.overflow = 'visible';
 
                 // Add styles inline
@@ -995,12 +989,9 @@
 
                     URL.revokeObjectURL(url);
 
-                    // Restore transform and zoom
+                    // Restore zoom
                     currentZoom = savedZoom;
-                    container.style.transform = savedTransform;
-                    container.style.transformOrigin = savedTransformOrigin;
-                    container.style.width = savedWidth;
-                    container.style.height = savedHeight;
+                    container.style.zoom = savedCSSZoom;
 
                     // Redraw connectors at restored zoom
                     drawConnectors();
@@ -1014,12 +1005,9 @@
                 };
 
                 img.onerror = function() {
-                    // Restore transform and zoom even on error
+                    // Restore zoom even on error
                     currentZoom = savedZoom;
-                    container.style.transform = savedTransform;
-                    container.style.transformOrigin = savedTransformOrigin;
-                    container.style.width = savedWidth;
-                    container.style.height = savedHeight;
+                    container.style.zoom = savedCSSZoom;
                     drawConnectors();
                     alert('Export failed. This may be due to browser security restrictions.');
                 };
