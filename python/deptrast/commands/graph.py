@@ -593,23 +593,42 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 def visualize_sbom(sbom_path, output_html=None, open_browser=True):
     """
     Generate an interactive HTML visualization of an SBOM file using index.html.
+    Supports both local files and URLs.
 
     Args:
-        sbom_path: Path to the CycloneDX SBOM JSON file
+        sbom_path: Path or URL to the CycloneDX SBOM JSON file
         output_html: Optional output path for HTML file (default: temp file)
         open_browser: Whether to automatically open the visualization in a browser
 
     Returns:
         Path to the generated HTML file
     """
-    sbom_path = Path(sbom_path)
+    from urllib.parse import urlparse
+    import requests
 
-    if not sbom_path.exists():
-        raise FileNotFoundError(f"SBOM file not found: {sbom_path}")
+    # Check if it's a URL
+    is_url = False
+    try:
+        result = urlparse(str(sbom_path))
+        is_url = result.scheme in ('http', 'https')
+    except:
+        pass
 
-    # Read SBOM
-    with open(sbom_path, 'r') as f:
-        sbom_data = json.load(f)
+    if is_url:
+        # Fetch from URL
+        response = requests.get(str(sbom_path), timeout=30)
+        response.raise_for_status()
+        sbom_data = response.json()
+        filename = str(sbom_path).split('/')[-1] or 'sbom.json'
+    else:
+        # Read from file
+        sbom_path = Path(sbom_path)
+        if not sbom_path.exists():
+            raise FileNotFoundError(f"SBOM file not found: {sbom_path}")
+
+        with open(sbom_path, 'r') as f:
+            sbom_data = json.load(f)
+        filename = sbom_path.name
 
     # Find index.html in the repo root (relative to this file)
     # This file is at: python/deptrast/commands/graph.py
@@ -619,7 +638,7 @@ def visualize_sbom(sbom_path, output_html=None, open_browser=True):
     if not index_html_path.exists():
         # Fallback: use old embedded template
         html_content = HTML_TEMPLATE.format(
-            filename=sbom_path.name,
+            filename=filename,
             sbom_json=json.dumps(sbom_data)
         )
     else:
@@ -633,7 +652,7 @@ def visualize_sbom(sbom_path, output_html=None, open_browser=True):
         // Preload SBOM data
         (function() {{
             const sbomData = {json.dumps(sbom_data)};
-            const fileName = '{sbom_path.name}';
+            const fileName = '{filename}';
 
             // Wait for page to load, then load the SBOM
             window.addEventListener('load', function() {{

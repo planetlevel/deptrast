@@ -8,11 +8,46 @@ import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import List, Dict, Set, Tuple, Optional
+from urllib.parse import urlparse
 
 from .models import Package
 from .version_parser import VersionParser
 
 logger = logging.getLogger(__name__)
+
+
+def _is_url(path: str) -> bool:
+    """Check if a path is a URL."""
+    try:
+        result = urlparse(path)
+        return result.scheme in ('http', 'https')
+    except:
+        return False
+
+
+def _read_content(path: str) -> str:
+    """
+    Read content from either a file path or URL.
+
+    Args:
+        path: File path or URL
+
+    Returns:
+        Content as string
+
+    Raises:
+        FileNotFoundError: If file doesn't exist
+        requests.RequestException: If URL fetch fails
+    """
+    if _is_url(path):
+        logger.info(f"Fetching content from URL: {path}")
+        response = requests.get(path, timeout=30)
+        response.raise_for_status()
+        return response.text
+    else:
+        logger.info(f"Reading content from file: {path}")
+        with open(path, 'r') as f:
+            return f.read()
 
 
 def _create_package_with_metadata(system: str, name: str, version: str, scope: str = "compile") -> Package:
@@ -317,6 +352,7 @@ class FileParser:
     def parse_flat_file(file_path: str) -> List[Package]:
         """
         Parse a flat file with system:name:version per line.
+        Supports both local files and URLs.
 
         Example:
             maven:org.springframework.boot:spring-boot-starter-web:3.1.0
@@ -324,40 +360,40 @@ class FileParser:
             pypi:requests:2.28.1
         """
         packages = []
+        content = _read_content(file_path)
 
-        with open(file_path, 'r') as f:
-            for line_num, line in enumerate(f, 1):
-                line = line.strip()
+        for line_num, line in enumerate(content.splitlines(), 1):
+            line = line.strip()
 
-                # Skip empty lines and comments
-                if not line or line.startswith('#'):
-                    continue
+            # Skip empty lines and comments
+            if not line or line.startswith('#'):
+                continue
 
-                # Parse system:name:version format
-                parts = line.split(':')
-                if len(parts) < 3:
-                    logger.warning(f"Line {line_num}: Invalid format '{line}' - expected system:name:version")
-                    continue
+            # Parse system:name:version format
+            parts = line.split(':')
+            if len(parts) < 3:
+                logger.warning(f"Line {line_num}: Invalid format '{line}' - expected system:name:version")
+                continue
 
-                system = parts[0]
-                # Handle maven groupId:artifactId format
-                if system.lower() == 'maven' and len(parts) >= 4:
-                    name = f"{parts[1]}:{parts[2]}"
-                    version = parts[3]
-                else:
-                    name = parts[1]
-                    version = ':'.join(parts[2:])  # Handle versions with colons
+            system = parts[0]
+            # Handle maven groupId:artifactId format
+            if system.lower() == 'maven' and len(parts) >= 4:
+                name = f"{parts[1]}:{parts[2]}"
+                version = parts[3]
+            else:
+                name = parts[1]
+                version = ':'.join(parts[2:])  # Handle versions with colons
 
-                packages.append(_create_package_with_metadata(system=system, name=name, version=version))
+            packages.append(_create_package_with_metadata(system=system, name=name, version=version))
 
         logger.info(f"Parsed {len(packages)} packages from flat file")
         return packages
 
     @staticmethod
     def parse_sbom_file(file_path: str) -> List[Package]:
-        """Parse a CycloneDX SBOM JSON file."""
-        with open(file_path, 'r') as f:
-            sbom = json.load(f)
+        """Parse a CycloneDX SBOM JSON file. Supports both local files and URLs."""
+        content = _read_content(file_path)
+        sbom = json.loads(content)
 
         packages = []
         components = sbom.get('components', [])
