@@ -1033,19 +1033,13 @@
 
             const container = document.getElementById('columnsContainer');
 
-            // Temporarily remove transform to measure natural size
-            const savedTransform = container.style.transform;
-            container.style.transform = '';
-            const naturalWidth = container.scrollWidth;
-
             // Apply zoom using transform scale
             container.style.transform = `scale(${currentZoom})`;
             container.style.transformOrigin = 'top left';
 
-            // Set container width to accommodate scaled content
-            // When zoomed out (e.g., 0.5), content appears smaller, so we need MORE layout space
-            // Don't set height - let it be natural to avoid vertical shifting
-            container.style.width = `${naturalWidth / currentZoom}px`;
+            // Don't set width/height - let it scale naturally
+            // The parent will handle scrollbars
+            container.style.width = '';
 
             // Redraw connectors with new zoom
             drawConnectors();
