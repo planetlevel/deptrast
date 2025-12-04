@@ -3005,9 +3005,8 @@
 
             // Build complete tree level by level using BFS
             // NOTE: Nodes CAN appear in multiple columns (different path lengths to same node)
-            // But we detect cycles by tracking all nodes seen so far from the root
+            // We rely on maxDepth to prevent runaway expansion (SBOMs shouldn't have cycles)
             let currentLevel = new Set([currentPurl]);
-            const seenFromRoot = new Set([currentPurl]); // Prevent cycles: don't revisit nodes we've already expanded
             let depth = 1;
             const maxDepth = 20; // Safety limit
 
@@ -3021,14 +3020,10 @@
                     const filteredDeps = filterNodesByScope(deps);
 
                     filteredDeps.forEach(dep => {
-                        // Always add to this level's column (allows duplicates across levels)
+                        // Add to this level's column (allows duplicates across levels)
                         nodesForThisLevel.add(dep);
-
-                        // Only traverse into nodes we haven't expanded yet (prevents cycles)
-                        if (!seenFromRoot.has(dep)) {
-                            seenFromRoot.add(dep);
-                            nextLevel.add(dep);
-                        }
+                        // Add to next level for traversal (will be expanded in next iteration)
+                        nextLevel.add(dep);
                     });
                 });
 
