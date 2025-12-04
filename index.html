@@ -3112,6 +3112,9 @@
         function collapseToRoot() {
             if (columns.length <= 1) return; // Already at root
 
+            // Remember the originally selected node (first item in selectedPath)
+            const originalSelectedPurl = selectedPath.length > 0 ? selectedPath[0] : null;
+
             // Clear expanded view flag
             isExpandedView = false;
 
@@ -3124,11 +3127,22 @@
             // Clear selected path
             selectedPath = [];
 
-            // Focus on middle item in first column
+            // Focus on the originally selected item, or middle item if none
             const firstColumn = columns[0];
             const nodes = firstColumn.element.querySelectorAll('.node-item');
-            const middleIndex = Math.floor(nodes.length / 2);
-            setKeyboardFocus(0, middleIndex);
+
+            let focusIndex = Math.floor(nodes.length / 2); // Default to middle
+
+            if (originalSelectedPurl) {
+                // Find the original node in the first column
+                nodes.forEach((node, idx) => {
+                    if (node.dataset.purl === originalSelectedPurl) {
+                        focusIndex = idx;
+                    }
+                });
+            }
+
+            setKeyboardFocus(0, focusIndex);
 
             updateSelectionUI();
             drawConnectors();
