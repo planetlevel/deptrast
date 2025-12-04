@@ -901,31 +901,38 @@
             return div.innerHTML;
         }
 
-        // Export view as PNG using html2canvas-like approach
-        function exportViewAsPNG() {
-            const container = document.getElementById('columnsContainer');
+        // Export view as PNG - simple screenshot approach
+        async function exportViewAsPNG() {
+            try {
+                const container = document.getElementById('columnsContainer');
 
-            // Save current zoom level and CSS zoom
-            const savedZoom = currentZoom;
-            const savedCSSZoom = container.style.zoom;
+                // Save current zoom level and CSS zoom
+                const savedZoom = currentZoom;
+                const savedCSSZoom = container.style.zoom;
+                const savedScrollLeft = container.scrollLeft;
+                const savedScrollTop = container.scrollTop;
 
-            // Reset zoom to 1.0 for accurate measurement
-            currentZoom = 1.0;
-            container.style.zoom = '';
+                // Reset zoom to 1.0 and scroll to origin for full capture
+                currentZoom = 1.0;
+                container.style.zoom = '';
+                container.scrollLeft = 0;
+                container.scrollTop = 0;
 
-            // Redraw connectors at 1:1 scale
-            drawConnectors();
+                // Redraw connectors at 1:1 scale
+                drawConnectors();
 
-            // Wait for layout to settle
-            setTimeout(() => {
-                // Get actual unscaled dimensions by measuring columns directly
+                // Wait for layout to settle
+                await new Promise(resolve => setTimeout(resolve, 200));
+
+                // Calculate full content dimensions
                 let maxWidth = 0;
                 let maxHeight = 0;
 
                 columns.forEach(col => {
                     const rect = col.element.getBoundingClientRect();
-                    const right = rect.right - container.getBoundingClientRect().left + container.scrollLeft;
-                    const bottom = rect.bottom - container.getBoundingClientRect().top + container.scrollTop;
+                    const containerRect = container.getBoundingClientRect();
+                    const right = rect.right - containerRect.left;
+                    const bottom = rect.bottom - containerRect.top;
                     maxWidth = Math.max(maxWidth, right);
                     maxHeight = Math.max(maxHeight, bottom);
                 });
@@ -934,86 +941,88 @@
                 const width = Math.max(container.scrollWidth, maxWidth + 100);
                 const height = Math.max(container.scrollHeight, maxHeight + 100);
 
-                // Create SVG with foreignObject containing the HTML
-                const svgWrapper = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-                svgWrapper.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-                svgWrapper.setAttribute('width', width);
-                svgWrapper.setAttribute('height', height);
+                // Create canvas
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
 
-                const foreignObject = document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject');
-                foreignObject.setAttribute('width', width);
-                foreignObject.setAttribute('height', height);
+                // Fill white background
+                ctx.fillStyle = 'white';
+                ctx.fillRect(0, 0, width, height);
 
-                // Clone the container content
-                const clonedContainer = container.cloneNode(true);
-                clonedContainer.style.width = width + 'px';
-                clonedContainer.style.height = height + 'px';
-                clonedContainer.style.zoom = '';
-                clonedContainer.style.overflow = 'visible';
+                // Draw each column as an image
+                for (const col of columns) {
+                    const rect = col.element.getBoundingClientRect();
+                    const containerRect = container.getBoundingClientRect();
+                    const x = rect.left - containerRect.left;
+                    const y = rect.top - containerRect.top;
 
-                // Add styles inline
-                const styles = document.createElement('style');
-                styles.textContent = Array.from(document.styleSheets)
-                    .filter(sheet => !sheet.href || sheet.href.startsWith(window.location.origin))
-                    .map(sheet => {
-                        try {
-                            return Array.from(sheet.cssRules).map(rule => rule.cssText).join('\n');
-                        } catch (e) {
-                            return '';
+                    // Draw column background and content
+                    ctx.fillStyle = window.getComputedStyle(col.element).backgroundColor || 'white';
+                    ctx.fillRect(x, y, rect.width, rect.height);
+
+                    // Draw text content (simplified - just component names)
+                    const items = col.element.querySelectorAll('.node-item');
+                    items.forEach(item => {
+                        const itemRect = item.getBoundingClientRect();
+                        const itemX = itemRect.left - containerRect.left;
+                        const itemY = itemRect.top - containerRect.top;
+
+                        // Draw item background
+                        ctx.fillStyle = window.getComputedStyle(item).backgroundColor || '#f5f5f5';
+                        ctx.fillRect(itemX, itemY, itemRect.width, itemRect.height);
+
+                        // Draw border
+                        ctx.strokeStyle = '#e0e0e0';
+                        ctx.lineWidth = 1;
+                        ctx.strokeRect(itemX, itemY, itemRect.width, itemRect.height);
+
+                        // Draw text
+                        const nameEl = item.querySelector('.node-name');
+                        if (nameEl) {
+                            ctx.fillStyle = '#333';
+                            ctx.font = '13px "Segoe UI", sans-serif';
+                            ctx.fillText(nameEl.textContent, itemX + 50, itemY + itemRect.height / 2);
                         }
-                    })
-                    .join('\n');
+                    });
+                }
 
-                const div = document.createElement('div');
-                div.appendChild(styles);
-                div.appendChild(clonedContainer);
-
-                foreignObject.appendChild(div);
-                svgWrapper.appendChild(foreignObject);
-
-                // Serialize and convert to image
-                const svgData = new XMLSerializer().serializeToString(svgWrapper);
+                // Draw SVG arrows
+                const svg = document.getElementById('connectorsCanvas');
+                const svgData = new XMLSerializer().serializeToString(svg);
                 const svgBlob = new Blob([svgData], {type: 'image/svg+xml;charset=utf-8'});
                 const url = URL.createObjectURL(svgBlob);
 
                 const img = new Image();
-                img.onload = function() {
-                    const canvas = document.createElement('canvas');
-                    canvas.width = width;
-                    canvas.height = height;
-                    const ctx = canvas.getContext('2d');
+                await new Promise((resolve, reject) => {
+                    img.onload = resolve;
+                    img.onerror = reject;
+                    img.src = url;
+                });
 
-                    ctx.fillStyle = 'white';
-                    ctx.fillRect(0, 0, width, height);
-                    ctx.drawImage(img, 0, 0);
+                ctx.drawImage(img, 0, 0);
+                URL.revokeObjectURL(url);
 
-                    URL.revokeObjectURL(url);
+                // Restore zoom and scroll
+                currentZoom = savedZoom;
+                container.style.zoom = savedCSSZoom;
+                container.scrollLeft = savedScrollLeft;
+                container.scrollTop = savedScrollTop;
+                drawConnectors();
 
-                    // Restore zoom
-                    currentZoom = savedZoom;
-                    container.style.zoom = savedCSSZoom;
+                // Download
+                canvas.toBlob(function(blob) {
+                    const link = document.createElement('a');
+                    link.download = `sbom-view-${currentFileName || 'export'}-${Date.now()}.png`;
+                    link.href = URL.createObjectURL(blob);
+                    link.click();
+                });
 
-                    // Redraw connectors at restored zoom
-                    drawConnectors();
-
-                    canvas.toBlob(function(blob) {
-                        const link = document.createElement('a');
-                        link.download = `sbom-view-${currentFileName || 'export'}-${Date.now()}.png`;
-                        link.href = URL.createObjectURL(blob);
-                        link.click();
-                    });
-                };
-
-                img.onerror = function() {
-                    // Restore zoom even on error
-                    currentZoom = savedZoom;
-                    container.style.zoom = savedCSSZoom;
-                    drawConnectors();
-                    alert('Export failed. This may be due to browser security restrictions.');
-                };
-
-                img.src = url;
-            }, 100);
+            } catch (error) {
+                console.error('Export failed:', error);
+                alert('Export failed: ' + error.message);
+            }
         }
 
         // Zoom controls - scale the entire view area
