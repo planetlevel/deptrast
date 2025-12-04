@@ -1451,6 +1451,15 @@
                 });
             }
 
+            // Sort roots alphabetically by component name (artifact name)
+            roots.sort((a, b) => {
+                const compA = componentMap.get(a);
+                const compB = componentMap.get(b);
+                const nameA = (compA?.name || a).toLowerCase();
+                const nameB = (compB?.name || b).toLowerCase();
+                return nameA.localeCompare(nameB);
+            });
+
             return roots;
         }
 
