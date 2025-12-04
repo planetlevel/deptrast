@@ -1696,6 +1696,24 @@
                 return;
             }
 
+            // Debug: Show what we're looking for vs what's in the map
+            console.log('  🔍 Looking for these PURLs:');
+            purls.forEach((purl, idx) => {
+                console.log(`    [${idx}] ${purl}`);
+                console.log(`        Found in map: ${componentMap.has(purl)}`);
+            });
+
+            console.log('  📚 Sample PURLs from componentMap (first 5):');
+            let count = 0;
+            for (const [purl] of componentMap) {
+                if (count < 5) {
+                    console.log(`    ${purl}`);
+                    count++;
+                } else {
+                    break;
+                }
+            }
+
             // Validate all purls exist in the component map
             const validPurls = purls.filter(purl => componentMap.has(purl));
             console.log('  ✅ Valid purls:', validPurls.length, 'of', purls.length);
