@@ -924,22 +924,31 @@
                 // Wait for layout to settle
                 await new Promise(resolve => setTimeout(resolve, 200));
 
-                // Calculate full content dimensions
-                let maxWidth = 0;
-                let maxHeight = 0;
+                // Calculate full content dimensions including all columns
+                // Need to find the absolute top/bottom/left/right of all nodes
+                let minY = Infinity;
+                let maxY = -Infinity;
+                let maxX = -Infinity;
 
                 columns.forEach(col => {
-                    const rect = col.element.getBoundingClientRect();
-                    const containerRect = container.getBoundingClientRect();
-                    const right = rect.right - containerRect.left;
-                    const bottom = rect.bottom - containerRect.top;
-                    maxWidth = Math.max(maxWidth, right);
-                    maxHeight = Math.max(maxHeight, bottom);
+                    const items = col.element.querySelectorAll('.node-item');
+                    items.forEach(item => {
+                        const rect = item.getBoundingClientRect();
+                        const containerRect = container.getBoundingClientRect();
+                        const itemTop = rect.top - containerRect.top;
+                        const itemBottom = rect.bottom - containerRect.top;
+                        const itemRight = rect.right - containerRect.left;
+
+                        minY = Math.min(minY, itemTop);
+                        maxY = Math.max(maxY, itemBottom);
+                        maxX = Math.max(maxX, itemRight);
+                    });
                 });
 
-                // Add padding
-                const width = Math.max(container.scrollWidth, maxWidth + 100);
-                const height = Math.max(container.scrollHeight, maxHeight + 100);
+                // Add padding and ensure we capture from top
+                const offsetY = Math.max(0, minY - 50); // Start above the topmost item
+                const width = maxX + 100;
+                const height = maxY - minY + 100;
 
                 // Create canvas
                 const canvas = document.createElement('canvas');
@@ -956,7 +965,7 @@
                     const rect = col.element.getBoundingClientRect();
                     const containerRect = container.getBoundingClientRect();
                     const x = rect.left - containerRect.left;
-                    const y = rect.top - containerRect.top;
+                    const y = rect.top - containerRect.top - minY + 50; // Offset to start from top of canvas
 
                     // Draw column background and content
                     const colBg = window.getComputedStyle(col.element).backgroundColor || 'white';
@@ -973,7 +982,7 @@
                     items.forEach(item => {
                         const itemRect = item.getBoundingClientRect();
                         const itemX = itemRect.left - containerRect.left;
-                        const itemY = itemRect.top - containerRect.top;
+                        const itemY = itemRect.top - containerRect.top - minY + 50; // Offset to start from top of canvas
 
                         // Determine background color based on scope classes
                         let itemBg = '#ffffff';
@@ -1046,7 +1055,17 @@
                     const match = d.match(/M ([\d.]+) ([\d.]+) C ([\d.]+) ([\d.]+), ([\d.]+) ([\d.]+), ([\d.]+) ([\d.]+)/);
                     if (!match) return;
 
-                    const [, x1, y1, cx1, cy1, cx2, cy2, x2, y2] = match.map(Number);
+                    // Apply Y offset to all coordinates to match node positioning
+                    const yOffset = -minY + 50;
+                    const [, x1Raw, y1Raw, cx1Raw, cy1Raw, cx2Raw, cy2Raw, x2Raw, y2Raw] = match.map(Number);
+                    const x1 = x1Raw;
+                    const y1 = y1Raw + yOffset;
+                    const cx1 = cx1Raw;
+                    const cy1 = cy1Raw + yOffset;
+                    const cx2 = cx2Raw;
+                    const cy2 = cy2Raw + yOffset;
+                    const x2 = x2Raw;
+                    const y2 = y2Raw + yOffset;
 
                     // Draw the curve
                     ctx.strokeStyle = '#0078d4';
