@@ -770,7 +770,14 @@
                     <div style="text-align: center;">
                         <button onclick="document.getElementById('fileInput').click()" style="background: #0078d4; color: white; border: none; padding: 12px 24px; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500; margin-bottom: 15px;">Choose SBOM File</button>
                     </div>
-                    <p style="font-size: 13px; color: #999; text-align: center;">or drag and drop a .json file here</p>
+                    <p style="font-size: 13px; color: #999; text-align: center; margin-bottom: 20px;">or drag and drop a .json file here</p>
+                    <div style="max-width: 500px; margin: 0 auto;">
+                        <div style="display: flex; gap: 8px; align-items: center; padding: 8px; background: white; border: 1px solid #ddd; border-radius: 4px;">
+                            <input type="text" id="urlInput" placeholder="Or paste SBOM URL here (https://...)" style="flex: 1; border: none; outline: none; padding: 8px; font-size: 14px;">
+                            <button onclick="loadFromUrl()" id="urlLoadButton" style="background: #0078d4; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 14px; white-space: nowrap;">Load URL</button>
+                        </div>
+                        <div id="urlError" style="color: #d13438; font-size: 12px; margin-top: 5px; text-align: center;"></div>
+                    </div>
                     <div id="recentFiles" style="margin-top: 30px; text-align: left; max-width: 400px; margin-left: auto; margin-right: auto;"></div>
                 </div>
             </div>
@@ -1180,6 +1187,72 @@
                     }
                 };
                 reader.readAsText(file);
+            }
+        });
+
+        // URL loading function
+        async function loadFromUrl() {
+            const urlInput = document.getElementById('urlInput');
+            const loadButton = document.getElementById('urlLoadButton');
+            const errorDiv = document.getElementById('urlError');
+            const url = urlInput.value.trim();
+
+            // Clear previous errors
+            errorDiv.textContent = '';
+
+            if (!url) {
+                errorDiv.textContent = 'Please enter a URL';
+                return;
+            }
+
+            // Validate URL format
+            try {
+                new URL(url);
+            } catch (e) {
+                errorDiv.textContent = 'Invalid URL format';
+                return;
+            }
+
+            // Disable button and show loading
+            loadButton.disabled = true;
+            loadButton.textContent = 'Loading...';
+
+            try {
+                const response = await fetch(url);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const json = await response.json();
+
+                // Validate it's a CycloneDX SBOM
+                if (!json.bomFormat || !json.components) {
+                    throw new Error('Invalid SBOM format - missing required fields');
+                }
+
+                // Extract filename from URL
+                currentFileName = url.split('/').pop() || 'sbom.json';
+
+                // Load the SBOM
+                loadSBOM(json);
+                saveRecentFile(currentFileName, json);
+
+                // Clear the URL input on success
+                urlInput.value = '';
+
+            } catch (error) {
+                errorDiv.textContent = `Failed to load SBOM: ${error.message}`;
+            } finally {
+                loadButton.disabled = false;
+                loadButton.textContent = 'Load URL';
+            }
+        }
+
+        // Allow Enter key to trigger load
+        document.getElementById('urlInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                loadFromUrl();
             }
         });
 

@@ -592,7 +592,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
 def visualize_sbom(sbom_path, output_html=None, open_browser=True):
     """
-    Generate an interactive HTML visualization of an SBOM file.
+    Generate an interactive HTML visualization of an SBOM file using index.html.
 
     Args:
         sbom_path: Path to the CycloneDX SBOM JSON file
@@ -611,11 +611,40 @@ def visualize_sbom(sbom_path, output_html=None, open_browser=True):
     with open(sbom_path, 'r') as f:
         sbom_data = json.load(f)
 
-    # Generate HTML with embedded SBOM data
-    html_content = HTML_TEMPLATE.format(
-        filename=sbom_path.name,
-        sbom_json=json.dumps(sbom_data)
-    )
+    # Find index.html in the repo root (relative to this file)
+    # This file is at: python/deptrast/commands/graph.py
+    # index.html is at: index.html (repo root)
+    index_html_path = Path(__file__).parent.parent.parent.parent / 'index.html'
+
+    if not index_html_path.exists():
+        # Fallback: use old embedded template
+        html_content = HTML_TEMPLATE.format(
+            filename=sbom_path.name,
+            sbom_json=json.dumps(sbom_data)
+        )
+    else:
+        # Use the new index.html viewer with preloaded data
+        with open(index_html_path, 'r') as f:
+            index_content = f.read()
+
+        # Inject SBOM data by adding a script before </body> that preloads the data
+        preload_script = f'''
+    <script>
+        // Preload SBOM data
+        (function() {{
+            const sbomData = {json.dumps(sbom_data)};
+            const fileName = '{sbom_path.name}';
+
+            // Wait for page to load, then load the SBOM
+            window.addEventListener('load', function() {{
+                currentFileName = fileName;
+                loadSBOM(sbomData);
+                saveRecentFile(fileName, sbomData);
+            }});
+        }})();
+    </script>
+'''
+        html_content = index_content.replace('</body>', preload_script + '</body>')
 
     # Write to output file
     if output_html is None:
