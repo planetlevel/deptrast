@@ -903,23 +903,40 @@
         function exportViewAsPNG() {
             const container = document.getElementById('columnsContainer');
 
-            // Save current transform and remove it temporarily for cleaner export
+            // Save current transform and zoom level
             const savedTransform = container.style.transform;
             const savedTransformOrigin = container.style.transformOrigin;
             const savedWidth = container.style.width;
             const savedHeight = container.style.height;
+            const savedZoom = currentZoom;
 
+            // Reset zoom to 1.0 for accurate measurement
+            currentZoom = 1.0;
             container.style.transform = '';
             container.style.transformOrigin = '';
             container.style.width = '';
             container.style.height = '';
 
+            // Redraw connectors at 1:1 scale
+            drawConnectors();
+
             // Wait for layout to settle
             setTimeout(() => {
-                // Use foreignObject to render HTML in SVG
-                const containerRect = container.getBoundingClientRect();
-                const width = container.scrollWidth;
-                const height = container.scrollHeight;
+                // Get actual unscaled dimensions by measuring columns directly
+                let maxWidth = 0;
+                let maxHeight = 0;
+
+                columns.forEach(col => {
+                    const rect = col.element.getBoundingClientRect();
+                    const right = rect.right - container.getBoundingClientRect().left + container.scrollLeft;
+                    const bottom = rect.bottom - container.getBoundingClientRect().top + container.scrollTop;
+                    maxWidth = Math.max(maxWidth, right);
+                    maxHeight = Math.max(maxHeight, bottom);
+                });
+
+                // Add padding
+                const width = Math.max(container.scrollWidth, maxWidth + 100);
+                const height = Math.max(container.scrollHeight, maxHeight + 100);
 
                 // Create SVG with foreignObject containing the HTML
                 const svgWrapper = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -976,11 +993,15 @@
 
                     URL.revokeObjectURL(url);
 
-                    // Restore transform
+                    // Restore transform and zoom
+                    currentZoom = savedZoom;
                     container.style.transform = savedTransform;
                     container.style.transformOrigin = savedTransformOrigin;
                     container.style.width = savedWidth;
                     container.style.height = savedHeight;
+
+                    // Redraw connectors at restored zoom
+                    drawConnectors();
 
                     canvas.toBlob(function(blob) {
                         const link = document.createElement('a');
@@ -991,11 +1012,13 @@
                 };
 
                 img.onerror = function() {
-                    // Restore transform even on error
+                    // Restore transform and zoom even on error
+                    currentZoom = savedZoom;
                     container.style.transform = savedTransform;
                     container.style.transformOrigin = savedTransformOrigin;
                     container.style.width = savedWidth;
                     container.style.height = savedHeight;
+                    drawConnectors();
                     alert('Export failed. This may be due to browser security restrictions.');
                 };
 
