@@ -1167,8 +1167,29 @@
             }
         }
 
+        // Check for URL parameter and auto-load SBOM
+        function checkUrlParameter() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const sbomUrl = urlParams.get('url');
+
+            if (sbomUrl) {
+                // Populate the URL input field
+                const urlInput = document.getElementById('urlInput');
+                if (urlInput) {
+                    urlInput.value = sbomUrl;
+                }
+
+                // Auto-load the SBOM
+                console.log('Auto-loading SBOM from URL parameter:', sbomUrl);
+                loadFromUrl();
+            }
+        }
+
         // Display recent files on page load
-        window.addEventListener('load', displayRecentFiles);
+        window.addEventListener('load', function() {
+            displayRecentFiles();
+            checkUrlParameter();
+        });
 
         // No auto-open file picker - wait for user action
 
