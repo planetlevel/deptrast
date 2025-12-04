@@ -2,16 +2,11 @@
 
 [![Java CI with Maven](https://github.com/planetlevel/deptrast/actions/workflows/build.yml/badge.svg)](https://github.com/planetlevel/deptrast/actions/workflows/build.yml)
 
-**The ultimate dependency tree converter, enhancer, and streamliner**
+**The ultimate SBOM swiss army knife**
 
-Deptrast will take whatever dependency information you have, from just about any source, and make a detailed and accurate SBOM without having to rely on getting a build system to actually work!  Live your life. Deptrast also includes a number of utilties for comparing, visualizing, analyzing, and validating SBOMS.
+1) SBOM Command Line Utility -- Deptrast will take whatever dependency information you have, from just about any source, and make a detailed and accurate SBOM without having to rely on getting a build system to actually work!  Live your life. Deptrast also includes a number of utilties for comparing, visualizing, analyzing, and validating SBOMS.
 
-## 🌐 Free SBOM Explorer
-
-**Try it now - no installation required!**
-**[Launch Interactive SBOM Viewer](https://planetlevel.github.io/deptrast/index.html)**
-
-Load any CycloneDX SBOM and explore your dependency tree with our free interactive visualization tool. Works entirely in your browser - your data never leaves your machine!
+2) SBOM Explorer -- Load any CycloneDX SBOM and explore your dependency tree with our free interactive visualization tool. Works entirely in your browser - your data never leaves your machine!  Try it now - no installation required!  **[Launch Interactive SBOM Viewer](https://planetlevel.github.io/deptrast/index.html)**
 
 ![Interactive SBOM Visualization](deptrast-sbom.png)
 
