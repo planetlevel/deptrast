@@ -1320,9 +1320,10 @@
 
             } catch (error) {
                 console.error('Failed to load SBOM:', error);
+                console.error('Error stack:', error.stack);
                 let errorMsg = error.message;
                 if (error.message.includes('Failed to fetch')) {
-                    errorMsg = 'Failed to fetch - check URL and CORS settings';
+                    errorMsg = `Failed to fetch from ${url}. Check URL, CORS settings, or network connection.`;
                 }
                 errorDiv.textContent = `Failed to load SBOM: ${errorMsg}`;
             } finally {
