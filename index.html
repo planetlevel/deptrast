@@ -3732,18 +3732,18 @@
         // Expand entire tree from currently keyboard-focused node
         function expandEntireTreeFromCurrent() {
             // Always use the keyboard-focused node (outlined), not the selected path
-            let currentPurl = null;
+            let currentBomRef = null;
             let currentColumnIndex = -1;
 
             if (focusedNodeElement) {
-                currentPurl = focusedNodeElement.dataset.purl;
+                currentBomRef = focusedNodeElement.dataset.purl; // dataset still uses 'purl' attribute name
                 currentColumnIndex = parseInt(focusedNodeElement.dataset.columnIndex);
                 // Update selected path to match keyboard focus
                 selectedPath = selectedPath.slice(0, currentColumnIndex);
-                selectedPath.push(currentPurl);
+                selectedPath.push(currentBomRef);
             }
 
-            if (!currentPurl) return;
+            if (!currentBomRef) return;
 
             // Remove any columns after the current selection
             while (columns.length > currentColumnIndex + 1) {
@@ -3758,9 +3758,9 @@
             isExpandedView = true;
 
             // Build complete tree level by level using BFS
-            // NOTE: Nodes CAN appear in multiple columns (different path lengths to same node)
-            // We rely on maxDepth to prevent runaway expansion (SBOMs shouldn't have cycles)
-            let currentLevel = new Set([currentPurl]);
+            // Track visited nodes to prevent infinite loops from cycles
+            let currentLevel = new Set([currentBomRef]);
+            const visited = new Set([currentBomRef]);
             let depth = 1;
             const maxDepth = 20; // Safety limit
 
@@ -3769,15 +3769,19 @@
                 const nodesForThisLevel = new Set();
 
                 // Collect all children for current level
-                currentLevel.forEach(purl => {
-                    const deps = dependencyMap.get(purl) || [];
+                currentLevel.forEach(bomRef => {
+                    const deps = dependencyMap.get(bomRef) || [];
                     const filteredDeps = filterNodesByScope(deps);
 
                     filteredDeps.forEach(dep => {
-                        // Add to this level's column (allows duplicates across levels)
+                        // Always add to this level's column (to show cycles)
                         nodesForThisLevel.add(dep);
-                        // Add to next level for traversal (will be expanded in next iteration)
-                        nextLevel.add(dep);
+
+                        // Only traverse further if not yet visited (prevents infinite loops from cycles)
+                        if (!visited.has(dep)) {
+                            visited.add(dep);
+                            nextLevel.add(dep);
+                        }
                     });
                 });
 
@@ -3826,15 +3830,18 @@
                 const nodesForThisLevel = new Set();
 
                 // Collect all children for current level
-                currentLevel.forEach(purl => {
-                    const deps = dependencyMap.get(purl) || [];
+                currentLevel.forEach(bomRef => {
+                    const deps = dependencyMap.get(bomRef) || [];
                     const filteredDeps = filterNodesByScope(deps);
 
                     filteredDeps.forEach(dep => {
+                        // Always add to this level's column (to show cycles)
+                        nodesForThisLevel.add(dep);
+
+                        // Only traverse further if not yet visited (prevents infinite loops)
                         if (!visited.has(dep)) {
                             visited.add(dep);
                             nextLevel.add(dep);
-                            nodesForThisLevel.add(dep);
                         }
                     });
                 });
