@@ -818,17 +818,23 @@
         let isExpandedView = false; // Flag to indicate we're in expanded tree view (draw all arrows)
 
         // Recent files management
-        function saveRecentFile(fileName, sbomData) {
+        function saveRecentFile(fileName, sbomData, sourceUrl = null) {
             const recentFiles = JSON.parse(localStorage.getItem('recentSBOMs') || '[]');
             const fileEntry = {
                 name: fileName,
                 timestamp: Date.now(),
                 componentCount: sbomData.components ? sbomData.components.length : 0,
-                metadata: sbomData.metadata
+                metadata: sbomData.metadata,
+                url: sourceUrl  // Store the URL if loaded from URL
             };
 
-            // Remove duplicate if exists
-            const filtered = recentFiles.filter(f => f.name !== fileName);
+            // Remove duplicate if exists (match by name or URL)
+            const filtered = recentFiles.filter(f => {
+                if (sourceUrl) {
+                    return f.url !== sourceUrl;
+                }
+                return f.name !== fileName;
+            });
             filtered.unshift(fileEntry);
 
             // Keep only last 5
@@ -873,17 +879,22 @@
                 return;
             }
 
-            let html = '<div style="border-top: 1px solid #e0e0e0; padding-top: 20px;"><p style="font-size: 12px; color: #999; text-transform: uppercase; font-weight: 600; margin-bottom: 10px;">Recent Files</p>';
+            let html = '<div style="border-top: 1px solid #e0e0e0; padding-top: 20px;"><p style="font-size: 12px; color: #999; text-transform: uppercase; font-weight: 600; margin-bottom: 10px;">Recent SBOMs</p>';
 
             recentFiles.forEach(file => {
                 const date = new Date(file.timestamp);
                 const timeAgo = getTimeAgo(date);
+                const displayName = file.url ? `🌐 ${file.name}` : `📄 ${file.name}`;
+                const subtitle = file.url
+                    ? `${file.componentCount} components • ${timeAgo} • from URL`
+                    : `${file.componentCount} components • ${timeAgo}`;
+
                 html += `<div style="padding: 8px 12px; border: 1px solid #e0e0e0; border-radius: 4px; margin-bottom: 8px; cursor: pointer;"
                          onmouseover="this.style.background='#f5f5f5'"
                          onmouseout="this.style.background='white'"
                          onclick="loadRecentFile('${escapeHtml(file.name)}')">
-                    <div style="font-size: 13px; font-weight: 500; color: #333;">${escapeHtml(file.name)}</div>
-                    <div style="font-size: 11px; color: #999; margin-top: 2px;">${file.componentCount} components • ${timeAgo}</div>
+                    <div style="font-size: 13px; font-weight: 500; color: #333;">${displayName}</div>
+                    <div style="font-size: 11px; color: #999; margin-top: 2px;">${subtitle}</div>
                 </div>`;
             });
 
@@ -1247,13 +1258,21 @@
             loadButton.textContent = 'Loading...';
 
             try {
+                console.log('Fetching SBOM from:', url);
                 const response = await fetch(url);
 
                 if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
 
-                const json = await response.json();
+                const text = await response.text();
+
+                // Check if this is a Git LFS pointer file
+                if (text.startsWith('version https://git-lfs.github.com')) {
+                    throw new Error('This file is stored in Git LFS. Please use the actual file URL or download it first.');
+                }
+
+                const json = JSON.parse(text);
 
                 // Validate it's a CycloneDX SBOM
                 if (!json.bomFormat || !json.components) {
@@ -1265,13 +1284,18 @@
 
                 // Load the SBOM
                 loadSBOM(json);
-                saveRecentFile(currentFileName, json);
+                saveRecentFile(currentFileName, json, url);  // Pass URL as third parameter
 
                 // Clear the URL input on success
                 urlInput.value = '';
 
             } catch (error) {
-                errorDiv.textContent = `Failed to load SBOM: ${error.message}`;
+                console.error('Failed to load SBOM:', error);
+                let errorMsg = error.message;
+                if (error.message.includes('Failed to fetch')) {
+                    errorMsg = 'Failed to fetch - check URL and CORS settings';
+                }
+                errorDiv.textContent = `Failed to load SBOM: ${errorMsg}`;
             } finally {
                 loadButton.disabled = false;
                 loadButton.textContent = 'Load URL';
