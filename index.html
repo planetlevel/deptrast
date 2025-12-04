@@ -959,50 +959,140 @@
                     const y = rect.top - containerRect.top;
 
                     // Draw column background and content
-                    ctx.fillStyle = window.getComputedStyle(col.element).backgroundColor || 'white';
+                    const colBg = window.getComputedStyle(col.element).backgroundColor || 'white';
+                    ctx.fillStyle = colBg;
                     ctx.fillRect(x, y, rect.width, rect.height);
 
-                    // Draw text content (simplified - just component names)
+                    // Draw column border
+                    ctx.strokeStyle = '#e0e0e0';
+                    ctx.lineWidth = 1;
+                    ctx.strokeRect(x, y, rect.width, rect.height);
+
+                    // Draw text content with full styling
                     const items = col.element.querySelectorAll('.node-item');
                     items.forEach(item => {
                         const itemRect = item.getBoundingClientRect();
                         const itemX = itemRect.left - containerRect.left;
                         const itemY = itemRect.top - containerRect.top;
 
-                        // Draw item background
-                        ctx.fillStyle = window.getComputedStyle(item).backgroundColor || '#f5f5f5';
-                        ctx.fillRect(itemX, itemY, itemRect.width, itemRect.height);
+                        // Determine background color based on scope classes
+                        let itemBg = '#ffffff';
+                        if (item.classList.contains('scope-optional')) {
+                            itemBg = '#fff9e6';
+                        } else if (item.classList.contains('scope-excluded')) {
+                            itemBg = '#ffe6e6';
+                        } else if (item.classList.contains('selected')) {
+                            itemBg = '#e3f2fd';
+                        }
+
+                        // Draw item background with rounded corners
+                        ctx.fillStyle = itemBg;
+                        const radius = 6;
+                        ctx.beginPath();
+                        ctx.roundRect(itemX, itemY, itemRect.width, itemRect.height, radius);
+                        ctx.fill();
 
                         // Draw border
                         ctx.strokeStyle = '#e0e0e0';
                         ctx.lineWidth = 1;
-                        ctx.strokeRect(itemX, itemY, itemRect.width, itemRect.height);
+                        ctx.stroke();
 
-                        // Draw text
+                        // Draw shadow
+                        ctx.shadowColor = 'rgba(0, 0, 0, 0.08)';
+                        ctx.shadowBlur = 3;
+                        ctx.shadowOffsetY = 1;
+                        ctx.fill();
+                        ctx.shadowColor = 'transparent';
+
+                        // Draw icon
+                        const iconEl = item.querySelector('.node-type-icon');
+                        if (iconEl) {
+                            ctx.fillStyle = '#666';
+                            ctx.font = 'bold 24px monospace';
+                            ctx.fillText(iconEl.textContent, itemX + 12, itemY + itemRect.height / 2 + 8);
+                        }
+
+                        // Draw group text (small gray text)
+                        const groupEl = item.querySelector('.node-group');
+                        if (groupEl) {
+                            ctx.fillStyle = '#666';
+                            ctx.font = '11px "Segoe UI", sans-serif';
+                            ctx.fillText(groupEl.textContent, itemX + 50, itemY + 20);
+                        }
+
+                        // Draw name text (bold)
                         const nameEl = item.querySelector('.node-name');
                         if (nameEl) {
                             ctx.fillStyle = '#333';
-                            ctx.font = '13px "Segoe UI", sans-serif';
-                            ctx.fillText(nameEl.textContent, itemX + 50, itemY + itemRect.height / 2);
+                            ctx.font = '600 13px "Segoe UI", sans-serif';
+                            const nameText = nameEl.textContent.replace(/\s+/g, ' ');
+                            ctx.fillText(nameText, itemX + 50, itemY + 38);
+                        }
+
+                        // Draw metadata (dependency count)
+                        const metaEl = item.querySelector('.node-meta');
+                        if (metaEl) {
+                            const countEl = metaEl.querySelector('.node-count');
+                            if (countEl) {
+                                ctx.fillStyle = '#666';
+                                ctx.font = '10px "Segoe UI", sans-serif';
+                                ctx.fillText(countEl.textContent, itemX + itemRect.width - 40, itemY + itemRect.height / 2);
+                            }
                         }
                     });
                 }
 
-                // Draw SVG arrows
+                // Draw arrows manually instead of using SVG
+                // Get all connector paths from SVG
                 const svg = document.getElementById('connectorsCanvas');
-                const svgData = new XMLSerializer().serializeToString(svg);
-                const svgBlob = new Blob([svgData], {type: 'image/svg+xml;charset=utf-8'});
-                const url = URL.createObjectURL(svgBlob);
+                const paths = svg.querySelectorAll('.connector-line');
 
-                const img = new Image();
-                await new Promise((resolve, reject) => {
-                    img.onload = resolve;
-                    img.onerror = reject;
-                    img.src = url;
+                paths.forEach(path => {
+                    const d = path.getAttribute('d');
+                    if (!d) return;
+
+                    // Parse the path data (cubic bezier curve)
+                    const match = d.match(/M ([\d.]+) ([\d.]+) C ([\d.]+) ([\d.]+), ([\d.]+) ([\d.]+), ([\d.]+) ([\d.]+)/);
+                    if (!match) return;
+
+                    const [, x1, y1, cx1, cy1, cx2, cy2, x2, y2] = match.map(Number);
+
+                    // Draw the curve
+                    ctx.strokeStyle = '#0078d4';
+                    ctx.lineWidth = 2.5;
+                    ctx.globalAlpha = 0.8;
+                    ctx.beginPath();
+                    ctx.moveTo(x1, y1);
+                    ctx.bezierCurveTo(cx1, cy1, cx2, cy2, x2, y2);
+                    ctx.stroke();
+
+                    // Draw arrowhead at end point
+                    // Calculate angle of arrow at end
+                    const dx = x2 - cx2;
+                    const dy = y2 - cy2;
+                    const angle = Math.atan2(dy, dx);
+
+                    // Arrowhead dimensions
+                    const arrowLength = 6;
+                    const arrowWidth = 5;
+
+                    ctx.fillStyle = '#0078d4';
+                    ctx.globalAlpha = 0.8;
+                    ctx.beginPath();
+                    ctx.moveTo(x2, y2);
+                    ctx.lineTo(
+                        x2 - arrowLength * Math.cos(angle) - arrowWidth/2 * Math.sin(angle),
+                        y2 - arrowLength * Math.sin(angle) + arrowWidth/2 * Math.cos(angle)
+                    );
+                    ctx.lineTo(
+                        x2 - arrowLength * Math.cos(angle) + arrowWidth/2 * Math.sin(angle),
+                        y2 - arrowLength * Math.sin(angle) - arrowWidth/2 * Math.cos(angle)
+                    );
+                    ctx.closePath();
+                    ctx.fill();
+
+                    ctx.globalAlpha = 1.0;
                 });
-
-                ctx.drawImage(img, 0, 0);
-                URL.revokeObjectURL(url);
 
                 // Restore zoom and scroll
                 currentZoom = savedZoom;
