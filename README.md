@@ -4,39 +4,26 @@
 
 **The ultimate dependency tree converter, enhancer, and streamliner**
 
-Deptrast will take whatever dependency information you have, from just about any source, and make it into what you need.  Make an SBOM anytime without having to rely on getting a build system to actually work!  Live your life.
+Deptrast will take whatever dependency information you have, from just about any source, and make a detailed and accurate SBOM without having to rely on getting a build system to actually work!  Live your life. Deptrast also includes a number of utilties for comparing, visualizing, analyzing, and validating SBOMS.
 
-- [x] pom.xml -> Full ASCII Tree with all transitive dependencies
-- [x] SBOM with only root dependencies and no dependency graph -> Fully awesome SBOM
-- [x] Random list of jar files -> Fully awesome SBOM
-- [x] requirements.txt -> Maven-style text output
-- [x] List of components from runtime analysis with no dependency graph -> Fully awesome SBOM
+## 🌐 Free SBOM Explorer
+
+**Try it now - no installation required!**
+**[Launch Interactive SBOM Viewer](https://planetlevel.github.io/deptrast/index.html)**
+
+Load any CycloneDX SBOM and explore your dependency tree with our free interactive visualization tool. Works entirely in your browser - your data never leaves your machine!
+
+![Interactive SBOM Visualization](deptrast-sbom.png)
+
+## Supported input sources
+
+Turn just about any set of dependencies into a full SBOM:
+- [x] Maven, Gradle, Python, etc...
+- [x] SBOM with only root dependencies and no dependency graph
+- [x] Random list of jar files
+- [x] requirements.txt
+- [x] List of components from runtime analysis
 - [x] Etc...
-
-Security folks will want to detect exactly what components are actually running in production! And there are many tools that will scan deployed systems or monitor them at runtime -- but they often just give you a flat list with no dependency tree information. That makes it difficult to fix problems. Fortunately, deptrast can unscramble runtime dependencies and organize them into something very close to the original build configuration.  And probably more accurate!
-
-![Example Dependency Tree](example.png)
-
-## Features
-
-### Input Formats
-- **Flat list** - Runtime dependency lists (system:name:version per line)
-- **Maven pom.xml** - Parse Maven project dependencies (skips test scope)
-- **Gradle** - Parse build.gradle and build.gradle.kts files
-- **Python requirements.txt** - Parse Python dependencies
-- **CycloneDX SBOM** - Parse existing SBOM files
-
-### Output Formats
-- **ASCII Tree** - Unicode tree visualization with root indicators (🔴)
-- **Maven dependency:tree** - Compatible with Maven's format
-- **CycloneDX SBOM** - Generate or enhance SBOM JSON (v1.6)
-
-### Core Capabilities
-- Constructs complete dependency graphs using the deps.dev REST API
-- Reconciles declared versions with actual runtime versions (handles Maven's dependency resolution)
-- Identifies minimal set of root dependencies using strict version matching
-- Supports multiple package ecosystems (Maven, NPM, PyPI)
-- **SBOM Enhancement** - When input and output are both SBOM, preserves original metadata and adds dependency graph
 
 ## Installation
 
@@ -54,8 +41,6 @@ mvn clean package
 alias deptrast='java -jar /path/to/deptrast-4.0.0.jar'
 ```
 
-**Requirements:** Java 11 or higher
-
 ### Python
 ```bash
 # Install from source
@@ -64,8 +49,6 @@ pip install ./python
 # Or install directly from GitHub
 pip install git+https://github.com/planetlevel/deptrast.git#subdirectory=python
 ```
-
-**Requirements:** Python 3.8 or higher
 
 ## Quick Start
 
@@ -79,10 +62,6 @@ deptrast enrich input.sbom enriched.sbom
 # Print SBOM as tree visualization
 deptrast print input.sbom --output=tree
 ```
-
-## Project Security
-
-See [SECURITY.md](SECURITY.md) for information about the project's security policy, vulnerability reporting, and best practices.
 
 ## Usage
 
@@ -159,34 +138,6 @@ pypi:requests:2.28.1
 ```
 
 Lines starting with `#` are treated as comments and ignored.
-
-#### Maven pom.xml
-Standard Maven pom.xml files. Deptrast extracts dependencies from `<dependencies>` blocks with smart handling:
-- **Scoped dependencies** - Automatically mapped to CycloneDX scopes
-- **Property variables** - Resolved from `<properties>` section (e.g., `${spring.version}`)
-- **Parent POM properties** - Recursively loads properties from parent POMs via `<relativePath>`
-- **Nested properties** - Supports properties that reference other properties
-- **Unresolvable variables** - Skipped with warning (e.g., properties from remote artifacts)
-
-#### Gradle build.gradle / build.gradle.kts
-Gradle build files in Groovy or Kotlin syntax. Supported formats:
-```gradle
-implementation 'group:artifact:version'
-implementation "group:artifact:version"
-implementation group: 'group', name: 'artifact', version: 'version'
-```
-Test dependencies (testImplementation, testCompile) are automatically skipped.
-
-#### Python requirements.txt
-Standard Python requirements files. Supports version operators:
-```
-requests==2.28.1
-flask>=2.0.0
-numpy~=1.23.0
-```
-
-#### CycloneDX SBOM
-CycloneDX SBOM JSON files (v1.6). Deptrast extracts components via purl (Package URL) parsing.
 
 ### Examples
 

@@ -131,6 +131,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             content: '•';
             font-size: 8px;
         }}
+        .expand-icon.root-leaf::before {{
+            content: '||';
+            font-size: 12px;
+        }}
         .node-name {{
             font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
             font-size: 13px;
@@ -208,6 +212,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         const sbomData = {sbom_json};
         let componentMap = new Map();
         let expandedState = new Map();
+        let rootNodeSet = new Set();
 
         function init() {{
             // Build component map
@@ -226,6 +231,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             }}
 
             const rootNodes = findRootNodes(dependencyMap);
+            // Track root nodes in a Set for quick lookup
+            rootNodes.forEach(root => rootNodeSet.add(root));
             updateStats(sbomData, rootNodes.length);
             renderTree(rootNodes, dependencyMap);
         }}
@@ -332,9 +339,16 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             content.className = 'node-content';
 
             const icon = document.createElement('span');
-            icon.className = hasChildren ?
-                (isExpanded ? 'expand-icon expandable expanded' : 'expand-icon expandable collapsed') :
-                'expand-icon leaf';
+            // Check if this is a root node with no children (root-leaf)
+            const isRootLeaf = rootNodeSet.has(purl) && !hasChildren;
+
+            if (isRootLeaf) {{
+                icon.className = 'expand-icon root-leaf';
+            }} else {{
+                icon.className = hasChildren ?
+                    (isExpanded ? 'expand-icon expandable expanded' : 'expand-icon expandable collapsed') :
+                    'expand-icon leaf';
+            }}
 
             if (hasChildren) {{
                 icon.onclick = () => toggleNode(purl);
