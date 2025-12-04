@@ -1267,9 +1267,38 @@
 
                 const text = await response.text();
 
-                // Check if this is a Git LFS pointer file
+                // Check if this is a Git LFS pointer file and redirect to LFS media URL
                 if (text.startsWith('version https://git-lfs.github.com')) {
-                    throw new Error('This file is stored in Git LFS. Please use the actual file URL or download it first.');
+                    console.log('Detected Git LFS pointer, redirecting to LFS media URL...');
+
+                    // Convert raw.githubusercontent.com URL to media.githubusercontent.com
+                    // From: https://raw.githubusercontent.com/owner/repo/branch/path/file.json
+                    // To:   https://media.githubusercontent.com/media/owner/repo/branch/path/file.json
+                    const lfsUrl = url.replace('raw.githubusercontent.com', 'media.githubusercontent.com/media');
+
+                    console.log('Fetching from LFS media URL:', lfsUrl);
+                    const lfsResponse = await fetch(lfsUrl);
+
+                    if (!lfsResponse.ok) {
+                        throw new Error(`Failed to fetch LFS content: HTTP ${lfsResponse.status}`);
+                    }
+
+                    const lfsText = await lfsResponse.text();
+                    const json = JSON.parse(lfsText);
+
+                    // Continue with LFS content
+                    if (!json.bomFormat || !json.components) {
+                        throw new Error('Invalid SBOM format - missing required fields');
+                    }
+
+                    currentFileName = url.split('/').pop() || 'sbom.json';
+                    loadSBOM(json);
+                    saveRecentFile(currentFileName, json, url);
+                    urlInput.value = '';
+
+                    loadButton.disabled = false;
+                    loadButton.textContent = 'Load URL';
+                    return;
                 }
 
                 const json = JSON.parse(text);
