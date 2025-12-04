@@ -2063,8 +2063,19 @@
                         const fromItems = fromColumn.element.querySelectorAll('.node-item');
                         const toItems = toColumn.element.querySelectorAll('.node-item');
 
+                        // Special case: if this is the first column and we have a selected path,
+                        // only draw arrows from the selected node (Shift+Right case)
+                        let fromItemsToProcess = fromItems;
+                        if (colIdx === 0 && selectedPath.length > 0 && isExpandedView) {
+                            // Only process the selected node in the first column
+                            const selectedPurl = selectedPath[0];
+                            fromItemsToProcess = Array.from(fromItems).filter(item =>
+                                item.dataset.purl === selectedPurl
+                            );
+                        }
+
                         // For each pair of nodes, check if there's a dependency relationship
-                        fromItems.forEach((fromItem) => {
+                        fromItemsToProcess.forEach((fromItem) => {
                             const fromPurl = fromItem.dataset.purl;
                             const allChildren = dependencyMap.get(fromPurl) || [];
                             const children = filterNodesByScope(allChildren);
