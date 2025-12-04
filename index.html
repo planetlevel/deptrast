@@ -3003,8 +3003,10 @@
             isExpandedView = true;
 
             // Build complete tree level by level using BFS
-            // NOTE: Nodes CAN appear in multiple columns (e.g., if A→B, A→C, B→C, then C appears in both column 1 and 2)
+            // NOTE: Nodes CAN appear in multiple columns (different path lengths to same node)
+            // But we detect cycles by tracking all nodes seen so far from the root
             let currentLevel = new Set([currentPurl]);
+            const seenFromRoot = new Set([currentPurl]); // Prevent cycles: don't revisit nodes we've already expanded
             let depth = 1;
             const maxDepth = 20; // Safety limit
 
@@ -3018,8 +3020,14 @@
                     const filteredDeps = filterNodesByScope(deps);
 
                     filteredDeps.forEach(dep => {
-                        nextLevel.add(dep);
+                        // Always add to this level's column (allows duplicates across levels)
                         nodesForThisLevel.add(dep);
+
+                        // Only traverse into nodes we haven't expanded yet (prevents cycles)
+                        if (!seenFromRoot.has(dep)) {
+                            seenFromRoot.add(dep);
+                            nextLevel.add(dep);
+                        }
                     });
                 });
 
