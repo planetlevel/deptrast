@@ -3002,9 +3002,9 @@
             // Set flag to draw all arrows
             isExpandedView = true;
 
-            // Build complete tree level by level using BFS (similar to expandAllTree)
+            // Build complete tree level by level using BFS
+            // NOTE: Nodes CAN appear in multiple columns (e.g., if A→B, A→C, B→C, then C appears in both column 1 and 2)
             let currentLevel = new Set([currentPurl]);
-            const visited = new Set([currentPurl]);
             let depth = 1;
             const maxDepth = 20; // Safety limit
 
@@ -3018,11 +3018,8 @@
                     const filteredDeps = filterNodesByScope(deps);
 
                     filteredDeps.forEach(dep => {
-                        if (!visited.has(dep)) {
-                            visited.add(dep);
-                            nextLevel.add(dep);
-                            nodesForThisLevel.add(dep);
-                        }
+                        nextLevel.add(dep);
+                        nodesForThisLevel.add(dep);
                     });
                 });
 
