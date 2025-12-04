@@ -1033,13 +1033,8 @@
 
             const container = document.getElementById('columnsContainer');
 
-            // Apply zoom using transform scale
-            container.style.transform = `scale(${currentZoom})`;
-            container.style.transformOrigin = 'top left';
-
-            // Don't set width/height - let it scale naturally
-            // The parent will handle scrollbars
-            container.style.width = '';
+            // Use CSS zoom which DOES affect layout (viewport expands/contracts)
+            container.style.zoom = currentZoom;
 
             // Redraw connectors with new zoom
             drawConnectors();
@@ -1055,9 +1050,7 @@
             currentZoom = 1.0;
 
             const container = document.getElementById('columnsContainer');
-            container.style.transform = '';
-            container.style.transformOrigin = '';
-            container.style.width = '';
+            container.style.zoom = '';
 
             // Redraw connectors at 100%
             drawConnectors();
@@ -2076,15 +2069,14 @@
             columns.forEach(col => {
                 const rect = col.element.getBoundingClientRect();
                 const containerRect = container.getBoundingClientRect();
-                // Divide by currentZoom to get unscaled dimensions
-                const right = (rect.right - containerRect.left + container.scrollLeft) / currentZoom;
-                const bottom = (rect.bottom - containerRect.top + container.scrollTop) / currentZoom;
+                // With CSS zoom, getBoundingClientRect returns unzoomed logical coordinates
+                const right = rect.right - containerRect.left + container.scrollLeft;
+                const bottom = rect.bottom - containerRect.top + container.scrollTop;
                 maxRight = Math.max(maxRight, right);
                 maxBottom = Math.max(maxBottom, bottom);
             });
 
             // Add padding to ensure arrows have room
-            // Calculate dimensions without accounting for transform (it will scale naturally)
             const baseWidth = Math.max(container.scrollWidth, maxRight + 100);
             const baseHeight = Math.max(container.scrollHeight, maxBottom + 100);
 
@@ -2139,12 +2131,12 @@
                 const fromRect = fromItem.getBoundingClientRect();
                 const toRect = toItem.getBoundingClientRect();
 
-                // getBoundingClientRect returns scaled coordinates (after transform)
-                // Divide by currentZoom to get original coordinates for SVG drawing
-                const x1 = (fromRect.right - containerRect.left + scrollLeft) / currentZoom;
-                const y1 = (fromRect.top + fromRect.height / 2 - containerRect.top + scrollTop) / currentZoom;
-                const x2 = (toRect.left - containerRect.left + scrollLeft - 6) / currentZoom;
-                const y2 = (toRect.top + toRect.height / 2 - containerRect.top + scrollTop) / currentZoom;
+                // With CSS zoom, getBoundingClientRect returns unzoomed logical coordinates
+                // Use them directly for SVG (which is also in the zoomed container)
+                const x1 = fromRect.right - containerRect.left + scrollLeft;
+                const y1 = fromRect.top + fromRect.height / 2 - containerRect.top + scrollTop;
+                const x2 = toRect.left - containerRect.left + scrollLeft - 6;
+                const y2 = toRect.top + toRect.height / 2 - containerRect.top + scrollTop;
 
                 const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
                 const midX = (x1 + x2) / 2;
