@@ -1858,11 +1858,15 @@
                     if (currentViewMode === 'app') {
                         // APP mode: navigate through dependencies
                         selectNode(purl, columnIndex);
+                        // Also move keyboard focus to the clicked item
+                        setKeyboardFocus(columnIndex, index);
                     } else {
                         // FOCUS mode: just update details panel without navigation
                         selectedPath = [purl];
                         updateSelectionUI();
                         updateComponentDetails();
+                        // Also move keyboard focus to the clicked item
+                        setKeyboardFocus(columnIndex, index);
                     }
                 });
 
