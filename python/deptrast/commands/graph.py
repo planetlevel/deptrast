@@ -89,6 +89,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             overflow: auto;
             max-height: calc(100vh - 300px);
         }}
+        .scroll-spacer {{
+            height: 50vh;
+            pointer-events: none;
+        }}
         .tree-node {{
             margin-left: 20px;
             position: relative;
@@ -293,10 +297,20 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             const container = document.getElementById('treeContainer');
             container.innerHTML = '';
 
+            // Add top spacer for scrolling
+            const topSpacer = document.createElement('div');
+            topSpacer.className = 'scroll-spacer';
+            container.appendChild(topSpacer);
+
             roots.forEach(root => {{
                 const nodeElement = renderNode(root, dependencyMap, new Set(), true);
                 container.appendChild(nodeElement);
             }});
+
+            // Add bottom spacer for scrolling
+            const bottomSpacer = document.createElement('div');
+            bottomSpacer.className = 'scroll-spacer';
+            container.appendChild(bottomSpacer);
         }}
 
         function renderNode(purl, dependencyMap, visited, isRoot = false) {{
