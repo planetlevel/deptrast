@@ -976,7 +976,12 @@
                 const sbomDataStr = localStorage.getItem(`sbom_data_${fileName}`);
                 if (sbomDataStr) {
                     const sbomData = JSON.parse(sbomDataStr);
-                    currentFileName = fileName;
+
+                    // Restore currentFileName from recent files metadata if it was loaded from URL
+                    const recentFiles = JSON.parse(localStorage.getItem('recentSBOMs') || '[]');
+                    const fileEntry = recentFiles.find(f => f.name === fileName);
+                    currentFileName = (fileEntry && fileEntry.url) ? fileEntry.url : fileName;
+
                     loadSBOM(sbomData);
                 } else {
                     alert('SBOM data not found in cache. Please reload the file.');
@@ -1267,21 +1272,32 @@
         function generateShareableUrl() {
             if (!sbomData) return null;
 
+            console.log('🔗 generateShareableUrl called');
+            console.log('  currentFileName:', currentFileName);
+            console.log('  currentViewMode:', currentViewMode);
+            console.log('  selectedPath length:', selectedPath.length);
+
             const params = new URLSearchParams();
 
             // Add SBOM URL if loaded from URL
             if (currentFileName && currentFileName.startsWith('http')) {
+                console.log('  ✅ Adding url parameter:', currentFileName);
                 params.set('url', currentFileName);
+            } else {
+                console.log('  ❌ NOT adding url parameter. currentFileName:', currentFileName);
+                console.log('     Reason:', !currentFileName ? 'currentFileName is falsy' : 'does not start with http');
             }
 
             // Add view mode and state
             if (currentViewMode === 'focus') {
                 // Focus mode: include focused component
                 if (currentSelectedComponent && currentSelectedComponent !== '__app__') {
+                    console.log('  ✅ Adding component parameter (focus mode):', currentSelectedComponent);
                     params.set('component', currentSelectedComponent);
                 }
             } else if (currentViewMode === 'app' && selectedPath.length > 0) {
                 // Explore mode: include the full navigation path
+                console.log('  ✅ Adding path parameter (explore mode):', selectedPath.length, 'items');
                 params.set('path', selectedPath.join(','));
             }
 
@@ -1291,12 +1307,15 @@
                 if (activeFilters.required) filters.push('required');
                 if (activeFilters.optional) filters.push('optional');
                 if (activeFilters.excluded) filters.push('excluded');
+                console.log('  ✅ Adding filters parameter:', filters.join(','));
                 params.set('filters', filters.join(','));
             }
 
             // Generate full URL
             const baseUrl = window.location.origin + window.location.pathname;
-            return params.toString() ? `${baseUrl}?${params.toString()}` : baseUrl;
+            const finalUrl = params.toString() ? `${baseUrl}?${params.toString()}` : baseUrl;
+            console.log('  📋 Final URL:', finalUrl);
+            return finalUrl;
         }
 
         function showShareDialog() {
