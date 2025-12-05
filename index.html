@@ -2511,28 +2511,35 @@
                 let groupText = '';
 
                 if (component && component.group && !component.group.startsWith('urn:')) {
+                    // Use component.group if present
                     groupText = component.group;
-                } else if (purl && purl.startsWith('pkg:maven/')) {
-                    // Extract group from purl: pkg:maven/GROUP/ARTIFACT@VERSION
-                    const purlMatch = purl.match(/pkg:maven\/([^\/]+)\//);
-                    if (purlMatch) {
-                        groupText = purlMatch[1];
+                } else if (purl && purl.startsWith('pkg:')) {
+                    // Extract namespace/group from PURL format: pkg:TYPE/NAMESPACE/PACKAGE@VERSION
+                    // Examples:
+                    //   pkg:maven/org.hibernate/hibernate-core@5.0.12.Final → org.hibernate
+                    //   pkg:apk/alpine/musl@1.2.4-r2 → alpine
+                    //   pkg:deb/debian/libc6@2.36-9 → debian
+                    //   pkg:npm/lodash@4.17.21 → (no namespace, leave blank)
+
+                    // Remove pkg:TYPE/ prefix
+                    const afterType = purl.substring(purl.indexOf('/') + 1);
+                    // Check if there's a second slash (indicating namespace exists)
+                    const secondSlash = afterType.indexOf('/');
+                    if (secondSlash > 0) {
+                        // Extract everything before the second slash as namespace/group
+                        groupText = afterType.substring(0, secondSlash);
                     }
+                    // Otherwise leave blank (no namespace in PURL)
                 } else if (purl && purl.startsWith('urn:cdx:')) {
                     // URN format: urn:cdx:GROUP:ARTIFACT:VERSION
-                    // Need to split by colons and extract GROUP (everything up to second-to-last colon)
                     const withoutPrefix = purl.replace('urn:cdx:', '');
                     const parts = withoutPrefix.split(':');
                     if (parts.length >= 3) {
-                        // Group is everything except last 2 parts (artifact and version)
                         groupText = parts.slice(0, -2).join('.');
-                    } else if (parts.length === 2) {
-                        // Just artifact:version, no group
-                        groupText = 'unknown';
                     }
                 }
 
-                groupDiv.textContent = groupText || 'unknown';
+                groupDiv.textContent = groupText || '';
 
                 // Debug logging
                 if (component && component.name === 'hibernate-entitymanager') {
