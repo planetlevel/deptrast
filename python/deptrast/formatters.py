@@ -8,7 +8,7 @@ from typing import List, Collection, Dict
 from uuid import uuid4
 
 from packageurl import PackageURL
-from cyclonedx.model import ExternalReference, ExternalReferenceType, XsUri
+from cyclonedx.model import ExternalReference, ExternalReferenceType, XsUri, Property
 from cyclonedx.model.bom import Bom
 from cyclonedx.model.component import Component, ComponentType, ComponentScope
 from cyclonedx.model.contact import OrganizationalContact
@@ -191,7 +191,7 @@ class OutputFormatter:
         # Add dependencies to SBOM
         sbom['dependencies'] = dependencies
 
-        # Reorder component fields to match Java output: type, bom-ref, group, name, version, scope, purl, tags
+        # Reorder component fields to match Java output: type, bom-ref, group, name, version, scope, purl, properties, tags
         reordered_components = []
         for comp in sbom.get('components', []):
             ordered_comp = {
@@ -202,6 +202,7 @@ class OutputFormatter:
                 'version': comp.get('version'),
                 'scope': comp.get('scope'),
                 'purl': comp.get('purl'),
+                'properties': comp.get('properties'),
                 'tags': comp.get('tags')
             }
             # Remove None values
@@ -480,6 +481,11 @@ class OutputFormatter:
             tags=tags if tags else None
         )
 
+        # Add language property based on PURL type
+        language = OutputFormatter._get_language_from_purl_type(pkg.system)
+        if language:
+            component.properties.add(Property(name='cdx:language', value=language))
+
         # Map package scope to CycloneDX scope (applies to all package types)
         if pkg.scope:
             cdx_scope = OutputFormatter._maven_scope_to_cyclonedx(pkg.scope)
@@ -496,3 +502,29 @@ class OutputFormatter:
             return f"pkg:maven/{name}@{pkg.version}"
         else:
             return f"pkg:{pkg.system.lower()}/{pkg.name}@{pkg.version}"
+
+    @staticmethod
+    def _get_language_from_purl_type(purl_type: str) -> str:
+        """Map PURL package type to programming language."""
+        if not purl_type:
+            return None
+
+        language_map = {
+            'maven': 'java',
+            'npm': 'javascript',
+            'pypi': 'python',
+            'cargo': 'rust',
+            'golang': 'go',
+            'gomod': 'go',
+            'composer': 'php',
+            'gem': 'ruby',
+            'nuget': 'csharp',
+            'cocoapods': 'swift',
+            'swift': 'swift',
+            'cran': 'r',
+            'hackage': 'haskell',
+            'hex': 'elixir',
+            'clojars': 'clojure'
+        }
+
+        return language_map.get(purl_type.lower())
