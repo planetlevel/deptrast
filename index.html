@@ -3035,6 +3035,16 @@
                     <div class="detail-label">Scope</div>
                     <div class="detail-value">${component.scope || 'required'}</div>
                 </div>`;
+
+                // Add language if available
+                const language = getLanguageFromComponent(component);
+                if (language) {
+                    html += `<div class="detail-row">
+                        <div class="detail-label">Language</div>
+                        <div class="detail-value">${language}</div>
+                    </div>`;
+                }
+
                 html += `<div class="detail-row">
                     <div class="detail-label">Direct Dependencies</div>
                     <div class="detail-value">${filteredDeps.length}</div>
@@ -3126,6 +3136,59 @@
             });
 
             return visited;
+        }
+
+        function getLanguageFromComponent(component) {
+            if (!component) return null;
+
+            // Priority 1: Check for cdx:language property
+            if (component.properties) {
+                const langProp = component.properties.find(p =>
+                    p.name === 'cdx:language' || p.name === 'language'
+                );
+                if (langProp && langProp.value) {
+                    return langProp.value;
+                }
+
+                // Priority 2: Check for syft:package:language property
+                const syftLangProp = component.properties.find(p =>
+                    p.name === 'syft:package:language'
+                );
+                if (syftLangProp && syftLangProp.value) {
+                    return syftLangProp.value;
+                }
+            }
+
+            // Priority 3: Infer from PURL type
+            if (component.purl) {
+                const purlMatch = component.purl.match(/^pkg:([^\/]+)\//);
+                if (purlMatch) {
+                    const purlType = purlMatch[1].toLowerCase();
+                    const languageMap = {
+                        'maven': 'Java',
+                        'npm': 'JavaScript',
+                        'pypi': 'Python',
+                        'cargo': 'Rust',
+                        'golang': 'Go',
+                        'gomod': 'Go',
+                        'composer': 'PHP',
+                        'gem': 'Ruby',
+                        'nuget': 'C#',
+                        'cocoapods': 'Swift',
+                        'swift': 'Swift',
+                        'cran': 'R',
+                        'hackage': 'Haskell',
+                        'hex': 'Elixir',
+                        'clojars': 'Clojure',
+                        'pub': 'Dart',
+                        'conan': 'C++',
+                        'conda': 'Python'
+                    };
+                    return languageMap[purlType] || null;
+                }
+            }
+
+            return null;
         }
 
         function calculateMaxDepth(purl, memo) {

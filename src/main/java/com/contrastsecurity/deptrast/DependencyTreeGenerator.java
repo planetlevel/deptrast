@@ -596,6 +596,49 @@ public class DependencyTreeGenerator {
     }
 
     /**
+     * Maps PURL package type to programming language.
+     * Returns null if language cannot be determined from package type.
+     */
+    private static String getLanguageFromPurlType(String purlType) {
+        if (purlType == null) {
+            return null;
+        }
+
+        switch (purlType.toLowerCase()) {
+            case "maven":
+                return "java";
+            case "npm":
+                return "javascript";
+            case "pypi":
+                return "python";
+            case "cargo":
+                return "rust";
+            case "golang":
+            case "gomod":
+                return "go";
+            case "composer":
+                return "php";
+            case "gem":
+                return "ruby";
+            case "nuget":
+                return "csharp";
+            case "cocoapods":
+            case "swift":
+                return "swift";
+            case "cran":
+                return "r";
+            case "hackage":
+                return "haskell";
+            case "hex":
+                return "elixir";
+            case "clojars":
+                return "clojure";
+            default:
+                return null;
+        }
+    }
+
+    /**
      * Parse existing dependency graph from SBOM
      */
     private static List<DependencyNode> parseDependencyGraphFromSbom(String sbomContent, List<Package> allPackages) {
@@ -1509,6 +1552,15 @@ public class DependencyTreeGenerator {
                 component.setVersion(pkg.getVersion());
                 component.setPurl(purl);
                 component.setBomRef(purl);  // Use PURL as bom-ref for consistent referencing
+
+                // Add language property based on PURL type
+                String language = getLanguageFromPurlType(pkg.getSystem());
+                if (language != null) {
+                    org.cyclonedx.model.Property languageProp = new org.cyclonedx.model.Property();
+                    languageProp.setName("cdx:language");
+                    languageProp.setValue(language);
+                    component.addProperty(languageProp);
+                }
 
                 // Map Maven scope to CycloneDX scope
                 if ("maven".equalsIgnoreCase(pkg.getSystem())) {
