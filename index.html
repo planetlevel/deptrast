@@ -588,6 +588,17 @@
             color: #333;
         }
 
+        .toggle-icon {
+            display: inline-block;
+            width: 12px;
+            font-size: 10px;
+            transition: transform 0.2s ease;
+        }
+
+        .toggle-icon.collapsed {
+            transform: rotate(-90deg);
+        }
+
         .stat-item {
             margin-bottom: 15px;
         }
@@ -886,7 +897,16 @@
         </div>
 
         <div class="stats-panel" id="statsPanel" style="display: none;">
-            <h2>Component Details</h2>
+            <div id="applicationDetails" style="display: none; margin-bottom: 20px; padding-bottom: 20px; border-bottom: 2px solid #e0e0e0;">
+                <h2 onclick="toggleSection('applicationDetailsContent', 'appDetailsToggle')" style="cursor: pointer; user-select: none;">
+                    <span id="appDetailsToggle" class="toggle-icon">▼</span> Application
+                </h2>
+                <div id="applicationDetailsContent" style="background: white; border: 1px solid #e0e0e0; border-radius: 4px; padding: 12px; font-size: 12px;">
+                </div>
+            </div>
+            <h2 onclick="toggleSection('componentDetails', 'componentDetailsToggle')" style="cursor: pointer; user-select: none;">
+                <span id="componentDetailsToggle" class="toggle-icon">▼</span> Component Details
+            </h2>
             <div id="componentDetails">
                 <em>Click a component to see details</em>
             </div>
@@ -1611,6 +1631,9 @@
 
             // Show view selector
             document.getElementById('viewSelector').style.display = 'flex';
+
+            // Update application details in right pane
+            updateApplicationDetails();
 
             // Find root nodes (those not depended upon by others)
             const rootNodes = findRootNodes();
@@ -2989,6 +3012,135 @@
                     });
                 }
             }
+        }
+
+        function toggleSection(contentId, toggleIconId) {
+            const content = document.getElementById(contentId);
+            const toggleIcon = document.getElementById(toggleIconId);
+
+            if (content.style.display === 'none') {
+                content.style.display = 'block';
+                toggleIcon.classList.remove('collapsed');
+            } else {
+                content.style.display = 'none';
+                toggleIcon.classList.add('collapsed');
+            }
+        }
+
+        function updateApplicationDetails() {
+            const appDetailsDiv = document.getElementById('applicationDetails');
+            const appDetailsContent = document.getElementById('applicationDetailsContent');
+
+            // Check if we have application metadata
+            if (!sbomData || !sbomData.metadata || !sbomData.metadata.component) {
+                // Show fallback message with helpful info
+                let html = '<div style="color: #999; font-style: italic; padding: 8px;">';
+                html += '<div style="margin-bottom: 8px;">No application metadata found in SBOM.</div>';
+
+                // Try to show something useful from SBOM metadata
+                if (sbomData && sbomData.metadata) {
+                    const componentCount = sbomData.components ? sbomData.components.length : 0;
+                    html += `<div style="color: #666; font-style: normal;">Total Components: <strong>${componentCount}</strong></div>`;
+
+                    if (sbomData.metadata.timestamp) {
+                        const date = new Date(sbomData.metadata.timestamp);
+                        html += `<div style="color: #666; font-style: normal; margin-top: 4px;">Generated: ${date.toLocaleDateString()} ${date.toLocaleTimeString()}</div>`;
+                    }
+                }
+
+                html += '</div>';
+                appDetailsContent.innerHTML = html;
+                appDetailsDiv.style.display = 'block';
+                return;
+            }
+
+            const app = sbomData.metadata.component;
+            let html = '';
+
+            // Name (bold)
+            if (app.name) {
+                html += `<div class="detail-row">
+                    <div class="detail-label">Name</div>
+                    <div class="detail-value"><strong>${app.name}</strong></div>
+                </div>`;
+            }
+
+            // Version
+            if (app.version) {
+                html += `<div class="detail-row">
+                    <div class="detail-label">Version</div>
+                    <div class="detail-value">${app.version}</div>
+                </div>`;
+            }
+
+            // Group
+            if (app.group) {
+                html += `<div class="detail-row">
+                    <div class="detail-label">Group</div>
+                    <div class="detail-value">${app.group}</div>
+                </div>`;
+            }
+
+            // Type
+            if (app.type) {
+                html += `<div class="detail-row">
+                    <div class="detail-label">Type</div>
+                    <div class="detail-value">${app.type}</div>
+                </div>`;
+            }
+
+            // Description
+            if (app.description) {
+                html += `<div class="detail-row">
+                    <div class="detail-label">Description</div>
+                    <div class="detail-value">${app.description}</div>
+                </div>`;
+            }
+
+            // Language
+            const language = getLanguageFromComponent(app);
+            if (language) {
+                html += `<div class="detail-row">
+                    <div class="detail-label">Language</div>
+                    <div class="detail-value">${language}</div>
+                </div>`;
+            }
+
+            // Package URL
+            if (app.purl) {
+                html += `<div class="detail-row">
+                    <div class="detail-label">Package URL</div>
+                    <div class="detail-value" style="font-size: 10px;">${app.purl}</div>
+                </div>`;
+            }
+
+            // Total component count
+            const componentCount = sbomData.components ? sbomData.components.length : 0;
+            html += `<div class="detail-row">
+                <div class="detail-label">Total Components</div>
+                <div class="detail-value"><strong>${componentCount}</strong></div>
+            </div>`;
+
+            // SBOM metadata
+            if (sbomData.metadata.timestamp) {
+                const date = new Date(sbomData.metadata.timestamp);
+                html += `<div class="detail-row">
+                    <div class="detail-label">Generated</div>
+                    <div class="detail-value">${date.toLocaleDateString()} ${date.toLocaleTimeString()}</div>
+                </div>`;
+            }
+
+            // Tools used
+            if (sbomData.metadata.tools && sbomData.metadata.tools.length > 0) {
+                const toolNames = sbomData.metadata.tools.map(t => t.name || t).join(', ');
+                html += `<div class="detail-row">
+                    <div class="detail-label">Generated By</div>
+                    <div class="detail-value">${toolNames}</div>
+                </div>`;
+            }
+
+            appDetailsContent.innerHTML = html;
+            appDetailsDiv.style.display = 'block';
         }
 
         function updateComponentDetails() {

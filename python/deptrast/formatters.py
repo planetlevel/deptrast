@@ -4,7 +4,7 @@ import json
 import logging
 import re
 from datetime import datetime
-from typing import List, Collection, Dict
+from typing import List, Collection, Dict, Optional
 from uuid import uuid4
 
 from packageurl import PackageURL
@@ -110,7 +110,8 @@ class OutputFormatter:
     def format_as_sbom(
         packages: Collection[Package],
         dependency_trees: List[DependencyNode],
-        command_line: str = None
+        command_line: str = None,
+        project_metadata: Optional[Dict[str, str]] = None
     ) -> str:
         """Generate a CycloneDX SBOM in JSON format."""
         from . import __version__
@@ -119,6 +120,37 @@ class OutputFormatter:
 
         # Set serial number - just use UUID, the library will format it
         bom.serial_number = uuid4()
+
+        # Add project metadata.component if available (represents the application)
+        if project_metadata:
+            # Build purl for the application
+            app_group = project_metadata.get('group', '')
+            app_name = project_metadata.get('name', '')
+            app_version = project_metadata.get('version', 'unknown')
+
+            app_purl_str = f"pkg:maven/{app_group}/{app_name}@{app_version}"
+            app_purl = PackageURL.from_string(app_purl_str)
+
+            # Determine component type
+            comp_type = ComponentType.APPLICATION
+            if project_metadata.get('type') == 'library':
+                comp_type = ComponentType.LIBRARY
+
+            app_component = Component(
+                name=app_name,
+                version=app_version,
+                type=comp_type,
+                group=app_group,
+                purl=app_purl,
+                bom_ref=app_purl_str
+            )
+
+            # Add description if available
+            if 'description' in project_metadata:
+                app_component.description = project_metadata['description']
+
+            # Set as the metadata component
+            bom.metadata.component = app_component
 
         # Create metadata with tool information as a component (like Java version)
         # Use GitHub-based purl since deptrast is open source on GitHub
@@ -158,6 +190,27 @@ class OutputFormatter:
             component = OutputFormatter._package_to_component(pkg)
             bom.components.add(component)
 
+        # If we have project metadata, add application dependency to bom.dependencies
+        # This prevents the CycloneDX library warning about incomplete dependency graph
+        if project_metadata:
+            from cyclonedx.model.dependency import Dependency
+            from cyclonedx.model.bom_ref import BomRef
+
+            app_purl = f"pkg:maven/{project_metadata.get('group', '')}/{project_metadata.get('name', '')}@{project_metadata.get('version', 'unknown')}"
+            app_bom_ref = BomRef(app_purl)
+
+            # Find root dependencies
+            root_deps = []
+            for tree in dependency_trees:
+                root_purl = OutputFormatter._build_purl(tree.package)
+                if tree.package in packages:
+                    root_dep_ref = BomRef(root_purl)
+                    root_deps.append(Dependency(ref=root_dep_ref))
+
+            # Create application dependency with root deps
+            app_dependency = Dependency(ref=app_bom_ref, dependencies=root_deps)
+            bom.dependencies.add(app_dependency)
+
         # Generate basic JSON first
         outputter = JsonV1Dot6(bom)
         sbom_str = outputter.output_as_string()
@@ -184,6 +237,28 @@ class OutputFormatter:
             }
 
             dependencies.append(dep_entry)
+
+        # If we have project metadata (application component), add it to dependencies
+        # The metadata.component should reference the root dependencies
+        if project_metadata:
+            app_purl = f"pkg:maven/{project_metadata.get('group', '')}/{project_metadata.get('name', '')}@{project_metadata.get('version', 'unknown')}"
+
+            # Find root dependencies (those in dependency_trees)
+            root_deps = []
+            for tree in dependency_trees:
+                root_purl = OutputFormatter._build_purl(tree.package)
+                if tree.package in packages:  # Only include if it's in our package list
+                    root_deps.append(root_purl)
+
+            # Sort root dependencies for consistency
+            root_deps.sort()
+
+            # Add application dependency entry at the beginning
+            app_dep_entry = {
+                "ref": app_purl,
+                "dependsOn": root_deps
+            }
+            dependencies.insert(0, app_dep_entry)
 
         # Sort dependencies alphabetically by ref for consistent ordering
         dependencies.sort(key=lambda d: d.get('ref', ''))
@@ -252,13 +327,24 @@ class OutputFormatter:
             if match:
                 metadata['timestamp'] = match.group(1) + 'Z'
 
+        # Reorder metadata fields to match Java: timestamp, tools, component, properties
+        ordered_metadata = {}
+        if 'timestamp' in metadata:
+            ordered_metadata['timestamp'] = metadata['timestamp']
+        if 'tools' in metadata:
+            ordered_metadata['tools'] = metadata['tools']
+        if 'component' in metadata:
+            ordered_metadata['component'] = metadata['component']
+        if 'properties' in metadata:
+            ordered_metadata['properties'] = metadata['properties']
+
         # Reorder to match Java output: metadata first, then components, then dependencies
         ordered_sbom = {
             'bomFormat': sbom.get('bomFormat'),
             'specVersion': sbom.get('specVersion'),
             'serialNumber': sbom.get('serialNumber'),
             'version': sbom.get('version', 1),
-            'metadata': metadata,
+            'metadata': ordered_metadata,
             'components': reordered_components,
             'dependencies': sbom.get('dependencies')
         }

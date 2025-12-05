@@ -247,7 +247,6 @@ class DependencyGraphBuilder:
         if not self.root_nodes:
             logger.warning("No root nodes available for conflict resolution")
             return
-
         logger.info("=== PHASE 2: Applying conflict resolution ===")
 
         # Step 1: Determine winning versions

@@ -258,6 +258,7 @@ public class DependencyTreeGenerator {
         Map<String, String> dependencyManagement = null;
         Map<String, Set<String>> exclusions = null;
         String originalSbomContent = null; // Store original SBOM if input is SBOM
+        FileParser.ProjectMetadata projectMetadata = null; // Store project metadata from POM
 
         switch (detectedFormat) {
             case "flat":
@@ -278,6 +279,7 @@ public class DependencyTreeGenerator {
                 allPackages = pomResult.getPackages();
                 dependencyManagement = pomResult.getDependencyManagement();
                 exclusions = pomResult.getExclusions();
+                projectMetadata = pomResult.getProjectMetadata();
                 logger.info("Parsed {} packages with {} managed versions and {} exclusions from pom.xml",
                     allPackages.size(), dependencyManagement.size(), exclusions.size());
                 break;
@@ -375,7 +377,7 @@ public class DependencyTreeGenerator {
             for (DependencyNode node : dependencyTree) {
                 rootPackages.add(node.getPackage());
             }
-            output = generateSbomString(rootPackages, dependencyTree);
+            output = generateSbomString(rootPackages, dependencyTree, projectMetadata);
         } else if ("tree".equals(outputFormat)) {
             // Tree visualization
             if ("maven".equals(treeFormat)) {
@@ -388,7 +390,7 @@ public class DependencyTreeGenerator {
             if (originalSbomContent != null) {
                 output = enhanceSbomWithDependencies(originalSbomContent, allTrackedPackages, dependencyTree);
             } else {
-                output = generateSbomString(allTrackedPackages, dependencyTree);
+                output = generateSbomString(allTrackedPackages, dependencyTree, projectMetadata);
             }
         }
 
@@ -1465,7 +1467,7 @@ public class DependencyTreeGenerator {
     /**
      * Generate SBOM as a string
      */
-    private static String generateSbomString(Collection<Package> packages, List<DependencyNode> trees) {
+    private static String generateSbomString(Collection<Package> packages, List<DependencyNode> trees, FileParser.ProjectMetadata projectMetadata) {
         try {
             // Build dependency map from tree structure
             Map<Package, List<Package>> dependencyMap = buildDependencyMap(trees);
@@ -1476,6 +1478,29 @@ public class DependencyTreeGenerator {
 
             Metadata metadata = new Metadata();
             metadata.setTimestamp(new Date());
+
+            // Add project metadata.component if available (represents the application)
+            if (projectMetadata != null) {
+                Component appComponent = new Component();
+                appComponent.setType(Component.Type.APPLICATION);
+                appComponent.setGroup(projectMetadata.getGroup());
+                appComponent.setName(projectMetadata.getName());
+                appComponent.setVersion(projectMetadata.getVersion());
+
+                // Build PURL
+                String appPurl = "pkg:maven/" + projectMetadata.getGroup() + "/" + projectMetadata.getName() + "@" + projectMetadata.getVersion();
+                appComponent.setPurl(appPurl);
+                appComponent.setBomRef(appPurl);
+
+                // Add description if available
+                if (projectMetadata.getDescription() != null && !projectMetadata.getDescription().isEmpty()) {
+                    appComponent.setDescription(projectMetadata.getDescription());
+                }
+
+                // Set as metadata component
+                metadata.setComponent(appComponent);
+                logger.info("Added application metadata: {}:{}:{}", projectMetadata.getGroup(), projectMetadata.getName(), projectMetadata.getVersion());
+            }
 
             // Create tool component using modern CycloneDX 1.6 format
             Component toolComponent = new Component();
@@ -1677,6 +1702,35 @@ public class DependencyTreeGenerator {
                 }
 
                 dependencies.add(dependency);
+            }
+
+            // If we have project metadata, add application dependency entry
+            // This prevents the CycloneDX library warning about incomplete dependency graph
+            if (projectMetadata != null) {
+                String appPurl = "pkg:maven/" + projectMetadata.getGroup() + "/" +
+                               projectMetadata.getName() + "@" + projectMetadata.getVersion();
+                Dependency appDependency = new Dependency(appPurl);
+
+                // Find root dependencies from dependency trees and collect them
+                List<String> rootDeps = new ArrayList<>();
+                for (DependencyNode tree : trees) {
+                    String rootPurl = buildPurl(tree.getPackage());
+                    if (purlByPackage.containsValue(rootPurl)) {
+                        rootDeps.add(rootPurl);
+                    }
+                }
+
+                // Sort root dependencies for consistency
+                Collections.sort(rootDeps);
+
+                // Add sorted root dependencies to application dependency
+                for (String rootPurl : rootDeps) {
+                    appDependency.addDependency(new Dependency(rootPurl));
+                }
+
+                // Add application dependency first
+                dependencies.add(0, appDependency);
+                logger.info("Added application dependency entry for {}", appPurl);
             }
 
             // Sort dependencies alphabetically by ref for consistent ordering

@@ -228,12 +228,22 @@ public class FileParser {
         Map<String, String> dependencyManagement = new HashMap<>();
         Map<String, String> managedScopes = new HashMap<>(); // package name -> managed scope
         Map<String, Set<String>> exclusions = new HashMap<>(); // package name -> excluded dependencies
+        ProjectMetadata projectMetadata = null;
 
         try {
             DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
             DocumentBuilder builder = factory.newDocumentBuilder();
             Document doc = builder.parse(new File(filePath));
             doc.getDocumentElement().normalize();
+
+            // Extract project metadata for SBOM metadata.component
+            // Use getDirectChildElementText to avoid getting values from <parent>
+            String projectGroup = getDirectChildElementText(doc.getDocumentElement(), "groupId");
+            String projectArtifact = getDirectChildElementText(doc.getDocumentElement(), "artifactId");
+            String projectVersion = getDirectChildElementText(doc.getDocumentElement(), "version");
+            String projectName = getDirectChildElementText(doc.getDocumentElement(), "name");
+            String projectDescription = getDirectChildElementText(doc.getDocumentElement(), "description");
+            String projectPackaging = getDirectChildElementText(doc.getDocumentElement(), "packaging");
 
             // Load parent POM data (properties and hierarchy of POM documents)
             ParentPomData parentData = parseParentPomData(doc, filePath, factory, builder);
@@ -245,6 +255,22 @@ public class FileParser {
             Map<String, String> currentProperties = parseProperties(doc);
             properties.putAll(currentProperties);
             logger.info("Loaded {} properties total ({} from current pom.xml)", properties.size(), currentProperties.size());
+
+            // Inherit groupId/version from parent if not specified
+            if (projectGroup == null || projectGroup.isEmpty()) {
+                NodeList parentNodes = doc.getElementsByTagName("parent");
+                if (parentNodes.getLength() > 0) {
+                    Element parentElement = (Element) parentNodes.item(0);
+                    projectGroup = getElementText(parentElement, "groupId");
+                }
+            }
+            if (projectVersion == null || projectVersion.isEmpty()) {
+                NodeList parentNodes = doc.getElementsByTagName("parent");
+                if (parentNodes.getLength() > 0) {
+                    Element parentElement = (Element) parentNodes.item(0);
+                    projectVersion = getElementText(parentElement, "version");
+                }
+            }
 
             // Now parse ALL dependencyManagement sections with the FINAL merged properties
             // This ensures that property overrides in child POMs affect parent dependencyManagement
@@ -264,6 +290,28 @@ public class FileParser {
 
             logger.info("Total {} managed dependency versions (re-evaluated with final properties)", dependencyManagement.size());
             logger.info("Total {} managed dependency scopes", managedScopes.size());
+
+            // NOW resolve project version using loaded properties and create metadata
+            if (projectVersion != null && projectVersion.contains("${")) {
+                String resolvedVersion = resolveProperty(projectVersion, properties);
+                if (resolvedVersion != null && !resolvedVersion.contains("${")) {
+                    projectVersion = resolvedVersion;
+                    logger.info("Resolved project version to: {}", projectVersion);
+                }
+            }
+
+            // Create project metadata
+            if (projectGroup != null && projectArtifact != null) {
+                projectMetadata = new ProjectMetadata(
+                    projectGroup,
+                    projectArtifact,
+                    projectVersion != null ? projectVersion : "unknown",
+                    projectName,
+                    projectDescription,
+                    projectPackaging
+                );
+                logger.info("Extracted project metadata: {}:{}:{}", projectGroup, projectArtifact, projectVersion);
+            }
 
             // Find all <dependency> elements
             NodeList dependencyNodes = doc.getElementsByTagName("dependency");
@@ -390,7 +438,7 @@ public class FileParser {
             logger.error("Error parsing pom.xml file {}: {}", filePath, e.getMessage());
         }
 
-        return new PomParseResult(packages, dependencyManagement, managedScopes, exclusions);
+        return new PomParseResult(packages, dependencyManagement, managedScopes, exclusions, projectMetadata);
     }
 
     /**
@@ -653,6 +701,34 @@ public class FileParser {
     }
 
     /**
+     * Simple class to hold project metadata from POM
+     */
+    public static class ProjectMetadata {
+        private final String group;
+        private final String name;
+        private final String version;
+        private final String displayName;
+        private final String description;
+        private final String packaging;
+
+        public ProjectMetadata(String group, String name, String version, String displayName, String description, String packaging) {
+            this.group = group;
+            this.name = name;
+            this.version = version;
+            this.displayName = displayName;
+            this.description = description;
+            this.packaging = packaging;
+        }
+
+        public String getGroup() { return group; }
+        public String getName() { return name; }
+        public String getVersion() { return version; }
+        public String getDisplayName() { return displayName; }
+        public String getDescription() { return description; }
+        public String getPackaging() { return packaging; }
+    }
+
+    /**
      * Result class to hold parsed packages and their dependency management
      */
     public static class PomParseResult {
@@ -660,12 +736,14 @@ public class FileParser {
         private final Map<String, String> dependencyManagement;
         private final Map<String, String> managedScopes; // package name -> managed scope
         private final Map<String, Set<String>> exclusions; // package name -> set of excluded "groupId:artifactId"
+        private final ProjectMetadata projectMetadata; // project info from POM
 
-        public PomParseResult(List<Package> packages, Map<String, String> dependencyManagement, Map<String, String> managedScopes, Map<String, Set<String>> exclusions) {
+        public PomParseResult(List<Package> packages, Map<String, String> dependencyManagement, Map<String, String> managedScopes, Map<String, Set<String>> exclusions, ProjectMetadata projectMetadata) {
             this.packages = packages;
             this.dependencyManagement = dependencyManagement;
             this.managedScopes = managedScopes;
             this.exclusions = exclusions;
+            this.projectMetadata = projectMetadata;
         }
 
         public List<Package> getPackages() {
@@ -682,6 +760,10 @@ public class FileParser {
 
         public Map<String, Set<String>> getExclusions() {
             return exclusions;
+        }
+
+        public ProjectMetadata getProjectMetadata() {
+            return projectMetadata;
         }
     }
 
@@ -1093,6 +1175,33 @@ public class FileParser {
         if (nodes.getLength() > 0) {
             Node node = nodes.item(0);
             return node.getTextContent().trim();
+        }
+        return null;
+    }
+
+    /**
+     * Get text content of a direct child element only (not grandchildren).
+     * This is useful for getting project-level elements while excluding parent element children.
+     *
+     * @param parent parent element
+     * @param tagName tag name to find
+     * @return text content or null
+     */
+    private static String getDirectChildElementText(Element parent, String tagName) {
+        NodeList children = parent.getChildNodes();
+        for (int i = 0; i < children.getLength(); i++) {
+            Node child = children.item(i);
+            if (child.getNodeType() == Node.ELEMENT_NODE) {
+                Element childElement = (Element) child;
+                // Skip parent element entirely
+                if ("parent".equals(childElement.getTagName())) {
+                    continue;
+                }
+                // Check if this is the element we want
+                if (tagName.equals(childElement.getTagName())) {
+                    return childElement.getTextContent().trim();
+                }
+            }
         }
         return null;
     }

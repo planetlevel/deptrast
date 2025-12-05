@@ -83,6 +83,20 @@ def get_element_text(parent: ET.Element, tag_name: str, ns: Dict[str, str]) -> O
     return None
 
 
+def get_direct_project_element_text(root: ET.Element, tag_name: str, ns: Dict[str, str]) -> Optional[str]:
+    """Get text content of a direct child of project element, excluding parent element children."""
+    # Iterate through direct children only
+    for child in root:
+        # Skip the parent element entirely
+        if child.tag.endswith('parent'):
+            continue
+        # Check if this is the element we want
+        if child.tag.endswith(tag_name):
+            if child.text:
+                return child.text.strip()
+    return None
+
+
 def resolve_property(value: str, properties: Dict[str, str], max_iterations: int = 10) -> Optional[str]:
     """
     Resolve ${property} references in a string with nesting support.
@@ -486,30 +500,49 @@ class FileParser:
         return properties
 
     @staticmethod
-    def parse_pom_file(file_path: str, scope_filter: str = 'all', include_optional: bool = False) -> Tuple[List, Dict[str, str], Dict[str, Set[str]]]:
+    def parse_pom_file(file_path: str, scope_filter: str = 'all', include_optional: bool = False) -> Tuple[List, Dict[str, str], Dict[str, Set[str]], Optional[Dict[str, str]]]:
         """
         Parse a Maven pom.xml file using pure XML parsing (no pymaven).
         Based on Java FileParser logic.
-    
+
         Args:
             file_path: Path to the pom.xml file
             scope_filter: Maven scope to include (runtime, compile, provided, test, or all)
             include_optional: Whether to include optional/provided dependencies
-    
+
         Returns:
-            Tuple of (packages, dependency_management, exclusions)
+            Tuple of (packages, dependency_management, exclusions, project_metadata)
+            where project_metadata is a dict with group, name, version, description
         """
           # Import here to avoid circular import
-    
+
         packages = []
         dependency_management = {}
         managed_scopes = {}
         exclusions_map = {}
+        project_metadata = {}
         ns = {'m': 'http://maven.apache.org/POM/4.0.0'}
 
         try:
             tree = ET.parse(file_path)
             root = tree.getroot()
+
+            # Extract project metadata for SBOM metadata.component
+            # Use get_direct_project_element_text to avoid getting values from <parent>
+            project_group = get_direct_project_element_text(root, 'groupId', ns)
+            project_artifact = get_direct_project_element_text(root, 'artifactId', ns)
+            project_version = get_direct_project_element_text(root, 'version', ns)
+            project_name = get_direct_project_element_text(root, 'name', ns)
+            project_description = get_direct_project_element_text(root, 'description', ns)
+            project_packaging = get_direct_project_element_text(root, 'packaging', ns)
+
+            # Inherit groupId/version from parent if not specified
+            parent_elem = root.find('m:parent', ns)
+            if parent_elem is not None:
+                if not project_group:
+                    project_group = get_element_text(parent_elem, 'groupId', ns)
+                if not project_version:
+                    project_version = get_element_text(parent_elem, 'version', ns)
 
             # Load parent POM data (properties and hierarchy)
             parent_properties, pom_hierarchy = parse_parent_pom_data(root, file_path, ns)
@@ -535,7 +568,31 @@ class FileParser:
 
             logger.info(f"Total {len(dependency_management)} managed dependency versions")
             logger.info(f"Total {len(managed_scopes)} managed dependency scopes")
-    
+
+            # NOW resolve project version using loaded properties and create metadata
+            if project_version and '${' in project_version:
+                resolved_version = resolve_property(project_version, all_properties)
+                if resolved_version and '${' not in resolved_version:
+                    project_version = resolved_version
+                    logger.info(f"Resolved project version to: {project_version}")
+
+            if project_group and project_artifact:
+                project_metadata = {
+                    'group': project_group,
+                    'name': project_artifact,  # CycloneDX uses 'name' for artifactId
+                    'version': project_version or 'unknown',
+                    'type': 'application',  # Maven projects are typically applications
+                    'packaging': project_packaging or 'jar'
+                }
+
+                # Add optional fields if present
+                if project_name and project_name != project_artifact:
+                    project_metadata['displayName'] = project_name
+                if project_description:
+                    project_metadata['description'] = project_description
+
+                logger.info(f"Created project metadata: {project_group}:{project_artifact}:{project_version}")
+
             # Find root <dependencies> section (not from <dependencyManagement> or <build>)
             # Look for <project><dependencies> directly
             dependency_nodes = []
@@ -636,7 +693,7 @@ class FileParser:
             import traceback
             traceback.print_exc()
 
-        return packages, dependency_management, exclusions_map
+        return packages, dependency_management, exclusions_map, project_metadata
     
 
     @staticmethod

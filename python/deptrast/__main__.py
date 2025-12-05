@@ -76,6 +76,7 @@ def handle_create(args):
     dependency_management = {}
     exclusions = {}
     original_sbom_content = None
+    project_metadata = None
 
     try:
         if detected_format == 'flat':
@@ -87,11 +88,13 @@ def handle_create(args):
                 with open(input_file, 'r') as f:
                     original_sbom_content = f.read()
         elif detected_format == 'pom':
-            packages, dependency_management, exclusions = FileParser.parse_pom_file(input_file, scope)
+            packages, dependency_management, exclusions, project_metadata = FileParser.parse_pom_file(input_file, scope)
             logger.info(
                 f"Parsed {len(packages)} packages with {len(dependency_management)} "
                 f"managed versions and {len(exclusions)} exclusions from pom.xml"
             )
+            if project_metadata:
+                logger.info(f"Extracted project metadata: {project_metadata.get('group')}:{project_metadata.get('name')}:{project_metadata.get('version')}")
         elif detected_format == 'pypi':
             packages = FileParser.parse_requirements_file(input_file)
         elif detected_format == 'gradle':
@@ -202,7 +205,7 @@ def handle_create(args):
         elif args.output_format == 'roots':
             # SBOM with only root packages
             root_packages = [node.package for node in dependency_trees]
-            output = OutputFormatter.format_as_sbom(root_packages, dependency_trees, command_line)
+            output = OutputFormatter.format_as_sbom(root_packages, dependency_trees, command_line, project_metadata)
         elif args.output_format == 'tree':
             if args.tree_format == 'maven':
                 output = OutputFormatter.format_as_maven_tree(args.project_name, dependency_trees)
@@ -214,7 +217,7 @@ def handle_create(args):
                     original_sbom_content, all_tracked_packages, dependency_trees
                 )
             else:
-                output = OutputFormatter.format_as_sbom(all_tracked_packages, dependency_trees, command_line)
+                output = OutputFormatter.format_as_sbom(all_tracked_packages, dependency_trees, command_line, project_metadata)
     except Exception as e:
         logger.error(f"Error generating output: {e}")
         print(f"Error generating output: {e}", file=sys.stderr)
