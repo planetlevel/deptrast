@@ -2456,23 +2456,30 @@
                 const hasParents = (reverseDependencyMap.get(purl) || []).length > 0;
                 const isCyclic = cyclicNodes.has(purl);
                 let nodeTypeIcon = '';
+                let iconTooltip = '';
 
                 if (isCyclic) {
                     nodeTypeIcon = '*>'; // Cyclic: part of a dependency cycle
+                    iconTooltip = 'Cyclic dependency - appears earlier in the path';
                 } else if (!hasParents && hasDeps) {
                     nodeTypeIcon = '|>'; // Root: no parents, has children
+                    iconTooltip = 'Root node - no incoming dependencies';
                 } else if (!hasDeps && hasParents) {
                     nodeTypeIcon = '<|'; // Leaf: has parents, no children
+                    iconTooltip = 'Leaf node - no outgoing dependencies';
                 } else if (hasDeps && hasParents) {
                     nodeTypeIcon = '<>'; // Inner: has both
+                    iconTooltip = 'Inner node - has dependencies in both directions';
                 } else {
                     nodeTypeIcon = '○'; // Isolated: no parents, no children
+                    iconTooltip = 'Isolated node - no dependencies';
                 }
 
                 // Always add icon element on the left
                 const iconDiv = document.createElement('div');
                 iconDiv.className = 'node-type-icon';
                 iconDiv.textContent = nodeTypeIcon;
+                iconDiv.title = iconTooltip;
                 item.appendChild(iconDiv);
 
                 // Line 1: Group (filter out urn:cdx: and other URN prefixes)
@@ -2604,13 +2611,7 @@
                 // Add click handler - always allow clicking to show details
                 item.addEventListener('click', () => {
                     if (currentViewMode === 'app') {
-                        // Check if this is a cyclic node - if so, don't allow navigation
-                        if (cyclicNodes.has(purl)) {
-                            console.log(`⚠️ Cannot expand cyclic node: ${purl}`);
-                            alert('⚠️ This component is part of a circular dependency and cannot be expanded further.');
-                            return;
-                        }
-                        // APP mode: navigate through dependencies
+                        // APP mode: navigate through dependencies (even cyclic ones)
                         selectNode(purl, columnIndex);
                         // Also move keyboard focus to the clicked item
                         setKeyboardFocus(columnIndex, index);
@@ -2668,6 +2669,9 @@
                 removed.element.remove();
             }
 
+            // Clear cyclic nodes - we're rebuilding the path from this point
+            cyclicNodes.clear();
+
             // Update selected path
             selectedPath = selectedPath.slice(0, columnIndex);
             selectedPath.push(purl);
@@ -2700,12 +2704,10 @@
                 addColumn(filteredDeps);
             }
 
-            // Show alert if cycles were detected
+            // Log cycles but don't show alert
             if (cyclicDeps.length > 0) {
                 const cycleNames = cyclicDeps.map(dep => componentMap.get(dep)?.name || dep.split('/').pop()).join(', ');
-                setTimeout(() => {
-                    alert(`⚠️ Cycle detected!\n\nThe following dependencies create circular references back to earlier components in the path:\n\n${cycleNames}\n\nThese nodes are marked with the *> icon and cannot be expanded further.`);
-                }, 100);
+                console.log(`   ⚠️ Cyclic dependencies detected: ${cycleNames}`);
             }
 
             // Always redraw connectors after removing/adding columns
