@@ -2611,7 +2611,18 @@
                 // Add click handler - always allow clicking to show details
                 item.addEventListener('click', () => {
                     if (currentViewMode === 'app') {
-                        // APP mode: navigate through dependencies (even cyclic ones)
+                        // Check if this is a cyclic node - if so, don't allow further navigation
+                        if (cyclicNodes.has(purl)) {
+                            console.log(`⚠️ Cannot expand cyclic node: ${purl}`);
+                            // Still update selection and details, just don't add new column
+                            selectedPath = selectedPath.slice(0, columnIndex);
+                            selectedPath.push(purl);
+                            updateSelectionUI();
+                            updateComponentDetails();
+                            setKeyboardFocus(columnIndex, index);
+                            return;
+                        }
+                        // APP mode: navigate through dependencies
                         selectNode(purl, columnIndex);
                         // Also move keyboard focus to the clicked item
                         setKeyboardFocus(columnIndex, index);
