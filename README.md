@@ -13,6 +13,8 @@ You can also load SBOMs directly from URLs - just upload a file, paste a URL, or
 https://planetlevel.github.io/deptrast/index.html?url=https://example.com/your-sbom.json
 ```
 
+**[📚 Browse 170+ Real-World SBOM Examples](SBOMS.md)** - Explore SBOMs from popular Docker images (PostgreSQL, Node.js, Nginx, Python, etc.)
+
 ![Interactive SBOM Visualization](deptrast-sbom.png)
 
 ## Supported input sources
