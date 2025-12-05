@@ -2611,12 +2611,15 @@
                 // Add click handler - always allow clicking to show details
                 item.addEventListener('click', () => {
                     if (currentViewMode === 'app') {
-                        // Check if this is a cyclic node - if so, don't allow further navigation
-                        if (cyclicNodes.has(purl)) {
-                            console.log(`⚠️ Cannot expand cyclic node: ${purl}`);
+                        // Check if clicking this node would create a cycle in the CURRENT path
+                        const futureSelectedPath = selectedPath.slice(0, columnIndex);
+                        futureSelectedPath.push(purl);
+                        const wouldCreateCycle = futureSelectedPath.slice(0, -1).includes(purl);
+
+                        if (wouldCreateCycle) {
+                            console.log(`⚠️ Cannot expand cyclic node: ${purl} - already in current path`);
                             // Still update selection and details, just don't add new column
-                            selectedPath = selectedPath.slice(0, columnIndex);
-                            selectedPath.push(purl);
+                            selectedPath = futureSelectedPath;
                             updateSelectionUI();
                             updateComponentDetails();
                             setKeyboardFocus(columnIndex, index);
