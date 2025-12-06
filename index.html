@@ -5741,6 +5741,18 @@
             const id = checkbox.id.replace('Right', '');
             const isChecked = checkbox.checked;
 
+            // Sync the corresponding checkbox if it exists
+            const otherCheckbox = document.getElementById(id);
+            if (otherCheckbox && otherCheckbox !== checkbox) {
+                otherCheckbox.checked = isChecked;
+            }
+
+            // Also sync the "Right" version if we're updating the left one
+            const rightCheckbox = document.getElementById(id + 'Right');
+            if (rightCheckbox && rightCheckbox !== checkbox) {
+                rightCheckbox.checked = isChecked;
+            }
+
             // Apply the filter change
             applyFilters();
         }
