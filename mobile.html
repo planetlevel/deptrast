@@ -1539,6 +1539,31 @@
         .nav-button, .node-item {
             min-height: 44px;
         }
+
+        /* Back to Explore button (shown in pinned mode) */
+        .back-to-explore-btn {
+            display: none;
+            position: fixed;
+            top: 60px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #0078d4;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            padding: 10px 20px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            z-index: 1001;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            white-space: nowrap;
+        }
+
+        .back-to-explore-btn:active {
+            background: #006abc;
+            transform: translateX(-50%) scale(0.95);
+        }
     </style>
 </head>
 <body>
@@ -2187,6 +2212,10 @@
 
         // ====== MOBILE-SPECIFIC FUNCTIONS ======
 
+        // Double-tap detection
+        let lastTapTime = 0;
+        let lastTapTarget = null;
+
         // Toggle mobile hamburger menu
         function toggleMobileMenu() {
             const controls = document.getElementById('headerControls');
@@ -2226,6 +2255,63 @@
             toggle.style.display = 'none';
             panel.classList.remove('open');
             overlay.classList.remove('show');
+        }
+
+        // Pin a component (switch to find/focused mode)
+        function pinComponent(purl) {
+            console.log(`📌 Pinning component: ${purl}`);
+
+            // Find the component in the dropdown and select it
+            const dropdown = document.getElementById('viewModeSelector');
+            if (dropdown) {
+                dropdown.value = purl;
+                // Trigger the change event to switch modes
+                dropdown.dispatchEvent(new Event('change'));
+            }
+
+            // Show "Back to Explore" button
+            showBackToExploreButton();
+        }
+
+        // Return to explore mode
+        function returnToExploreMode() {
+            console.log(`🌳 Returning to explore mode`);
+
+            // Switch back to app mode
+            const dropdown = document.getElementById('viewModeSelector');
+            if (dropdown) {
+                dropdown.value = '__app__';
+                dropdown.dispatchEvent(new Event('change'));
+            }
+
+            // Hide "Back to Explore" button
+            hideBackToExploreButton();
+        }
+
+        // Show "Back to Explore" button
+        function showBackToExploreButton() {
+            let backBtn = document.getElementById('backToExploreBtn');
+            if (!backBtn) {
+                // Create the button if it doesn't exist
+                backBtn = document.createElement('button');
+                backBtn.id = 'backToExploreBtn';
+                backBtn.className = 'back-to-explore-btn';
+                backBtn.textContent = '🌳 Back to Explore';
+                backBtn.onclick = returnToExploreMode;
+
+                // Insert it in the header after the title
+                const header = document.querySelector('.header');
+                header.appendChild(backBtn);
+            }
+            backBtn.style.display = 'block';
+        }
+
+        // Hide "Back to Explore" button
+        function hideBackToExploreButton() {
+            const backBtn = document.getElementById('backToExploreBtn');
+            if (backBtn) {
+                backBtn.style.display = 'none';
+            }
         }
 
         // Recent files management
@@ -3959,8 +4045,26 @@
                     item.appendChild(bar);
                 }
 
-                // Click handler
-                item.addEventListener('click', () => {
+                // Click handler with double-tap detection for mobile
+                item.addEventListener('click', (e) => {
+                    // Double-tap detection (mobile pin)
+                    const currentTime = Date.now();
+                    const tapGap = currentTime - lastTapTime;
+
+                    if (tapGap < 300 && lastTapTarget === item) {
+                        // DOUBLE TAP - Pin this component
+                        e.preventDefault();
+                        e.stopPropagation();
+                        pinComponent(purl);
+                        lastTapTime = 0;
+                        lastTapTarget = null;
+                        return;
+                    }
+
+                    // Single tap - normal navigation
+                    lastTapTime = currentTime;
+                    lastTapTarget = item;
+
                     if (currentViewMode === 'app') {
                         const futureSelectedPath = selectedPath.slice(0, columnIndex);
                         futureSelectedPath.push(purl);
@@ -4289,8 +4393,26 @@
                     item.appendChild(bar);
                 }
 
-                // Add click handler - always allow clicking to show details
-                item.addEventListener('click', () => {
+                // Add click handler with double-tap detection - always allow clicking to show details
+                item.addEventListener('click', (e) => {
+                    // Double-tap detection (mobile pin)
+                    const currentTime = Date.now();
+                    const tapGap = currentTime - lastTapTime;
+
+                    if (tapGap < 300 && lastTapTarget === item) {
+                        // DOUBLE TAP - Pin this component
+                        e.preventDefault();
+                        e.stopPropagation();
+                        pinComponent(purl);
+                        lastTapTime = 0;
+                        lastTapTarget = null;
+                        return;
+                    }
+
+                    // Single tap - normal navigation
+                    lastTapTime = currentTime;
+                    lastTapTarget = item;
+
                     if (currentViewMode === 'app') {
                         // Check if clicking this node would create a cycle in the CURRENT path
                         const futureSelectedPath = selectedPath.slice(0, columnIndex);
