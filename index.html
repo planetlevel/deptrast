@@ -3469,6 +3469,220 @@
             });
         }
 
+        // Global variable to track the absolute center line for tree expansion
+        let absoluteCenterLine = null;
+
+        function addColumnWithMultipleParents(nodes, title, parentPurls) {
+            // If absoluteCenterLine is set, ALWAYS use it - don't calculate from parents
+            if (absoluteCenterLine !== null) {
+                return addColumnWithCustomCenter(nodes, title, absoluteCenterLine);
+            }
+
+            // For multiple parents, calculate the average position and use that as the center point
+            if (parentPurls && parentPurls.length > 0) {
+                // If there's only one parent, use the simple single-parent logic
+                if (parentPurls.length === 1) {
+                    return addColumn(nodes, title, null, parentPurls[0]);
+                }
+
+                // For multiple parents, we'll modify addColumn to accept an average position
+                const container = document.getElementById('columnsContainer');
+                const columnIndex = columns.length;
+
+                // Find all parent elements and calculate their average center position
+                const prevColumn = columns[columnIndex - 1];
+                if (prevColumn) {
+                    const prevColumnContent = prevColumn.element.querySelector('.column-content');
+                    let totalCenterPosition = 0;
+                    let validParentCount = 0;
+
+                    parentPurls.forEach(purl => {
+                        const parentElement = prevColumn.element.querySelector(`[data-purl="${CSS.escape(purl)}"]`);
+                        if (parentElement && prevColumnContent) {
+                            const parentRect = parentElement.getBoundingClientRect();
+                            const prevContentRect = prevColumnContent.getBoundingClientRect();
+                            const parentOffsetInColumn = parentRect.top - prevContentRect.top;
+                            const parentCenter = parentOffsetInColumn + parentRect.height / 2;
+                            totalCenterPosition += parentCenter;
+                            validParentCount++;
+                        }
+                    });
+
+                    if (validParentCount > 0) {
+                        const avgCenterPosition = totalCenterPosition / validParentCount;
+
+                        // Now call addColumn with a custom centering calculation
+                        return addColumnWithCustomCenter(nodes, title, avgCenterPosition);
+                    }
+                }
+            }
+
+            // Fallback to regular addColumn without centering
+            return addColumn(nodes, title);
+        }
+
+        function addColumnWithCustomCenter(nodes, title, targetCenterPosition) {
+            const container = document.getElementById('columnsContainer');
+            const columnIndex = columns.length;
+
+            const column = document.createElement('div');
+            column.className = 'column';
+            column.dataset.columnIndex = columnIndex;
+
+            const header = document.createElement('div');
+            header.className = 'column-header';
+
+            const titleSpan = document.createElement('span');
+            titleSpan.className = 'column-title';
+            titleSpan.textContent = title || (columnIndex === 0 ? 'Direct Dependencies' : `Transitive Dependencies ${columnIndex}`);
+
+            let totalDownstream = 0;
+            nodes.forEach(purl => {
+                const allTransitive = collectAllTransitiveDeps(purl, new Set());
+                totalDownstream += allTransitive.size;
+            });
+
+            const aggregateSpan = document.createElement('span');
+            aggregateSpan.className = 'column-aggregate';
+            aggregateSpan.textContent = `${nodes.length}:${totalDownstream}`;
+
+            header.appendChild(titleSpan);
+            header.appendChild(aggregateSpan);
+
+            const content = document.createElement('div');
+            content.className = 'column-content';
+
+            // Apply custom centering - when using absolute positioning, don't enforce minPadding
+            const estimatedItemHeight = 60;
+            const totalItemsHeight = nodes.length * estimatedItemHeight;
+            const targetTop = Math.max(0, targetCenterPosition - (totalItemsHeight / 2));
+            content.style.paddingTop = `${targetTop}px`;
+
+            // Now build the items (simplified from addColumn)
+            const maxDeps = Math.max(...nodes.map(purl => {
+                const allTransitive = collectAllTransitiveDeps(purl, new Set());
+                return allTransitive.size;
+            }));
+
+            nodes.forEach((purl, index) => {
+                const component = componentMap.get(purl);
+                const deps = dependencyMap.get(purl) || [];
+
+                const item = document.createElement('div');
+                item.className = 'node-item';
+                item.dataset.purl = purl;
+                item.dataset.columnIndex = columnIndex;
+                item.dataset.itemIndex = index;
+
+                // Add scope styling
+                if (component && component.scope) {
+                    const scope = component.scope.toLowerCase();
+                    if (scope === 'optional') {
+                        item.classList.add('scope-optional');
+                    } else if (scope === 'excluded') {
+                        item.classList.add('scope-excluded');
+                    }
+                }
+
+                // Node type icon
+                const hasDeps = deps.length > 0;
+                const hasParents = (reverseDependencyMap.get(purl) || []).length > 0;
+                const isCyclic = cyclicNodes.has(purl);
+                let nodeTypeIcon = '';
+
+                if (isCyclic) {
+                    nodeTypeIcon = '*>';
+                } else if (!hasParents && hasDeps) {
+                    nodeTypeIcon = '|>';
+                } else if (!hasDeps && hasParents) {
+                    nodeTypeIcon = '<|';
+                } else if (hasDeps && hasParents) {
+                    nodeTypeIcon = '<>';
+                } else {
+                    nodeTypeIcon = '○';
+                }
+
+                const iconDiv = document.createElement('div');
+                iconDiv.className = 'node-type-icon';
+                iconDiv.textContent = nodeTypeIcon;
+                item.appendChild(iconDiv);
+
+                // Add component details (simplified)
+                const groupDiv = document.createElement('div');
+                groupDiv.className = 'node-group';
+
+                let groupText = '';
+                if (component) {
+                    if (component.group) {
+                        groupText = component.group.replace(/^urn:cdx:/, '');
+                    } else if (component.purl) {
+                        const match = component.purl.match(/pkg:([^\/]+)\/([^\/]+)/);
+                        if (match) groupText = match[2];
+                    }
+                }
+                groupDiv.textContent = groupText || 'N/A';
+                item.appendChild(groupDiv);
+
+                const nameDiv = document.createElement('div');
+                nameDiv.className = 'node-name';
+                nameDiv.textContent = component?.name || purl.split('/').pop();
+                item.appendChild(nameDiv);
+
+                const versionDiv = document.createElement('div');
+                versionDiv.className = 'node-version';
+                versionDiv.textContent = component?.version || '';
+                item.appendChild(versionDiv);
+
+                // Transitive count bar
+                if (maxDeps > 0) {
+                    const allTransitive = collectAllTransitiveDeps(purl, new Set());
+                    const transitiveCount = allTransitive.size;
+                    const bar = document.createElement('div');
+                    bar.className = 'transitive-count-bar';
+                    bar.style.width = `${(transitiveCount / maxDeps) * 100}%`;
+                    item.appendChild(bar);
+                }
+
+                // Click handler
+                item.addEventListener('click', () => {
+                    if (currentViewMode === 'app') {
+                        const futureSelectedPath = selectedPath.slice(0, columnIndex);
+                        futureSelectedPath.push(purl);
+                        const wouldCreateCycle = futureSelectedPath.slice(0, -1).includes(purl);
+
+                        if (wouldCreateCycle) {
+                            selectedPath = futureSelectedPath;
+                            updateSelectionUI();
+                            updateComponentDetails();
+                            setKeyboardFocus(columnIndex, index);
+                            return;
+                        }
+                        selectNode(purl, columnIndex);
+                        setKeyboardFocus(columnIndex, index);
+                    } else {
+                        selectedPath = [purl];
+                        updateSelectionUI();
+                        updateComponentDetails();
+                        setKeyboardFocus(columnIndex, index);
+                    }
+                });
+
+                content.appendChild(item);
+            });
+
+            column.appendChild(header);
+            column.appendChild(content);
+            container.appendChild(column);
+
+            columns.push({
+                element: column,
+                nodes: nodes,
+                type: null
+            });
+
+            return column;
+        }
+
         function addColumn(nodes, title, columnType, parentPurl = null) {
             const container = document.getElementById('columnsContainer');
             const columnIndex = columns.length;
@@ -3514,32 +3728,51 @@
             const content = document.createElement('div');
             content.className = 'column-content';
 
-            // If we have a parent node, center this column's items relative to it
-            if (parentPurl && columnIndex > 0) {
+            // Minimum padding for all columns to ensure space for centering
+            const minPadding = 600;
+
+            // If absoluteCenterLine is set, use it; otherwise use parent-relative centering
+            if (absoluteCenterLine !== null && columnIndex > 0) {
+                // absoluteCenterLine is in container coordinates (viewport position)
+                // We need to convert this to padding within this column
+                // The column will be positioned at the top of the container, so we want to center
+                // the items at absoluteCenterLine pixels from the top of this column
+                const estimatedItemHeight = 60;
+                const totalItemsHeight = nodes.length * estimatedItemHeight;
+
+                // Center the items around the absolute center line
+                // We want the middle of all items to be at absoluteCenterLine position
+                // Don't apply minPadding here - trust the absolute positioning
+                const targetTop = Math.max(0, absoluteCenterLine - (totalItemsHeight / 2));
+                content.style.paddingTop = `${targetTop}px`;
+            } else if (parentPurl && columnIndex > 0) {
                 // Find the parent node element in the previous column
                 const prevColumn = columns[columnIndex - 1];
                 if (prevColumn) {
                     const parentElement = prevColumn.element.querySelector(`[data-purl="${CSS.escape(parentPurl)}"]`);
-                    if (parentElement) {
-                        // Calculate parent's vertical center position
+                    const prevColumnContent = prevColumn.element.querySelector('.column-content');
+
+                    if (parentElement && prevColumnContent) {
+                        // Get positions relative to the parent column's content area
                         const parentRect = parentElement.getBoundingClientRect();
-                        const parentCenter = parentRect.top + parentRect.height / 2;
+                        const prevContentRect = prevColumnContent.getBoundingClientRect();
+
+                        // Calculate parent's position within its column's content
+                        const parentOffsetInColumn = parentRect.top - prevContentRect.top;
+                        const parentCenter = parentOffsetInColumn + parentRect.height / 2;
 
                         // Estimate the height of all items (roughly 60px per item including margins)
                         const estimatedItemHeight = 60;
                         const totalItemsHeight = nodes.length * estimatedItemHeight;
 
                         // Calculate the top position needed to center items around parent
-                        const containerRect = container.getBoundingClientRect();
-                        const headerHeight = 40; // Approximate header height
-                        const targetTop = parentCenter - containerRect.top - headerHeight - (totalItemsHeight / 2);
-
-                        // Apply padding-top to center the items (but don't go negative)
-                        if (targetTop > 0) {
-                            content.style.paddingTop = `${targetTop}px`;
-                        }
+                        const targetTop = Math.max(minPadding, parentCenter - (totalItemsHeight / 2));
+                        content.style.paddingTop = `${targetTop}px`;
                     }
                 }
+            } else {
+                // No special centering, but still apply minimum padding for all columns
+                content.style.paddingTop = `${minPadding}px`;
             }
 
             // Calculate max transitive dependencies for bar sizing (entire subtree)
@@ -3787,6 +4020,7 @@
 
             // Clear expanded view flag when doing normal navigation
             isExpandedView = false;
+            absoluteCenterLine = null;
 
             // ALWAYS save current state to history before any state change
             // This captures every single click in explore mode
@@ -5135,6 +5369,38 @@
 
             if (!currentBomRef) return;
 
+            // Calculate the absolute center line from the focused element
+            // We need to find what paddingTop was used for this element's column
+            // and use that same value for all subsequent columns
+            if (focusedNodeElement) {
+                const currentColumn = columns[currentColumnIndex];
+                if (currentColumn) {
+                    const columnContent = currentColumn.element.querySelector('.column-content');
+                    const currentPaddingTop = parseFloat(columnContent.style.paddingTop) || 0;
+
+                    // Get the focused element's position within its column's node list
+                    const itemIndex = parseInt(focusedNodeElement.dataset.itemIndex);
+
+                    // Calculate where the center of this item is relative to the column content start
+                    // Each item is roughly 60px tall
+                    const estimatedItemHeight = 60;
+                    const itemOffsetFromContentStart = itemIndex * estimatedItemHeight;
+                    const itemCenterFromContentStart = itemOffsetFromContentStart + estimatedItemHeight / 2;
+
+                    // The absolute center line is: existing padding + position within items
+                    absoluteCenterLine = currentPaddingTop + itemCenterFromContentStart;
+
+                    // Ensure there's enough space for centering by adding padding to current column if needed
+                    // We need at least 600px (10 items worth) of space above the center line for proper centering
+                    const minSpaceAbove = 600;
+                    if (absoluteCenterLine < minSpaceAbove) {
+                        const additionalPadding = minSpaceAbove - absoluteCenterLine;
+                        columnContent.style.paddingTop = `${currentPaddingTop + additionalPadding}px`;
+                        absoluteCenterLine = minSpaceAbove;
+                    }
+                }
+            }
+
             // Remove any columns after the current selection
             while (columns.length > currentColumnIndex + 1) {
                 const removed = columns.pop();
@@ -5156,6 +5422,9 @@
             const visited = new Set([currentBomRef]);
             let depth = 1;
             const maxDepth = 20; // Safety limit
+
+            // Track parent positions for centering
+            let parentNodesForLevel = new Set([currentBomRef]);
 
             while (currentLevel.size > 0 && depth < maxDepth) {
                 const nextLevel = new Set();
@@ -5183,14 +5452,20 @@
 
                 // Add column for this level if there are nodes
                 if (nodesForThisLevel.size > 0) {
-                    addColumn(Array.from(nodesForThisLevel), `Level ${depth}`);
+                    // Pass the current level nodes as parents for multi-parent centering
+                    addColumnWithMultipleParents(Array.from(nodesForThisLevel), `Level ${depth}`, Array.from(parentNodesForLevel));
                 }
 
                 currentLevel = nextLevel;
+                // For the next iteration, ALL nodes in this level become potential parents
+                parentNodesForLevel = nodesForThisLevel;
                 depth++;
             }
 
             drawConnectors();
+
+            // Clear the absolute center line after expansion is complete
+            absoluteCenterLine = null;
         }
 
         // Expand entire tree from all root nodes
