@@ -1174,6 +1174,48 @@
             background: #005a9e;
         }
 
+        .unified-input-container {
+            display: flex;
+            gap: 4px;
+            width: 100%;
+            max-width: 700px;
+        }
+
+        .unified-input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 14px;
+            outline: none;
+        }
+
+        .unified-input:focus {
+            border-color: #0078d4;
+            box-shadow: 0 0 0 2px rgba(0, 120, 212, 0.1);
+        }
+
+        .file-browse-btn {
+            padding: 10px 14px;
+            background: #f3f3f3;
+            color: #333;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            white-space: nowrap;
+        }
+
+        .file-browse-btn:hover {
+            background: #e6e6e6;
+            border-color: #0078d4;
+        }
+
+        .file-browse-btn:active {
+            background: #d9d9d9;
+        }
+
         .url-error {
             color: #d13438;
             font-size: 12px;
@@ -1866,16 +1908,13 @@
                         <div class="hero-card">
                             <h1 style="font-size: 28px; font-weight: 600; color: #0078d4; margin: 0 0 24px 0;">Welcome to Deptrast SBOM Explorer</h1>
                             <h2>New Analysis</h2>
-                            <p>Choose a file or paste a URL to begin exploring dependencies</p>
-                            <div class="action-row">
-                                <button onclick="document.getElementById('fileInput').click()" class="primary-action-btn">
-                                    📂 Choose SBOM File
+                            <p>Enter a file:// or https:// URL, or click 📂 to browse files</p>
+                            <div class="unified-input-container">
+                                <input type="text" id="urlInput" placeholder="file:///path/to/sbom.json  or  https://example.com/sbom.json" class="unified-input" onkeypress="if(event.key==='Enter') loadFromUrl()">
+                                <button onclick="document.getElementById('fileInput').click()" class="file-browse-btn" title="Browse for local file">
+                                    📂
                                 </button>
-                                <span class="action-divider">or</span>
-                                <div class="url-input-group">
-                                    <input type="text" id="urlInput" placeholder="Paste SBOM URL (https://...)" class="url-input" onkeypress="if(event.key==='Enter') loadFromUrl()">
-                                    <button onclick="loadFromUrl()" class="url-open-btn">Open</button>
-                                </div>
+                                <button onclick="loadFromUrl()" class="url-open-btn">Open</button>
                             </div>
                             <div id="urlError" class="url-error"></div>
                         </div>
