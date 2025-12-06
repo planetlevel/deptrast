@@ -496,7 +496,7 @@
             padding: 0;
             display: flex;
             flex-direction: column;
-            justify-content: safe center;
+            justify-content: flex-start;
             align-items: stretch;
         }
 
@@ -1025,6 +1025,7 @@
         .accordion-subcontent {
             display: none;
             background: #fafafa;
+            padding-left: 16px;
         }
 
         .accordion-subcontent.open {
@@ -1454,19 +1455,19 @@
                                     <!-- Security Tools -->
                                     <div class="accordion-subsection">
                                         <div class="accordion-subheader" onclick="toggleAccordion(this)">
-                                            <span>🔒 Security & Analysis</span>
+                                            <span>Security & Analysis</span>
                                             <span class="accordion-icon">▶</span>
                                         </div>
                                         <div class="accordion-subcontent">
                                             <a href="#" onclick="event.preventDefault(); loadFromUrl('https://raw.githubusercontent.com/anchore/sbom-examples/main/results/docker.io_anchore_grype%3Alatest/sbom/cyclonedx.json')" class="accordion-link">
                                                 <div style="display: flex; align-items: center; gap: 6px;">
-                                                    <span>🔗</span>
+                                                    <span>🌐</span>
                                                     <span style="flex: 1;">Grype</span>
                                                 </div>
                                             </a>
                                             <a href="#" onclick="event.preventDefault(); loadFromUrl('https://raw.githubusercontent.com/anchore/sbom-examples/main/results/docker.io_anchore_syft%3Alatest/sbom/cyclonedx.json')" class="accordion-link">
                                                 <div style="display: flex; align-items: center; gap: 6px;">
-                                                    <span>🔗</span>
+                                                    <span>🌐</span>
                                                     <span style="flex: 1;">Syft</span>
                                                 </div>
                                             </a>
@@ -1476,67 +1477,67 @@
                                     <!-- Linux -->
                                     <div class="accordion-subsection">
                                         <div class="accordion-subheader" onclick="toggleAccordion(this)">
-                                            <span>🐧 Linux Distributions</span>
+                                            <span>Linux Distributions</span>
                                             <span class="accordion-icon">▶</span>
                                         </div>
                                         <div class="accordion-subcontent">
                                             <a href="#" onclick="event.preventDefault(); loadFromUrl('https://raw.githubusercontent.com/anchore/sbom-examples/main/results/docker.io_library_ubuntu%3Alatest/sbom/cyclonedx.json')" class="accordion-link">
                                                 <div style="display: flex; align-items: center; gap: 6px;">
-                                                    <span>🔗</span>
+                                                    <span>🌐</span>
                                                     <span style="flex: 1;">Ubuntu</span>
                                                 </div>
                                             </a>
                                             <a href="#" onclick="event.preventDefault(); loadFromUrl('https://raw.githubusercontent.com/anchore/sbom-examples/main/results/docker.io_library_debian%3Alatest/sbom/cyclonedx.json')" class="accordion-link">
                                                 <div style="display: flex; align-items: center; gap: 6px;">
-                                                    <span>🔗</span>
+                                                    <span>🌐</span>
                                                     <span style="flex: 1;">Debian</span>
                                                 </div>
                                             </a>
                                             <a href="#" onclick="event.preventDefault(); loadFromUrl('https://raw.githubusercontent.com/anchore/sbom-examples/main/results/docker.io_library_alpine%3Alatest/sbom/cyclonedx.json')" class="accordion-link">
                                                 <div style="display: flex; align-items: center; gap: 6px;">
-                                                    <span>🔗</span>
+                                                    <span>🌐</span>
                                                     <span style="flex: 1;">Alpine</span>
                                                 </div>
                                             </a>
                                             <a href="#" onclick="event.preventDefault(); loadFromUrl('https://raw.githubusercontent.com/anchore/sbom-examples/main/results/docker.io_library_fedora%3Alatest/sbom/cyclonedx.json')" class="accordion-link">
                                                 <div style="display: flex; align-items: center; gap: 6px;">
-                                                    <span>🔗</span>
+                                                    <span>🌐</span>
                                                     <span style="flex: 1;">Fedora</span>
                                                 </div>
                                             </a>
                                             <a href="#" onclick="event.preventDefault(); loadFromUrl('https://raw.githubusercontent.com/anchore/sbom-examples/main/results/docker.io_library_centos%3Alatest/sbom/cyclonedx.json')" class="accordion-link">
                                                 <div style="display: flex; align-items: center; gap: 6px;">
-                                                    <span>🔗</span>
+                                                    <span>🌐</span>
                                                     <span style="flex: 1;">CentOS</span>
                                                 </div>
                                             </a>
                                             <a href="#" onclick="event.preventDefault(); loadFromUrl('https://raw.githubusercontent.com/anchore/sbom-examples/main/results/docker.io_library_rockylinux%3A9/sbom/cyclonedx.json')" class="accordion-link">
                                                 <div style="display: flex; align-items: center; gap: 6px;">
-                                                    <span>🔗</span>
+                                                    <span>🌐</span>
                                                     <span style="flex: 1;">Rocky Linux</span>
                                                 </div>
                                             </a>
                                             <a href="#" onclick="event.preventDefault(); loadFromUrl('https://raw.githubusercontent.com/anchore/sbom-examples/main/results/docker.io_library_almalinux%3Alatest/sbom/cyclonedx.json')" class="accordion-link">
                                                 <div style="display: flex; align-items: center; gap: 6px;">
-                                                    <span>🔗</span>
+                                                    <span>🌐</span>
                                                     <span style="flex: 1;">AlmaLinux</span>
                                                 </div>
                                             </a>
                                             <a href="#" onclick="event.preventDefault(); loadFromUrl('https://raw.githubusercontent.com/anchore/sbom-examples/main/results/docker.io_library_archlinux%3Alatest/sbom/cyclonedx.json')" class="accordion-link">
                                                 <div style="display: flex; align-items: center; gap: 6px;">
-                                                    <span>🔗</span>
+                                                    <span>🌐</span>
                                                     <span style="flex: 1;">Arch Linux</span>
                                                 </div>
                                             </a>
                                             <a href="#" onclick="event.preventDefault(); loadFromUrl('https://raw.githubusercontent.com/anchore/sbom-examples/main/results/docker.io_library_amazonlinux%3Alatest/sbom/cyclonedx.json')" class="accordion-link">
                                                 <div style="display: flex; align-items: center; gap: 6px;">
-                                                    <span>🔗</span>
+                                                    <span>🌐</span>
                                                     <span style="flex: 1;">Amazon Linux</span>
                                                 </div>
                                             </a>
                                             <a href="#" onclick="event.preventDefault(); loadFromUrl('https://raw.githubusercontent.com/anchore/sbom-examples/main/results/docker.io_opensuse_leap%3Alatest/sbom/cyclonedx.json')" class="accordion-link">
                                                 <div style="display: flex; align-items: center; gap: 6px;">
-                                                    <span>🔗</span>
+                                                    <span>🌐</span>
                                                     <span style="flex: 1;">OpenSUSE Leap</span>
                                                 </div>
                                             </a>
@@ -1546,55 +1547,55 @@
                                     <!-- Databases -->
                                     <div class="accordion-subsection">
                                         <div class="accordion-subheader" onclick="toggleAccordion(this)">
-                                            <span>🗄️ Databases</span>
+                                            <span>Databases</span>
                                             <span class="accordion-icon">▶</span>
                                         </div>
                                         <div class="accordion-subcontent">
                                             <a href="#" onclick="event.preventDefault(); loadFromUrl('https://raw.githubusercontent.com/anchore/sbom-examples/main/results/docker.io_library_postgres%3Alatest/sbom/cyclonedx.json')" class="accordion-link">
                                                 <div style="display: flex; align-items: center; gap: 6px;">
-                                                    <span>🔗</span>
+                                                    <span>🌐</span>
                                                     <span style="flex: 1;">PostgreSQL</span>
                                                 </div>
                                             </a>
                                             <a href="#" onclick="event.preventDefault(); loadFromUrl('https://raw.githubusercontent.com/anchore/sbom-examples/main/results/docker.io_library_mysql%3Alatest/sbom/cyclonedx.json')" class="accordion-link">
                                                 <div style="display: flex; align-items: center; gap: 6px;">
-                                                    <span>🔗</span>
+                                                    <span>🌐</span>
                                                     <span style="flex: 1;">MySQL</span>
                                                 </div>
                                             </a>
                                             <a href="#" onclick="event.preventDefault(); loadFromUrl('https://raw.githubusercontent.com/anchore/sbom-examples/main/results/docker.io_library_mariadb%3Alatest/sbom/cyclonedx.json')" class="accordion-link">
                                                 <div style="display: flex; align-items: center; gap: 6px;">
-                                                    <span>🔗</span>
+                                                    <span>🌐</span>
                                                     <span style="flex: 1;">MariaDB</span>
                                                 </div>
                                             </a>
                                             <a href="#" onclick="event.preventDefault(); loadFromUrl('https://raw.githubusercontent.com/anchore/sbom-examples/main/results/docker.io_library_mongo%3Alatest/sbom/cyclonedx.json')" class="accordion-link">
                                                 <div style="display: flex; align-items: center; gap: 6px;">
-                                                    <span>🔗</span>
+                                                    <span>🌐</span>
                                                     <span style="flex: 1;">MongoDB</span>
                                                 </div>
                                             </a>
                                             <a href="#" onclick="event.preventDefault(); loadFromUrl('https://raw.githubusercontent.com/anchore/sbom-examples/main/results/docker.io_library_redis%3Alatest/sbom/cyclonedx.json')" class="accordion-link">
                                                 <div style="display: flex; align-items: center; gap: 6px;">
-                                                    <span>🔗</span>
+                                                    <span>🌐</span>
                                                     <span style="flex: 1;">Redis</span>
                                                 </div>
                                             </a>
                                             <a href="#" onclick="event.preventDefault(); loadFromUrl('https://raw.githubusercontent.com/anchore/sbom-examples/main/results/docker.io_library_cassandra%3Alatest/sbom/cyclonedx.json')" class="accordion-link">
                                                 <div style="display: flex; align-items: center; gap: 6px;">
-                                                    <span>🔗</span>
+                                                    <span>🌐</span>
                                                     <span style="flex: 1;">Cassandra</span>
                                                 </div>
                                             </a>
                                             <a href="#" onclick="event.preventDefault(); loadFromUrl('https://raw.githubusercontent.com/anchore/sbom-examples/main/results/docker.io_library_neo4j%3Alatest/sbom/cyclonedx.json')" class="accordion-link">
                                                 <div style="display: flex; align-items: center; gap: 6px;">
-                                                    <span>🔗</span>
+                                                    <span>🌐</span>
                                                     <span style="flex: 1;">Neo4j</span>
                                                 </div>
                                             </a>
                                             <a href="#" onclick="event.preventDefault(); loadFromUrl('https://raw.githubusercontent.com/anchore/sbom-examples/main/results/docker.io_library_influxdb%3Alatest/sbom/cyclonedx.json')" class="accordion-link">
                                                 <div style="display: flex; align-items: center; gap: 6px;">
-                                                    <span>🔗</span>
+                                                    <span>🌐</span>
                                                     <span style="flex: 1;">InfluxDB</span>
                                                 </div>
                                             </a>
@@ -1604,43 +1605,43 @@
                                     <!-- Web Servers -->
                                     <div class="accordion-subsection">
                                         <div class="accordion-subheader" onclick="toggleAccordion(this)">
-                                            <span>🌐 Web Servers</span>
+                                            <span>Web Servers</span>
                                             <span class="accordion-icon">▶</span>
                                         </div>
                                         <div class="accordion-subcontent">
                                             <a href="#" onclick="event.preventDefault(); loadFromUrl('https://raw.githubusercontent.com/anchore/sbom-examples/main/results/docker.io_library_nginx%3Alatest/sbom/cyclonedx.json')" class="accordion-link">
                                                 <div style="display: flex; align-items: center; gap: 6px;">
-                                                    <span>🔗</span>
+                                                    <span>🌐</span>
                                                     <span style="flex: 1;">Nginx</span>
                                                 </div>
                                             </a>
                                             <a href="#" onclick="event.preventDefault(); loadFromUrl('https://raw.githubusercontent.com/anchore/sbom-examples/main/results/docker.io_library_httpd%3Alatest/sbom/cyclonedx.json')" class="accordion-link">
                                                 <div style="display: flex; align-items: center; gap: 6px;">
-                                                    <span>🔗</span>
+                                                    <span>🌐</span>
                                                     <span style="flex: 1;">Apache HTTP</span>
                                                 </div>
                                             </a>
                                             <a href="#" onclick="event.preventDefault(); loadFromUrl('https://raw.githubusercontent.com/anchore/sbom-examples/main/results/docker.io_library_tomcat%3Alatest/sbom/cyclonedx.json')" class="accordion-link">
                                                 <div style="display: flex; align-items: center; gap: 6px;">
-                                                    <span>🔗</span>
+                                                    <span>🌐</span>
                                                     <span style="flex: 1;">Tomcat</span>
                                                 </div>
                                             </a>
                                             <a href="#" onclick="event.preventDefault(); loadFromUrl('https://raw.githubusercontent.com/anchore/sbom-examples/main/results/docker.io_library_caddy%3Alatest/sbom/cyclonedx.json')" class="accordion-link">
                                                 <div style="display: flex; align-items: center; gap: 6px;">
-                                                    <span>🔗</span>
+                                                    <span>🌐</span>
                                                     <span style="flex: 1;">Caddy</span>
                                                 </div>
                                             </a>
                                             <a href="#" onclick="event.preventDefault(); loadFromUrl('https://raw.githubusercontent.com/anchore/sbom-examples/main/results/docker.io_library_haproxy%3Alatest/sbom/cyclonedx.json')" class="accordion-link">
                                                 <div style="display: flex; align-items: center; gap: 6px;">
-                                                    <span>🔗</span>
+                                                    <span>🌐</span>
                                                     <span style="flex: 1;">HAProxy</span>
                                                 </div>
                                             </a>
                                             <a href="#" onclick="event.preventDefault(); loadFromUrl('https://raw.githubusercontent.com/anchore/sbom-examples/main/results/docker.io_library_traefik%3Alatest/sbom/cyclonedx.json')" class="accordion-link">
                                                 <div style="display: flex; align-items: center; gap: 6px;">
-                                                    <span>🔗</span>
+                                                    <span>🌐</span>
                                                     <span style="flex: 1;">Traefik</span>
                                                 </div>
                                             </a>
@@ -1650,25 +1651,25 @@
                                     <!-- Languages - Java -->
                                     <div class="accordion-subsection">
                                         <div class="accordion-subheader" onclick="toggleAccordion(this)">
-                                            <span>☕ Java</span>
+                                            <span>Java</span>
                                             <span class="accordion-icon">▶</span>
                                         </div>
                                         <div class="accordion-subcontent">
                                             <a href="#" onclick="event.preventDefault(); loadFromUrl('https://raw.githubusercontent.com/anchore/sbom-examples/main/results/docker.io_library_openjdk%3Alatest/sbom/cyclonedx.json')" class="accordion-link">
                                                 <div style="display: flex; align-items: center; gap: 6px;">
-                                                    <span>🔗</span>
+                                                    <span>🌐</span>
                                                     <span style="flex: 1;">OpenJDK</span>
                                                 </div>
                                             </a>
                                             <a href="#" onclick="event.preventDefault(); loadFromUrl('https://raw.githubusercontent.com/anchore/sbom-examples/main/results/docker.io_library_eclipse-temurin%3Alatest/sbom/cyclonedx.json')" class="accordion-link">
                                                 <div style="display: flex; align-items: center; gap: 6px;">
-                                                    <span>🔗</span>
+                                                    <span>🌐</span>
                                                     <span style="flex: 1;">Eclipse Temurin</span>
                                                 </div>
                                             </a>
                                             <a href="#" onclick="event.preventDefault(); loadFromUrl('https://raw.githubusercontent.com/anchore/sbom-examples/main/results/docker.io_library_amazoncorretto%3Alatest/sbom/cyclonedx.json')" class="accordion-link">
                                                 <div style="display: flex; align-items: center; gap: 6px;">
-                                                    <span>🔗</span>
+                                                    <span>🌐</span>
                                                     <span style="flex: 1;">Amazon Corretto</span>
                                                 </div>
                                             </a>
@@ -1678,13 +1679,13 @@
                                     <!-- Languages - JavaScript -->
                                     <div class="accordion-subsection">
                                         <div class="accordion-subheader" onclick="toggleAccordion(this)">
-                                            <span>📜 JavaScript</span>
+                                            <span>JavaScript</span>
                                             <span class="accordion-icon">▶</span>
                                         </div>
                                         <div class="accordion-subcontent">
                                             <a href="#" onclick="event.preventDefault(); loadFromUrl('https://raw.githubusercontent.com/anchore/sbom-examples/main/results/docker.io_library_node%3Alatest/sbom/cyclonedx.json')" class="accordion-link">
                                                 <div style="display: flex; align-items: center; gap: 6px;">
-                                                    <span>🔗</span>
+                                                    <span>🌐</span>
                                                     <span style="flex: 1;">Node.js</span>
                                                 </div>
                                             </a>
@@ -1694,19 +1695,19 @@
                                     <!-- Languages - Python -->
                                     <div class="accordion-subsection">
                                         <div class="accordion-subheader" onclick="toggleAccordion(this)">
-                                            <span>🐍 Python</span>
+                                            <span>Python</span>
                                             <span class="accordion-icon">▶</span>
                                         </div>
                                         <div class="accordion-subcontent">
                                             <a href="#" onclick="event.preventDefault(); loadFromUrl('https://raw.githubusercontent.com/anchore/sbom-examples/main/results/docker.io_library_python%3Alatest/sbom/cyclonedx.json')" class="accordion-link">
                                                 <div style="display: flex; align-items: center; gap: 6px;">
-                                                    <span>🔗</span>
+                                                    <span>🌐</span>
                                                     <span style="flex: 1;">Python</span>
                                                 </div>
                                             </a>
                                             <a href="#" onclick="event.preventDefault(); loadFromUrl('https://raw.githubusercontent.com/anchore/sbom-examples/main/results/docker.io_library_pypy%3Alatest/sbom/cyclonedx.json')" class="accordion-link">
                                                 <div style="display: flex; align-items: center; gap: 6px;">
-                                                    <span>🔗</span>
+                                                    <span>🌐</span>
                                                     <span style="flex: 1;">PyPy</span>
                                                 </div>
                                             </a>
@@ -1716,37 +1717,37 @@
                                     <!-- Languages - Other -->
                                     <div class="accordion-subsection">
                                         <div class="accordion-subheader" onclick="toggleAccordion(this)">
-                                            <span>💻 Other Languages</span>
+                                            <span>Other Languages</span>
                                             <span class="accordion-icon">▶</span>
                                         </div>
                                         <div class="accordion-subcontent">
                                             <a href="#" onclick="event.preventDefault(); loadFromUrl('https://raw.githubusercontent.com/anchore/sbom-examples/main/results/docker.io_library_golang%3Alatest/sbom/cyclonedx.json')" class="accordion-link">
                                                 <div style="display: flex; align-items: center; gap: 6px;">
-                                                    <span>🔗</span>
+                                                    <span>🌐</span>
                                                     <span style="flex: 1;">Go</span>
                                                 </div>
                                             </a>
                                             <a href="#" onclick="event.preventDefault(); loadFromUrl('https://raw.githubusercontent.com/anchore/sbom-examples/main/results/docker.io_library_rust%3Alatest/sbom/cyclonedx.json')" class="accordion-link">
                                                 <div style="display: flex; align-items: center; gap: 6px;">
-                                                    <span>🔗</span>
+                                                    <span>🌐</span>
                                                     <span style="flex: 1;">Rust</span>
                                                 </div>
                                             </a>
                                             <a href="#" onclick="event.preventDefault(); loadFromUrl('https://raw.githubusercontent.com/anchore/sbom-examples/main/results/docker.io_library_ruby%3Alatest/sbom/cyclonedx.json')" class="accordion-link">
                                                 <div style="display: flex; align-items: center; gap: 6px;">
-                                                    <span>🔗</span>
+                                                    <span>🌐</span>
                                                     <span style="flex: 1;">Ruby</span>
                                                 </div>
                                             </a>
                                             <a href="#" onclick="event.preventDefault(); loadFromUrl('https://raw.githubusercontent.com/anchore/sbom-examples/main/results/docker.io_library_php%3Alatest/sbom/cyclonedx.json')" class="accordion-link">
                                                 <div style="display: flex; align-items: center; gap: 6px;">
-                                                    <span>🔗</span>
+                                                    <span>🌐</span>
                                                     <span style="flex: 1;">PHP</span>
                                                 </div>
                                             </a>
                                             <a href="#" onclick="event.preventDefault(); loadFromUrl('https://raw.githubusercontent.com/anchore/sbom-examples/main/results/docker.io_library_perl%3Alatest/sbom/cyclonedx.json')" class="accordion-link">
                                                 <div style="display: flex; align-items: center; gap: 6px;">
-                                                    <span>🔗</span>
+                                                    <span>🌐</span>
                                                     <span style="flex: 1;">Perl</span>
                                                 </div>
                                             </a>
@@ -1756,31 +1757,31 @@
                                     <!-- CMS -->
                                     <div class="accordion-subsection">
                                         <div class="accordion-subheader" onclick="toggleAccordion(this)">
-                                            <span>📝 Content Management</span>
+                                            <span>Content Management</span>
                                             <span class="accordion-icon">▶</span>
                                         </div>
                                         <div class="accordion-subcontent">
                                             <a href="#" onclick="event.preventDefault(); loadFromUrl('https://raw.githubusercontent.com/anchore/sbom-examples/main/results/docker.io_library_wordpress%3Alatest/sbom/cyclonedx.json')" class="accordion-link">
                                                 <div style="display: flex; align-items: center; gap: 6px;">
-                                                    <span>🔗</span>
+                                                    <span>🌐</span>
                                                     <span style="flex: 1;">WordPress</span>
                                                 </div>
                                             </a>
                                             <a href="#" onclick="event.preventDefault(); loadFromUrl('https://raw.githubusercontent.com/anchore/sbom-examples/main/results/docker.io_library_drupal%3Alatest/sbom/cyclonedx.json')" class="accordion-link">
                                                 <div style="display: flex; align-items: center; gap: 6px;">
-                                                    <span>🔗</span>
+                                                    <span>🌐</span>
                                                     <span style="flex: 1;">Drupal</span>
                                                 </div>
                                             </a>
                                             <a href="#" onclick="event.preventDefault(); loadFromUrl('https://raw.githubusercontent.com/anchore/sbom-examples/main/results/docker.io_library_joomla%3Alatest/sbom/cyclonedx.json')" class="accordion-link">
                                                 <div style="display: flex; align-items: center; gap: 6px;">
-                                                    <span>🔗</span>
+                                                    <span>🌐</span>
                                                     <span style="flex: 1;">Joomla</span>
                                                 </div>
                                             </a>
                                             <a href="#" onclick="event.preventDefault(); loadFromUrl('https://raw.githubusercontent.com/anchore/sbom-examples/main/results/docker.io_library_ghost%3Alatest/sbom/cyclonedx.json')" class="accordion-link">
                                                 <div style="display: flex; align-items: center; gap: 6px;">
-                                                    <span>🔗</span>
+                                                    <span>🌐</span>
                                                     <span style="flex: 1;">Ghost</span>
                                                 </div>
                                             </a>
@@ -1790,19 +1791,19 @@
                                     <!-- CI/CD -->
                                     <div class="accordion-subsection">
                                         <div class="accordion-subheader" onclick="toggleAccordion(this)">
-                                            <span>🔧 CI/CD & DevOps</span>
+                                            <span>CI/CD & DevOps</span>
                                             <span class="accordion-icon">▶</span>
                                         </div>
                                         <div class="accordion-subcontent">
                                             <a href="#" onclick="event.preventDefault(); loadFromUrl('https://raw.githubusercontent.com/anchore/sbom-examples/main/results/docker.io_library_docker%3Alatest/sbom/cyclonedx.json')" class="accordion-link">
                                                 <div style="display: flex; align-items: center; gap: 6px;">
-                                                    <span>🔗</span>
+                                                    <span>🌐</span>
                                                     <span style="flex: 1;">Docker</span>
                                                 </div>
                                             </a>
                                             <a href="#" onclick="event.preventDefault(); loadFromUrl('https://raw.githubusercontent.com/anchore/sbom-examples/main/results/docker.io_library_jenkins%3A2.60.3/sbom/cyclonedx.json')" class="accordion-link">
                                                 <div style="display: flex; align-items: center; gap: 6px;">
-                                                    <span>🔗</span>
+                                                    <span>🌐</span>
                                                     <span style="flex: 1;">Jenkins</span>
                                                 </div>
                                             </a>
@@ -1819,25 +1820,6 @@
                                 </div>
                                 <div class="accordion-content">
                                     <div style="padding: 16px; font-size: 13px; line-height: 1.6; color: #333;">
-                                        <!-- Getting Started Section -->
-                                        <div style="margin-bottom: 20px;">
-                                            <h3 style="margin: 0 0 12px 0; font-size: 14px; font-weight: 600; color: #0078d4;">Getting Started</h3>
-                                            <div style="display: flex; flex-direction: column; gap: 8px;">
-                                                <div style="display: flex; align-items: start; gap: 10px;">
-                                                    <span style="color: #0078d4; font-size: 16px;">📂</span>
-                                                    <span style="flex: 1; color: #555;">Choose a file or paste a URL to begin</span>
-                                                </div>
-                                                <div style="display: flex; align-items: start; gap: 10px;">
-                                                    <span style="color: #0078d4; font-size: 16px;">🖼️</span>
-                                                    <span style="flex: 1; color: #555;">Browse examples from the Gallery</span>
-                                                </div>
-                                                <div style="display: flex; align-items: start; gap: 10px;">
-                                                    <span style="color: #0078d4; font-size: 16px;">⬇️</span>
-                                                    <span style="flex: 1; color: #555;">Drag & drop .json files anywhere</span>
-                                                </div>
-                                            </div>
-                                        </div>
-
                                         <!-- Keyboard Shortcuts Section -->
                                         <div style="margin-bottom: 20px;">
                                             <h3 style="margin: 0 0 12px 0; font-size: 14px; font-weight: 600; color: #0078d4;">Keyboard Shortcuts</h3>
@@ -1867,7 +1849,7 @@
 
                                         <!-- Documentation Link -->
                                         <div style="padding-top: 16px; border-top: 1px solid #e0e0e0;">
-                                            <a href="https://github.com/planetlevel/deptrast" target="_blank" style="display: inline-flex; align-items: center; gap: 6px; color: #0078d4; text-decoration: none; font-weight: 500; transition: opacity 0.15s ease;">
+                                            <a href="https://github.com/planetlevel/deptrast/blob/main/README.md" target="_blank" style="display: inline-flex; align-items: center; gap: 6px; color: #0078d4; text-decoration: none; font-weight: 500; transition: opacity 0.15s ease;">
                                                 <span>📖</span>
                                                 <span>View Documentation</span>
                                                 <span style="font-size: 10px;">→</span>
@@ -1906,17 +1888,21 @@
 
                         <!-- Hero Card - Primary Action -->
                         <div class="hero-card">
-                            <h1 style="font-size: 28px; font-weight: 600; color: #0078d4; margin: 0 0 24px 0;">Welcome to Deptrast SBOM Explorer</h1>
-                            <h2>New Analysis</h2>
+                            <h2>Get started...</h2>
                             <p>Enter a file:// or https:// URL, or click 📂 to browse files</p>
                             <div class="unified-input-container">
-                                <input type="text" id="urlInput" placeholder="file:///path/to/sbom.json  or  https://example.com/sbom.json" class="unified-input" onkeypress="if(event.key==='Enter') loadFromUrl()">
+                                <input type="text" id="urlInput" placeholder="Enter URL" class="unified-input" onkeypress="if(event.key==='Enter') loadFromUrl()">
                                 <button onclick="document.getElementById('fileInput').click()" class="file-browse-btn" title="Browse for local file">
                                     📂
                                 </button>
                                 <button onclick="loadFromUrl()" class="url-open-btn">Open</button>
                             </div>
                             <div id="urlError" class="url-error"></div>
+                        </div>
+
+                        <!-- Example visualization image -->
+                        <div style="margin-top: 32px;">
+                            <img src="deptrast-sbom.png" alt="Interactive SBOM Visualization" style="width: 100%; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
                         </div>
 
                         <!-- Hidden container for legacy code -->
@@ -2354,14 +2340,14 @@
 
             const params = new URLSearchParams();
 
-            // Add SBOM URL if loaded from URL or file
+            // Add SBOM URL if loaded from URL (http or file with full path)
             if (currentFileName && (currentFileName.startsWith('http') || currentFileName.startsWith('file:'))) {
                 console.log('  ✅ Adding url parameter:', currentFileName);
                 params.set('url', currentFileName);
             } else if (currentFileName) {
-                // Local file without file: protocol - construct file: URL
-                console.log('  ✅ Adding url parameter as file: URL:', currentFileName);
-                params.set('url', `file:///${currentFileName}`);
+                // Local file loaded via file chooser - we don't have the full path
+                console.log('  ⚠️  NOT adding url parameter. File loaded via chooser:', currentFileName);
+                console.log('     Reason: Browser security prevents access to full file path');
             } else {
                 console.log('  ❌ NOT adding url parameter. currentFileName:', currentFileName);
                 console.log('     Reason: currentFileName is falsy');
@@ -2407,9 +2393,17 @@
             document.getElementById('shareUrlInput').value = shareUrl;
             document.getElementById('shareCopyFeedback').textContent = '';
 
-            // Show warning if sharing a local file
-            const isLocalFile = currentFileName && !currentFileName.startsWith('http');
-            document.getElementById('shareFileWarning').style.display = isLocalFile ? 'block' : 'none';
+            // Show warning if file was loaded via chooser/drag-drop (no full path available)
+            const isLocalFileWithoutPath = currentFileName && !currentFileName.startsWith('http') && !currentFileName.startsWith('file:');
+            document.getElementById('shareFileWarning').style.display = isLocalFileWithoutPath ? 'block' : 'none';
+
+            // Update warning text based on the situation
+            const warningEl = document.getElementById('shareFileWarning');
+            if (isLocalFileWithoutPath) {
+                warningEl.innerHTML = '⚠️ <strong>No File Path Available:</strong> This SBOM was loaded via file chooser or drag-and-drop. The share link will not include the file path. To create a shareable link with a file path, paste the full <code>file:///absolute/path/to/file.sbom</code> URL into the input field instead.';
+            } else if (currentFileName && currentFileName.startsWith('file:')) {
+                warningEl.innerHTML = '⚠️ <strong>Local File Warning:</strong> This SBOM was loaded from a local file. The share link will only work for people who have access to the same file path on their system or network.';
+            }
 
             document.getElementById('shareModal').style.display = 'flex';
 
@@ -3676,13 +3670,49 @@
 
                 const nameDiv = document.createElement('div');
                 nameDiv.className = 'node-name';
-                nameDiv.textContent = component?.name || purl.split('/').pop();
+                const artifactName = component?.name || purl.split('/').pop();
+                const version = component?.version || '';
+                if (version) {
+                    nameDiv.innerHTML = `<strong>${artifactName}</strong> <span class="node-version">${version}</span>`;
+                } else {
+                    nameDiv.innerHTML = `<strong>${artifactName}</strong>`;
+                }
                 item.appendChild(nameDiv);
 
-                const versionDiv = document.createElement('div');
-                versionDiv.className = 'node-version';
-                versionDiv.textContent = component?.version || '';
-                item.appendChild(versionDiv);
+                // Meta: dependency count with action buttons
+                const meta = document.createElement('div');
+                meta.className = 'node-meta';
+
+                const count = document.createElement('span');
+                const filteredDeps = filterNodesByScope(deps);
+                const allTransitive = collectAllTransitiveDeps(purl, new Set());
+                const transitiveCount = allTransitive.size;
+
+                count.className = filteredDeps.length > 0 ? 'node-count' : 'node-count no-deps';
+                if (filteredDeps.length > 0) {
+                    count.textContent = `${filteredDeps.length}:${transitiveCount}`;
+                } else {
+                    count.textContent = '0';
+                }
+                meta.appendChild(count);
+
+                // Add action buttons container
+                const actions = document.createElement('div');
+                actions.className = 'node-actions';
+
+                // Analyze button
+                const analyzeBtn = document.createElement('button');
+                analyzeBtn.className = 'node-action-btn';
+                analyzeBtn.innerHTML = '🔍';
+                analyzeBtn.title = 'Focus on this component';
+                analyzeBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    analyzeComponent(purl);
+                };
+                actions.appendChild(analyzeBtn);
+
+                meta.appendChild(actions);
+                item.appendChild(meta);
 
                 // Transitive count bar
                 if (maxDeps > 0) {
@@ -3779,9 +3809,6 @@
             const content = document.createElement('div');
             content.className = 'column-content';
 
-            // Minimum padding for all columns to ensure space for centering
-            const minPadding = 600;
-
             // If absoluteCenterLine is set, use it; otherwise use parent-relative centering
             if (absoluteCenterLine !== null && columnIndex > 0) {
                 // absoluteCenterLine is in container coordinates (viewport position)
@@ -3804,26 +3831,34 @@
                     const prevColumnContent = prevColumn.element.querySelector('.column-content');
 
                     if (parentElement && prevColumnContent) {
-                        // Get positions relative to the parent column's content area
+                        // Get parent's position INCLUDING the parent column's padding
                         const parentRect = parentElement.getBoundingClientRect();
-                        const prevContentRect = prevColumnContent.getBoundingClientRect();
+                        const parentCenter = parentRect.top + parentRect.height / 2;
 
-                        // Calculate parent's position within its column's content
-                        const parentOffsetInColumn = parentRect.top - prevContentRect.top;
-                        const parentCenter = parentOffsetInColumn + parentRect.height / 2;
+                        // Get the container's top position to calculate absolute positions
+                        const containerRect = container.getBoundingClientRect();
+
+                        // Calculate where the parent center is relative to container top (including scroll)
+                        const parentCenterRelativeToContainer = (parentCenter - containerRect.top) + container.scrollTop;
 
                         // Estimate the height of all items (roughly 60px per item including margins)
                         const estimatedItemHeight = 60;
                         const totalItemsHeight = nodes.length * estimatedItemHeight;
 
-                        // Calculate the top position needed to center items around parent
-                        const targetTop = Math.max(minPadding, parentCenter - (totalItemsHeight / 2));
+                        // Calculate padding needed to center our items around the parent
+                        // We want the vertical center of all our items to align with the parent's center
+                        const targetTop = Math.max(0, parentCenterRelativeToContainer - (totalItemsHeight / 2));
+
+                        console.log(`Column ${columnIndex}: parent=${parentPurl.substring(parentPurl.lastIndexOf('/')+1)}`);
+                        console.log(`  parentCenter screen=${parentCenter.toFixed(0)}, container-relative=${parentCenterRelativeToContainer.toFixed(0)}`);
+                        console.log(`  nodes=${nodes.length}, totalHeight=${totalItemsHeight}, targetTop=${targetTop.toFixed(0)}`);
+
                         content.style.paddingTop = `${targetTop}px`;
                     }
                 }
             } else {
-                // No special centering, but still apply minimum padding for all columns
-                content.style.paddingTop = `${minPadding}px`;
+                // First column - no special centering needed
+                content.style.paddingTop = '0px';
             }
 
             // Calculate max transitive dependencies for bar sizing (entire subtree)
@@ -4274,7 +4309,7 @@
             if (currentViewMode === 'app') {
                 // APP MODE: Draw arrows based on selectedPath OR all arrows if expanded all
 
-                if ((selectedPath.length === 0 || isExpandedView) && columns.length > 1) {
+                if (isExpandedView && columns.length > 1) {
                     // EXPANDED ALL MODE: Draw ALL arrows between adjacent columns
                     for (let colIdx = 0; colIdx < columns.length - 1; colIdx++) {
                         const fromColumn = columns[colIdx];
@@ -5177,45 +5212,79 @@
 
         function navigateLeft() {
             if (currentViewMode === 'app') {
-                // EXPLORE MODE: Go back (remove last column, return to previously selected item)
+                // EXPLORE MODE: Go back
+
+                // If in expanded view, just move focus left without changing columns
+                if (isExpandedView && focusedColumnIndex > 0) {
+                    const prevColumn = columns[focusedColumnIndex - 1];
+                    const nodes = prevColumn.element.querySelectorAll('.node-item');
+                    if (nodes.length > 0) {
+                        const middleIndex = Math.floor(nodes.length / 2);
+                        setKeyboardFocus(focusedColumnIndex - 1, middleIndex);
+                    }
+                    return;
+                }
+
+                // If in expanded view and at column 0, collapse everything
+                if (isExpandedView && focusedColumnIndex === 0) {
+                    collapseToRoot();
+                    return;
+                }
+
+                // Normal navigation: remove last column
                 if (columns.length > 1) {
-                    // Capture the current selection BEFORE removing it
+                    // Capture the current selection BEFORE removing it (for normal navigation)
                     const previousSelection = selectedPath.length > 0 ? selectedPath[selectedPath.length - 1] : null;
 
                     // Remove the last column
                     const lastColumn = columns.pop();
                     lastColumn.element.remove();
 
-                    // Also remove from selected path
-                    if (selectedPath.length > 0) {
+                    // Also remove from selected path (but only if it tracks this column)
+                    if (selectedPath.length > 0 && selectedPath.length >= columns.length) {
                         selectedPath.pop();
                     }
 
-                    // Update focus to the item we just came from
-                    if (previousSelection && columns.length > 0) {
-                        // Find the previously selected node in the current last column
-                        const lastColumn = columns[columns.length - 1];
-                        const nodes = lastColumn.element.querySelectorAll('.node-item');
+                    // Remember the original root before clearing (for focus restoration)
+                    const originalRoot = (columns.length === 1 && selectedPath.length > 0) ? selectedPath[0] : null;
 
+                    // If we're back to just the root column, clear flags and selected path
+                    if (columns.length === 1) {
+                        selectedPath = [];
+                        isExpandedView = false;
+                    }
+
+                    // Update focus in the now-last column
+                    const newLastColumn = columns[columns.length - 1];
+                    const nodes = newLastColumn.element.querySelectorAll('.node-item');
+
+                    if (nodes.length > 0) {
                         let found = false;
-                        nodes.forEach((node, idx) => {
-                            if (node.dataset.purl === previousSelection) {
-                                setKeyboardFocus(columns.length - 1, idx);
-                                found = true;
-                            }
-                        });
 
-                        // If not found (shouldn't happen), default to middle
+                        // Special case: if we're back at root and have the original root node, find it
+                        if (originalRoot) {
+                            nodes.forEach((node, idx) => {
+                                if (node.dataset.purl === originalRoot) {
+                                    setKeyboardFocus(0, idx);
+                                    found = true;
+                                }
+                            });
+                        }
+                        // Otherwise, try to find the previous selection in this column
+                        else if (previousSelection) {
+                            nodes.forEach((node, idx) => {
+                                if (node.dataset.purl === previousSelection) {
+                                    setKeyboardFocus(columns.length - 1, idx);
+                                    found = true;
+                                }
+                            });
+                        }
+
+                        // If still not found, focus on middle of the column
                         if (!found) {
                             const middleIndex = Math.floor(nodes.length / 2);
                             setKeyboardFocus(columns.length - 1, middleIndex);
                         }
-                    } else {
-                        // Back to root - focus middle item in first column
-                        const firstColumn = columns[0];
-                        const nodes = firstColumn.element.querySelectorAll('.node-item');
-                        const middleIndex = Math.floor(nodes.length / 2);
-                        setKeyboardFocus(0, middleIndex);
                     }
 
                     updateSelectionUI();
@@ -5255,7 +5324,18 @@
 
         function navigateRight() {
             if (currentViewMode === 'app') {
-                // EXPLORE MODE: Select focused node and expand (show its children in next column)
+                // If in expanded view, just move focus right without changing columns
+                if (isExpandedView && focusedColumnIndex < columns.length - 1) {
+                    const nextColumn = columns[focusedColumnIndex + 1];
+                    const nodes = nextColumn.element.querySelectorAll('.node-item');
+                    if (nodes.length > 0) {
+                        const middleIndex = Math.floor(nodes.length / 2);
+                        setKeyboardFocus(focusedColumnIndex + 1, middleIndex);
+                    }
+                    return;
+                }
+
+                // Normal navigation: select focused node and expand (show its children in next column)
                 if (focusedNodeElement) {
                     // Click the focused node to select and expand it
                     focusedNodeElement.click();
@@ -5308,8 +5388,8 @@
                 setTimeout(() => {
                     const firstColumn = columns[0];
                     const nodes = firstColumn.element.querySelectorAll('.node-item');
-                    const middleIndex = Math.floor(nodes.length / 2);
-                    setKeyboardFocus(0, middleIndex);
+                    // Start at the top (index 0) like a normal person
+                    setKeyboardFocus(0, 0);
                 }, 100);
             }
         }
@@ -5380,12 +5460,12 @@
                 e.preventDefault();
                 resetZoom();
             }
-            // Shift+Right: Expand entire tree from current node (explore mode only)
+            // Shift+Right: Expand entire tree from current node, then move to rightmost column (explore mode only)
             if (e.shiftKey && e.key === 'ArrowRight' && currentViewMode === 'app') {
                 e.preventDefault();
                 expandEntireTreeFromCurrent();
             }
-            // Shift+Left: Collapse everything and go back to leftmost column (explore mode only)
+            // Shift+Left: Collapse everything and return to root (explore mode only)
             if (e.shiftKey && e.key === 'ArrowLeft' && currentViewMode === 'app') {
                 e.preventDefault();
                 collapseToRoot();
@@ -5411,8 +5491,9 @@
             let currentColumnIndex = -1;
 
             if (focusedNodeElement) {
-                currentBomRef = focusedNodeElement.dataset.purl; // dataset still uses 'purl' attribute name
+                currentBomRef = focusedNodeElement.dataset.purl;
                 currentColumnIndex = parseInt(focusedNodeElement.dataset.columnIndex);
+
                 // Update selected path to match keyboard focus
                 selectedPath = selectedPath.slice(0, currentColumnIndex);
                 selectedPath.push(currentBomRef);
@@ -5421,35 +5502,12 @@
             if (!currentBomRef) return;
 
             // Calculate the absolute center line from the focused element
-            // We need to find what paddingTop was used for this element's column
-            // and use that same value for all subsequent columns
             if (focusedNodeElement) {
-                const currentColumn = columns[currentColumnIndex];
-                if (currentColumn) {
-                    const columnContent = currentColumn.element.querySelector('.column-content');
-                    const currentPaddingTop = parseFloat(columnContent.style.paddingTop) || 0;
-
-                    // Get the focused element's position within its column's node list
-                    const itemIndex = parseInt(focusedNodeElement.dataset.itemIndex);
-
-                    // Calculate where the center of this item is relative to the column content start
-                    // Each item is roughly 60px tall
-                    const estimatedItemHeight = 60;
-                    const itemOffsetFromContentStart = itemIndex * estimatedItemHeight;
-                    const itemCenterFromContentStart = itemOffsetFromContentStart + estimatedItemHeight / 2;
-
-                    // The absolute center line is: existing padding + position within items
-                    absoluteCenterLine = currentPaddingTop + itemCenterFromContentStart;
-
-                    // Ensure there's enough space for centering by adding padding to current column if needed
-                    // We need at least 600px (10 items worth) of space above the center line for proper centering
-                    const minSpaceAbove = 600;
-                    if (absoluteCenterLine < minSpaceAbove) {
-                        const additionalPadding = minSpaceAbove - absoluteCenterLine;
-                        columnContent.style.paddingTop = `${currentPaddingTop + additionalPadding}px`;
-                        absoluteCenterLine = minSpaceAbove;
-                    }
-                }
+                const container = document.getElementById('columnsContainer');
+                const focusedRect = focusedNodeElement.getBoundingClientRect();
+                const focusedCenter = focusedRect.top + focusedRect.height / 2;
+                const containerRect = container.getBoundingClientRect();
+                absoluteCenterLine = (focusedCenter - containerRect.top) + container.scrollTop;
             }
 
             // Remove any columns after the current selection
@@ -5468,47 +5526,36 @@
             isExpandedView = true;
 
             // Build complete tree level by level using BFS
-            // Track visited nodes to prevent infinite loops from cycles
             let currentLevel = new Set([currentBomRef]);
             const visited = new Set([currentBomRef]);
             let depth = 1;
             const maxDepth = 20; // Safety limit
 
-            // Track parent positions for centering
             let parentNodesForLevel = new Set([currentBomRef]);
 
             while (currentLevel.size > 0 && depth < maxDepth) {
                 const nextLevel = new Set();
                 const nodesForThisLevel = new Set();
 
-                // Collect all children for current level
                 currentLevel.forEach(bomRef => {
                     const deps = dependencyMap.get(bomRef) || [];
                     const filteredDeps = filterNodesByScope(deps);
 
                     filteredDeps.forEach(dep => {
-                        // Always add to this level's column (to show cycles)
                         nodesForThisLevel.add(dep);
 
-                        // Only traverse further if not yet visited (prevents infinite loops from cycles)
                         if (!visited.has(dep)) {
                             visited.add(dep);
                             nextLevel.add(dep);
-                        } else {
-                            // Mark as cyclic - this node was already visited
-                            cyclicNodes.add(dep);
                         }
                     });
                 });
 
-                // Add column for this level if there are nodes
                 if (nodesForThisLevel.size > 0) {
-                    // Pass the current level nodes as parents for multi-parent centering
                     addColumnWithMultipleParents(Array.from(nodesForThisLevel), `Level ${depth}`, Array.from(parentNodesForLevel));
                 }
 
                 currentLevel = nextLevel;
-                // For the next iteration, ALL nodes in this level become potential parents
                 parentNodesForLevel = nodesForThisLevel;
                 depth++;
             }
@@ -5517,6 +5564,16 @@
 
             // Clear the absolute center line after expansion is complete
             absoluteCenterLine = null;
+
+            // Move focus to the rightmost column (middle item)
+            if (columns.length > 0) {
+                const lastColumn = columns[columns.length - 1];
+                const nodes = lastColumn.element.querySelectorAll('.node-item');
+                if (nodes.length > 0) {
+                    const middleIndex = Math.floor(nodes.length / 2);
+                    setKeyboardFocus(columns.length - 1, middleIndex);
+                }
+            }
         }
 
         // Expand entire tree from all root nodes
@@ -5558,17 +5615,17 @@
                     const filteredDeps = filterNodesByScope(deps);
 
                     filteredDeps.forEach(dep => {
-                        // Always add to this level's column (to show cycles)
+                        // Always add to this level's column (to show all paths)
                         nodesForThisLevel.add(dep);
 
                         // Only traverse further if not yet visited (prevents infinite loops)
+                        // Note: Don't mark as cyclic here - in BFS expansion, seeing a node again
+                        // just means it's reachable through multiple paths, not a real cycle
                         if (!visited.has(dep)) {
                             visited.add(dep);
                             nextLevel.add(dep);
-                        } else {
-                            // Mark as cyclic - this node was already visited
-                            cyclicNodes.add(dep);
                         }
+                        // If already visited, just show it again but don't traverse further
                     });
                 });
 
@@ -5586,8 +5643,9 @@
             if (columns.length > 0) {
                 const firstColumn = columns[0];
                 const nodes = firstColumn.element.querySelectorAll('.node-item');
-                const middleIndex = Math.floor(nodes.length / 2);
-                setKeyboardFocus(0, middleIndex);
+                // Stay at current position (or 0 if invalid)
+                const targetIndex = Math.min(focusedNodeIndex, nodes.length - 1);
+                setKeyboardFocus(0, Math.max(0, targetIndex));
             }
         }
 
@@ -5610,11 +5668,13 @@
             // Clear selected path
             selectedPath = [];
 
-            // Focus on the originally selected item, or middle item if none
+            // Focus on the originally selected item, or stay at current position
             const firstColumn = columns[0];
             const nodes = firstColumn.element.querySelectorAll('.node-item');
 
-            let focusIndex = Math.floor(nodes.length / 2); // Default to middle
+            // Default to current position (or 0 if invalid)
+            let focusIndex = Math.min(focusedNodeIndex, nodes.length - 1);
+            focusIndex = Math.max(0, focusIndex);
 
             if (originalSelectedPurl) {
                 // Find the original node in the first column
