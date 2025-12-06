@@ -163,8 +163,9 @@ class DeptrastTest(unittest.TestCase):
                            "All components should have PURLs")
             self.assertEqual(stats["component_count"], stats["components_with_bom_ref"],
                            "All components should have bom-refs")
-            self.assertEqual(stats["component_count"], stats["dependency_count"],
-                           "Should have dependency entries for all components")
+            # Dependency count can be component_count + 1 due to root node
+            self.assertIn(stats["dependency_count"], [stats["component_count"], stats["component_count"] + 1],
+                         "Should have dependency entries for all components (or +1 for root)")
 
         finally:
             if os.path.exists(output_file):
@@ -662,7 +663,7 @@ class DeptrastTest(unittest.TestCase):
             self.assertEqual(py_result.returncode, 0)
 
             # Run Java version
-            java_cmd = ["java", "-jar", "target/deptrast-4.0.0.jar", "create",
+            java_cmd = ["java", "-jar", "target/deptrast-4.2.0.jar", "create",
                        str(self.flat_file), java_output]
             java_result = subprocess.run(java_cmd, capture_output=True, text=True,
                                         cwd=self.project_root)
