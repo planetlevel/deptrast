@@ -2713,9 +2713,9 @@
                 activeFilters.excluded = filters.includes('excluded');
 
                 // Update checkbox UI
-                document.getElementById('scopeRequired').checked = activeFilters.required;
-                document.getElementById('scopeOptional').checked = activeFilters.optional;
-                document.getElementById('scopeExcluded').checked = activeFilters.excluded;
+                document.getElementById('scopeRequiredRight').checked = activeFilters.required;
+                document.getElementById('scopeOptionalRight').checked = activeFilters.optional;
+                document.getElementById('scopeExcludedRight').checked = activeFilters.excluded;
             }
 
             // Check for path parameter (explore mode with navigation path)
@@ -2900,7 +2900,7 @@
             container.appendChild(appItem);
 
             // Check excluded filter state
-            const excludedCheckbox = document.getElementById('scopeExcluded');
+            const excludedCheckbox = document.getElementById('scopeExcludedRight');
             const showExcluded = excludedCheckbox ? excludedCheckbox.checked : false;
 
             // Helper function to get scope icon
@@ -4808,10 +4808,10 @@
         }
 
         function applyFilters() {
-            // Get current filter state
-            activeFilters.required = document.getElementById('scopeRequired').checked;
-            activeFilters.optional = document.getElementById('scopeOptional').checked;
-            activeFilters.excluded = document.getElementById('scopeExcluded').checked;
+            // Get current filter state (only Right sidebar has checkboxes)
+            activeFilters.required = document.getElementById('scopeRequiredRight').checked;
+            activeFilters.optional = document.getElementById('scopeOptionalRight').checked;
+            activeFilters.excluded = document.getElementById('scopeExcludedRight').checked;
 
             console.log(`Filters updated: required=${activeFilters.required}, optional=${activeFilters.optional}, excluded=${activeFilters.excluded}`);
 
@@ -5736,24 +5736,9 @@
             }
         }
 
-        // Sync filters between any duplicates
+        // Apply filter changes when checkboxes change
         function syncFilters(checkbox) {
-            const id = checkbox.id.replace('Right', '');
-            const isChecked = checkbox.checked;
-
-            // Sync the corresponding checkbox if it exists
-            const otherCheckbox = document.getElementById(id);
-            if (otherCheckbox && otherCheckbox !== checkbox) {
-                otherCheckbox.checked = isChecked;
-            }
-
-            // Also sync the "Right" version if we're updating the left one
-            const rightCheckbox = document.getElementById(id + 'Right');
-            if (rightCheckbox && rightCheckbox !== checkbox) {
-                rightCheckbox.checked = isChecked;
-            }
-
-            // Apply the filter change
+            // Simply apply the filter change
             applyFilters();
         }
 
