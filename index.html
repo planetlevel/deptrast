@@ -5210,6 +5210,32 @@
             }
         }
 
+        // Helper function to find the node in a column that's vertically closest to current focus
+        function findClosestNodeIndex(targetNodes) {
+            if (!focusedNodeElement || targetNodes.length === 0) {
+                return Math.floor(targetNodes.length / 2);
+            }
+
+            const currentRect = focusedNodeElement.getBoundingClientRect();
+            const currentCenter = currentRect.top + currentRect.height / 2;
+
+            let closestIndex = 0;
+            let minDistance = Infinity;
+
+            targetNodes.forEach((node, idx) => {
+                const nodeRect = node.getBoundingClientRect();
+                const nodeCenter = nodeRect.top + nodeRect.height / 2;
+                const distance = Math.abs(nodeCenter - currentCenter);
+
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    closestIndex = idx;
+                }
+            });
+
+            return closestIndex;
+        }
+
         function navigateLeft() {
             if (currentViewMode === 'app') {
                 // EXPLORE MODE: Go back
@@ -5219,8 +5245,8 @@
                     const prevColumn = columns[focusedColumnIndex - 1];
                     const nodes = prevColumn.element.querySelectorAll('.node-item');
                     if (nodes.length > 0) {
-                        const middleIndex = Math.floor(nodes.length / 2);
-                        setKeyboardFocus(focusedColumnIndex - 1, middleIndex);
+                        const closestIndex = findClosestNodeIndex(nodes);
+                        setKeyboardFocus(focusedColumnIndex - 1, closestIndex);
                     }
                     return;
                 }
@@ -5329,8 +5355,8 @@
                     const nextColumn = columns[focusedColumnIndex + 1];
                     const nodes = nextColumn.element.querySelectorAll('.node-item');
                     if (nodes.length > 0) {
-                        const middleIndex = Math.floor(nodes.length / 2);
-                        setKeyboardFocus(focusedColumnIndex + 1, middleIndex);
+                        const closestIndex = findClosestNodeIndex(nodes);
+                        setKeyboardFocus(focusedColumnIndex + 1, closestIndex);
                     }
                     return;
                 }
@@ -5565,13 +5591,13 @@
             // Clear the absolute center line after expansion is complete
             absoluteCenterLine = null;
 
-            // Move focus to the rightmost column (middle item)
+            // Move focus to the rightmost column (closest item vertically)
             if (columns.length > 0) {
                 const lastColumn = columns[columns.length - 1];
                 const nodes = lastColumn.element.querySelectorAll('.node-item');
                 if (nodes.length > 0) {
-                    const middleIndex = Math.floor(nodes.length / 2);
-                    setKeyboardFocus(columns.length - 1, middleIndex);
+                    const closestIndex = findClosestNodeIndex(nodes);
+                    setKeyboardFocus(columns.length - 1, closestIndex);
                 }
             }
         }
