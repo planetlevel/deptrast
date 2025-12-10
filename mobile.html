@@ -1552,13 +1552,14 @@
             display: none !important;
         }
 
-        /* Hide hamburger menu and controls - move to right panel */
-        .hamburger-button {
+        /* Hide desktop controls dropdown - use hamburger to open right panel */
+        .controls {
             display: none !important;
         }
 
-        .controls {
-            display: none !important;
+        /* Hamburger button opens right panel */
+        .hamburger-button {
+            display: block !important;
         }
 
         /* Touch-friendly tap targets */
@@ -1599,7 +1600,7 @@
 </head>
 <body>
     <div class="header">
-        <button class="hamburger-button" onclick="toggleMobileMenu()" aria-label="Toggle menu">☰</button>
+        <button class="hamburger-button" onclick="togglePanel()" aria-label="Toggle menu">☰</button>
         <h1>Deptrast SBOM Explorer</h1>
         <div style="width: 34px;"></div> <!-- Spacer for centering -->
         <div class="controls" id="headerControls">
@@ -2152,6 +2153,9 @@
         </div>
 
         <div class="stats-panel" id="statsPanel" style="display: none;">
+            <!-- Close button at top -->
+            <button onclick="togglePanel()" style="position: absolute; top: 12px; right: 12px; background: transparent; border: none; font-size: 24px; cursor: pointer; color: #666; padding: 4px; line-height: 1; z-index: 10;" aria-label="Close panel">×</button>
+
             <!-- Menu Controls at top of right panel -->
             <div style="margin-bottom: 16px; padding-bottom: 16px; border-bottom: 2px solid #e0e0e0;">
                 <h2 style="margin: 0 0 10px 0; font-size: 14px;">Menu</h2>
@@ -2236,7 +2240,7 @@
     </div>
 
     <!-- Mobile Panel Toggle Button -->
-    <button class="panel-toggle" id="panelToggle" onclick="togglePanel()" aria-label="Toggle details panel" style="display: none;">◀</button>
+    <button class="panel-toggle" id="panelToggle" onclick="togglePanel()" aria-label="Toggle details panel">◀</button>
 
     <!-- Mobile Panel Overlay -->
     <div class="panel-overlay" id="panelOverlay" onclick="togglePanel()"></div>
