@@ -1497,13 +1497,26 @@
 
         /* Smaller columns and nodes for mobile */
         .column {
-            min-width: 180px;
-            max-width: 180px;
+            min-width: 140px;
+            max-width: 140px;
+            margin-right: 0px !important;
         }
 
         .node-item {
-            padding: 10px 12px;
-            font-size: 13px;
+            padding: 4px 6px !important;
+            font-size: 10px;
+            margin: 1px 2px !important;
+        }
+
+        .node-group, .node-name, .node-version {
+            font-size: 10px !important;
+            margin-bottom: 0 !important;
+            line-height: 1.1 !important;
+        }
+
+        .column-header {
+            padding: 8px 10px !important;
+            font-size: 11px !important;
         }
 
         /* Smaller buttons */
@@ -1530,14 +1543,32 @@
             display: none;
         }
 
-        /* Keep icons visible */
+        /* Hide ALL icons on mobile */
         .button-icon {
-            margin: 0;
+            display: none !important;
+        }
+
+        .node-type-icon {
+            display: none !important;
+        }
+
+        /* Hide hamburger menu and controls - move to right panel */
+        .hamburger-button {
+            display: none !important;
+        }
+
+        .controls {
+            display: none !important;
         }
 
         /* Touch-friendly tap targets */
         .nav-button, .node-item {
             min-height: 44px;
+        }
+
+        /* Right panel always shows controls at top */
+        .stats-panel {
+            padding: 12px !important;
         }
 
         /* Back to Explore button (shown in pinned mode) */
@@ -2121,9 +2152,57 @@
         </div>
 
         <div class="stats-panel" id="statsPanel" style="display: none;">
+            <!-- Menu Controls at top of right panel -->
+            <div style="margin-bottom: 16px; padding-bottom: 16px; border-bottom: 2px solid #e0e0e0;">
+                <h2 style="margin: 0 0 10px 0; font-size: 14px;">Menu</h2>
+                <div style="display: flex; flex-direction: column; gap: 6px;">
+                    <button onclick="document.getElementById('fileInput').click()" title="Load SBOM file" class="nav-button" style="width: 100%; text-align: left; padding: 8px 12px; font-size: 13px;">
+                        Open File
+                    </button>
+                    <div style="display: flex; gap: 6px;">
+                        <button id="backButton" onclick="goBack()" disabled title="Go back" class="nav-arrow-button" style="flex: 1; padding: 8px; font-size: 13px;">
+                            Back
+                        </button>
+                        <button id="forwardButton" onclick="goForward()" disabled title="Go forward" class="nav-arrow-button" style="flex: 1; padding: 8px; font-size: 13px;">
+                            Forward
+                        </button>
+                    </div>
+                    <button id="expandAllButton" onclick="expandAllTree()" title="Expand entire tree" class="nav-button" style="width: 100%; text-align: left; padding: 8px 12px; font-size: 13px;">
+                        Expand All
+                    </button>
+                    <button onclick="showShareDialog()" title="Share current view" class="nav-button primary-button" style="width: 100%; text-align: left; padding: 8px 12px; font-size: 13px;">
+                        Share
+                    </button>
+                    <button onclick="exportViewAsPNG()" title="Export as PNG" class="nav-button primary-button" style="width: 100%; text-align: left; padding: 8px 12px; font-size: 13px;">
+                        Export PNG
+                    </button>
+                    <button id="closeButton" onclick="closeDocument()" class="nav-button close-button" title="Close document" style="width: 100%; text-align: left; padding: 8px 12px; font-size: 13px;">
+                        Close
+                    </button>
+                </div>
+            </div>
+
+            <!-- Focus Selector in right panel -->
+            <div style="margin-bottom: 16px; padding-bottom: 16px; border-bottom: 2px solid #e0e0e0;">
+                <h2 style="margin: 0 0 10px 0; font-size: 14px;">Focus</h2>
+                <div class="custom-dropdown" style="font-size: 13px;">
+                    <div class="dropdown-selected" id="dropdownSelected" onclick="toggleDropdown()">
+                        Application (Full Tree)
+                    </div>
+                    <div class="dropdown-menu" id="dropdownMenu">
+                        <div class="dropdown-search">
+                            <input type="text" id="dropdownSearch" placeholder="Type to search..." autocomplete="off">
+                        </div>
+                        <div class="dropdown-items-container" id="dropdownItemsContainer">
+                            <!-- Populated by JavaScript -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Filters at top of right panel -->
             <div style="margin-bottom: 20px; padding-bottom: 20px; border-bottom: 2px solid #e0e0e0;">
-                <h2 style="margin: 0 0 12px 0;">Filters</h2>
+                <h2 style="margin: 0 0 12px 0; font-size: 14px;">Filters</h2>
                 <div id="scopeFiltersRight" style="display: flex; flex-direction: column; gap: 8px;">
                     <label class="scope-checkbox" style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer;">
                         <input type="checkbox" id="scopeRequiredRight" checked onchange="syncFilters(this)">
