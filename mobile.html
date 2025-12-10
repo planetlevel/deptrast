@@ -1434,7 +1434,28 @@
             transition: margin-right 0.3s ease;
         }
 
-        /* Right panel - slide in/out from right */
+        /* Left menu panel - slide in/out from left */
+        .menu-panel {
+            position: fixed;
+            top: 50px;
+            left: 0;
+            bottom: 0;
+            width: 85vw;
+            max-width: 280px;
+            transform: translateX(-100%);
+            transition: transform 0.3s ease;
+            z-index: 900;
+            box-shadow: 2px 0 8px rgba(0,0,0,0.15);
+            background: #fafafa;
+            padding: 12px;
+            overflow-y: auto;
+        }
+
+        .menu-panel.open {
+            transform: translateX(0);
+        }
+
+        /* Right panel - slide in/out from right (for component details) */
         .stats-panel {
             position: fixed;
             top: 50px;
@@ -1600,7 +1621,7 @@
 </head>
 <body>
     <div class="header">
-        <button class="hamburger-button" onclick="togglePanel()" aria-label="Toggle menu">☰</button>
+        <button class="hamburger-button" onclick="toggleMenu()" aria-label="Toggle menu">☰</button>
         <h1>Deptrast SBOM Explorer</h1>
         <div style="width: 34px;"></div> <!-- Spacer for centering -->
         <div class="controls" id="headerControls">
@@ -2152,43 +2173,38 @@
             </div>
         </div>
 
-        <div class="stats-panel" id="statsPanel" style="display: none;">
-            <!-- Close button at top -->
-            <button onclick="togglePanel()" style="position: absolute; top: 12px; right: 12px; background: transparent; border: none; font-size: 24px; cursor: pointer; color: #666; padding: 4px; line-height: 1; z-index: 10;" aria-label="Close panel">×</button>
+        <!-- Left Menu Panel -->
+        <div class="menu-panel" id="menuPanel">
+            <h2 style="margin: 0 0 16px 0; font-size: 16px; font-weight: 600;">Menu</h2>
 
-            <!-- Menu Controls at top of right panel -->
-            <div style="margin-bottom: 16px; padding-bottom: 16px; border-bottom: 2px solid #e0e0e0;">
-                <h2 style="margin: 0 0 10px 0; font-size: 14px;">Menu</h2>
-                <div style="display: flex; flex-direction: column; gap: 6px;">
-                    <button onclick="document.getElementById('fileInput').click()" title="Load SBOM file" class="nav-button" style="width: 100%; text-align: left; padding: 8px 12px; font-size: 13px;">
-                        Open File
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+                <button onclick="document.getElementById('fileInput').click(); toggleMenu();" title="Load SBOM file" class="nav-button" style="width: 100%; text-align: left; padding: 10px 12px; font-size: 14px;">
+                    Open File
+                </button>
+                <div style="display: flex; gap: 8px;">
+                    <button id="backButton" onclick="goBack()" disabled title="Go back" class="nav-arrow-button" style="flex: 1; padding: 10px; font-size: 14px;">
+                        Back
                     </button>
-                    <div style="display: flex; gap: 6px;">
-                        <button id="backButton" onclick="goBack()" disabled title="Go back" class="nav-arrow-button" style="flex: 1; padding: 8px; font-size: 13px;">
-                            Back
-                        </button>
-                        <button id="forwardButton" onclick="goForward()" disabled title="Go forward" class="nav-arrow-button" style="flex: 1; padding: 8px; font-size: 13px;">
-                            Forward
-                        </button>
-                    </div>
-                    <button id="expandAllButton" onclick="expandAllTree()" title="Expand entire tree" class="nav-button" style="width: 100%; text-align: left; padding: 8px 12px; font-size: 13px;">
-                        Expand All
-                    </button>
-                    <button onclick="showShareDialog()" title="Share current view" class="nav-button primary-button" style="width: 100%; text-align: left; padding: 8px 12px; font-size: 13px;">
-                        Share
-                    </button>
-                    <button onclick="exportViewAsPNG()" title="Export as PNG" class="nav-button primary-button" style="width: 100%; text-align: left; padding: 8px 12px; font-size: 13px;">
-                        Export PNG
-                    </button>
-                    <button id="closeButton" onclick="closeDocument()" class="nav-button close-button" title="Close document" style="width: 100%; text-align: left; padding: 8px 12px; font-size: 13px;">
-                        Close
+                    <button id="forwardButton" onclick="goForward()" disabled title="Go forward" class="nav-arrow-button" style="flex: 1; padding: 10px; font-size: 14px;">
+                        Forward
                     </button>
                 </div>
+                <button id="expandAllButton" onclick="expandAllTree(); toggleMenu();" title="Expand entire tree" class="nav-button" style="width: 100%; text-align: left; padding: 10px 12px; font-size: 14px;">
+                    Expand All
+                </button>
+                <button onclick="showShareDialog(); toggleMenu();" title="Share current view" class="nav-button primary-button" style="width: 100%; text-align: left; padding: 10px 12px; font-size: 14px;">
+                    Share
+                </button>
+                <button onclick="exportViewAsPNG(); toggleMenu();" title="Export as PNG" class="nav-button primary-button" style="width: 100%; text-align: left; padding: 10px 12px; font-size: 14px;">
+                    Export PNG
+                </button>
+                <button id="closeButton" onclick="closeDocument(); toggleMenu();" class="nav-button close-button" title="Close document" style="width: 100%; text-align: left; padding: 10px 12px; font-size: 14px;">
+                    Close
+                </button>
             </div>
 
-            <!-- Focus Selector in right panel -->
-            <div style="margin-bottom: 16px; padding-bottom: 16px; border-bottom: 2px solid #e0e0e0;">
-                <h2 style="margin: 0 0 10px 0; font-size: 14px;">Focus</h2>
+            <div style="margin-top: 20px; padding-top: 20px; border-top: 2px solid #e0e0e0;">
+                <h2 style="margin: 0 0 12px 0; font-size: 14px; font-weight: 600;">Focus</h2>
                 <div class="custom-dropdown" style="font-size: 13px;">
                     <div class="dropdown-selected" id="dropdownSelected" onclick="toggleDropdown()">
                         Application (Full Tree)
@@ -2204,6 +2220,27 @@
                 </div>
             </div>
 
+            <div style="margin-top: 20px; padding-top: 20px; border-top: 2px solid #e0e0e0;">
+                <h2 style="margin: 0 0 12px 0; font-size: 14px; font-weight: 600;">Filters</h2>
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    <label class="scope-checkbox" style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer;">
+                        <input type="checkbox" id="scopeRequiredMenu" checked onchange="syncFilters(this)">
+                        <span>Required</span>
+                    </label>
+                    <label class="scope-checkbox" style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer;">
+                        <input type="checkbox" id="scopeOptionalMenu" checked onchange="syncFilters(this)">
+                        <span>Optional</span>
+                    </label>
+                    <label class="scope-checkbox" style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer;">
+                        <input type="checkbox" id="scopeExcludedMenu" onchange="syncFilters(this)">
+                        <span>Excluded</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Details Panel -->
+        <div class="stats-panel" id="statsPanel" style="display: none;">
             <!-- Filters at top of right panel -->
             <div style="margin-bottom: 20px; padding-bottom: 20px; border-bottom: 2px solid #e0e0e0;">
                 <h2 style="margin: 0 0 12px 0; font-size: 14px;">Filters</h2>
@@ -2238,6 +2275,9 @@
             </div>
         </div>
     </div>
+
+    <!-- Mobile Menu Overlay -->
+    <div class="panel-overlay" id="menuOverlay" onclick="toggleMenu()"></div>
 
     <!-- Mobile Panel Toggle Button -->
     <button class="panel-toggle" id="panelToggle" onclick="togglePanel()" aria-label="Toggle details panel">◀</button>
@@ -2306,6 +2346,14 @@
         }
 
         // Toggle right panel
+        function toggleMenu() {
+            const menu = document.getElementById('menuPanel');
+            const overlay = document.getElementById('menuOverlay');
+
+            menu.classList.toggle('open');
+            overlay.classList.toggle('show');
+        }
+
         function togglePanel() {
             const panel = document.getElementById('statsPanel');
             const toggle = document.getElementById('panelToggle');
