@@ -1488,12 +1488,22 @@
             cursor: pointer;
             z-index: 950;
             box-shadow: -2px 0 8px rgba(0,0,0,0.2);
-            transition: right 0.3s ease;
+            transition: transform 0.3s ease;
+            display: none;
+        }
+
+        .panel-toggle.show {
+            display: block;
         }
 
         .panel-toggle.panel-open {
-            right: 85vw;
-            max-width: calc(320px);
+            transform: translateX(-85vw) translateY(-50%);
+        }
+
+        @media (min-width: 376px) {
+            .panel-toggle.panel-open {
+                transform: translateX(-320px) translateY(-50%);
+            }
         }
 
         .panel-toggle:active {
@@ -2374,7 +2384,7 @@
         // Show panel toggle button when SBOM is loaded
         function showPanelToggle() {
             const toggle = document.getElementById('panelToggle');
-            toggle.style.display = 'block';
+            toggle.classList.add('show');
         }
 
         // Hide panel toggle button when SBOM is closed
@@ -2383,7 +2393,7 @@
             const panel = document.getElementById('statsPanel');
             const overlay = document.getElementById('panelOverlay');
 
-            toggle.style.display = 'none';
+            toggle.classList.remove('show');
             panel.classList.remove('open');
             overlay.classList.remove('show');
         }
