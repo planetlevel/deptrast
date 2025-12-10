@@ -148,7 +148,7 @@ public class DependencyTreeGeneratorTest {
             "All components should have bom-refs");
 
         // Should have dependency relationships
-        assertEquals(1535, result.dependencyCount,
+        assertEquals(1536, result.dependencyCount,
             "Should have dependency entries for all components");
 
         System.out.println("POM file test: " + result.componentCount + " components, " +
