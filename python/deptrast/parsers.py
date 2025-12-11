@@ -383,16 +383,26 @@ class FileParser:
             if not line or line.startswith('#'):
                 continue
 
+            # Skip Maven warning and info lines
+            import re
+            if re.match(r'^\[WARNING\]', line, re.IGNORECASE):
+                continue
+            if re.match(r'^\[INFO\].*---.*---', line, re.IGNORECASE):  # Maven goal headers like "[INFO] --- dependency:tree ---"
+                continue
+
             # Strip Maven tree visualization characters if present
             # Examples: "[INFO] +- ", "[INFO] |  \- ", "[INFO]    ", etc.
-            import re
             maven_tree_pattern = r'^\[INFO\]\s*[\|\\+\-\s]*'
             line = re.sub(maven_tree_pattern, '', line, flags=re.IGNORECASE)
+
+            # Skip lines that don't look like dependencies after stripping
+            if not line or len(line.split(':')) < 3:
+                continue
 
             # Parse system:name:version format
             parts = line.split(':')
             if len(parts) < 3:
-                logger.warning(f"Line {line_num}: Invalid format '{line}' - expected system:name:version or Maven format")
+                logger.debug(f"Line {line_num}: Skipping non-dependency line '{line}'")
                 continue
 
             # Check if this is Maven dependency:tree format: groupId:artifactId:type:version:scope

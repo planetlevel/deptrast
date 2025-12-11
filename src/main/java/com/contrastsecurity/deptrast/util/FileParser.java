@@ -101,14 +101,27 @@ public class FileParser {
                     continue;
                 }
 
+                // Skip Maven warning and info lines
+                if (line.matches("(?i)^\\[WARNING\\].*")) {
+                    continue;
+                }
+                if (line.matches("(?i)^\\[INFO\\].*---.*---.*")) {  // Maven goal headers like "[INFO] --- dependency:tree ---"
+                    continue;
+                }
+
                 // Strip Maven tree visualization characters if present
                 // Examples: "[INFO] +- ", "[INFO] |  \- ", "[INFO]    ", etc.
                 line = line.replaceAll("(?i)^\\[INFO\\]\\s*[|\\\\+\\-\\s]*", "");
 
+                // Skip lines that don't look like dependencies after stripping
+                if (line.isEmpty() || line.split(":").length < 3) {
+                    continue;
+                }
+
                 try {
                     String[] parts = line.split(":");
                     if (parts.length < 3) {
-                        logger.warn("Invalid format at line {}: {}. Expected system:name:version or Maven dependency:tree format", lineNumber, line);
+                        logger.debug("Skipping non-dependency line {}: {}", lineNumber, line);
                         continue;
                     }
 
