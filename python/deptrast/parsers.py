@@ -383,14 +383,32 @@ class FileParser:
             if not line or line.startswith('#'):
                 continue
 
+            # Strip Maven tree visualization characters if present
+            # Examples: "[INFO] +- ", "[INFO] |  \- ", "[INFO]    ", etc.
+            import re
+            maven_tree_pattern = r'^\[INFO\]\s*[\|\\+\-\s]*'
+            line = re.sub(maven_tree_pattern, '', line, flags=re.IGNORECASE)
+
             # Parse system:name:version format
             parts = line.split(':')
             if len(parts) < 3:
-                logger.warning(f"Line {line_num}: Invalid format '{line}' - expected system:name:version")
+                logger.warning(f"Line {line_num}: Invalid format '{line}' - expected system:name:version or Maven format")
+                continue
+
+            # Check if this is Maven dependency:tree format: groupId:artifactId:type:version:scope
+            # or if it has an explicit system prefix like maven:groupId:artifactId:version
+            if len(parts) >= 5 and parts[2] == 'jar':
+                # Maven dependency:tree format: groupId:artifactId:jar:version:scope
+                system = 'maven'
+                name = f"{parts[0]}:{parts[1]}"
+                version = parts[3]
+                scope = parts[4] if len(parts) > 4 else 'compile'
+                pkg = _create_package_with_metadata(system=system, name=name, version=version, scope=scope)
+                packages.append(pkg)
                 continue
 
             system = parts[0]
-            # Handle maven groupId:artifactId format
+            # Handle maven groupId:artifactId format with system prefix
             if system.lower() == 'maven' and len(parts) >= 4:
                 name = f"{parts[1]}:{parts[2]}"
                 version = parts[3]

@@ -95,19 +95,35 @@ public class FileParser {
             while ((line = reader.readLine()) != null) {
                 lineNumber++;
                 line = line.trim();
-                
+
                 // Skip empty lines and comments
                 if (line.isEmpty() || line.startsWith("#")) {
                     continue;
                 }
-                
+
+                // Strip Maven tree visualization characters if present
+                // Examples: "[INFO] +- ", "[INFO] |  \- ", "[INFO]    ", etc.
+                line = line.replaceAll("(?i)^\\[INFO\\]\\s*[|\\\\+\\-\\s]*", "");
+
                 try {
                     String[] parts = line.split(":");
                     if (parts.length < 3) {
-                        logger.warn("Invalid format at line {}: {}. Expected system:name:version", lineNumber, line);
+                        logger.warn("Invalid format at line {}: {}. Expected system:name:version or Maven dependency:tree format", lineNumber, line);
                         continue;
                     }
-                    
+
+                    // Check if this is Maven dependency:tree format: groupId:artifactId:type:version:scope
+                    if (parts.length >= 5 && "jar".equals(parts[2])) {
+                        // Maven dependency:tree format: groupId:artifactId:jar:version:scope
+                        String name = parts[0] + ":" + parts[1];
+                        String version = parts[3];
+                        String scope = parts.length > 4 ? parts[4] : "compile";
+                        Package pkg = createPackageWithMetadata("maven", name, version, scope);
+                        packages.add(pkg);
+                        logger.info("Added Maven package from dependency:tree: {}", pkg.getFullName());
+                        continue;
+                    }
+
                     String system = parts[0];
                     
                     if ("maven".equals(system)) {
