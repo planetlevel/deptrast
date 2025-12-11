@@ -109,9 +109,9 @@ public class FileParser {
                     continue;
                 }
 
-                // Strip Maven tree visualization characters if present
-                // Examples: "[INFO] +- ", "[INFO] |  \- ", "[INFO]    ", etc.
-                line = line.replaceAll("(?i)^\\[INFO\\]\\s*[|\\\\+\\-\\s]*", "");
+                // Strip Maven tree visualization and warning characters if present
+                // Examples: "[INFO] +- ", "[INFO] |  \- ", "[warning] ", etc.
+                line = line.replaceAll("(?i)^\\[(?:INFO|WARNING)\\]\\s*[|\\\\+\\-\\s]*", "");
 
                 // Skip lines that don't look like dependencies after stripping
                 if (line.isEmpty() || line.split(":").length < 3) {

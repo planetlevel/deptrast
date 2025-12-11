@@ -390,10 +390,10 @@ class FileParser:
             if re.match(r'^\[INFO\].*---.*---', line, re.IGNORECASE):  # Maven goal headers like "[INFO] --- dependency:tree ---"
                 continue
 
-            # Strip Maven tree visualization characters if present
-            # Examples: "[INFO] +- ", "[INFO] |  \- ", "[INFO]    ", etc.
-            maven_tree_pattern = r'^\[INFO\]\s*[\|\\+\-\s]*'
-            line = re.sub(maven_tree_pattern, '', line, flags=re.IGNORECASE)
+            # Strip Maven tree visualization and warning characters if present
+            # Examples: "[INFO] +- ", "[INFO] |  \- ", "[warning] ", etc.
+            maven_prefix_pattern = r'^\[(?:INFO|WARNING)\]\s*[\|\\+\-\s]*'
+            line = re.sub(maven_prefix_pattern, '', line, flags=re.IGNORECASE)
 
             # Skip lines that don't look like dependencies after stripping
             if not line or len(line.split(':')) < 3:
