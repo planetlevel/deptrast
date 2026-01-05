@@ -7,6 +7,7 @@ deptrast/formatters.py
 deptrast/graph_builder.py
 deptrast/models.py
 deptrast/parsers.py
+deptrast/version_parser.py
 deptrast.egg-info/PKG-INFO
 deptrast.egg-info/SOURCES.txt
 deptrast.egg-info/dependency_links.txt
@@ -26,4 +27,6 @@ deptrast/pymaven/errors.py
 deptrast/pymaven/pom.py
 deptrast/pymaven/utils.py
 deptrast/pymaven/versioning.py
+tests/test_api_integration.py
 tests/test_deptrast.py
+tests/test_version_parser.py

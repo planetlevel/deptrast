@@ -8,14 +8,13 @@ version = "4.2.0"
 description = "The ultimate dependency tree converter, enhancer, and streamliner"
 readme = "README.md"
 requires-python = ">=3.8"
-license = {text = "MIT"}
+license = "MIT"
 authors = [
     {name = "Jeff Williams", email = "jeff.williams@contrastsecurity.com"}
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
@@ -40,3 +39,7 @@ deptrast = "deptrast.__main__:main"
 [project.urls]
 Homepage = "https://github.com/planetlevel/deptrast"
 Repository = "https://github.com/planetlevel/deptrast"
+
+[tool.setuptools.packages.find]
+include = ["deptrast*"]
+exclude = ["logs*", "tests*"]

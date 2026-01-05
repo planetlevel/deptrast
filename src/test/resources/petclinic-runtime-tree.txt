@@ -1,11 +1,3 @@
-[INFO] Scanning for projects...
-[INFO] 
-[INFO] ------------< org.springframework.samples:spring-petclinic >------------
-[INFO] Building petclinic 1.5.1
-[INFO]   from pom.xml
-[INFO] --------------------------------[ jar ]---------------------------------
-[WARNING] 1 problem was encountered while building the effective model for org.javassist:javassist:jar:3.21.0-GA during dependency collection step for project (use -X to see details)
-[INFO] 
 [INFO] --- dependency:2.10:tree (default-cli) @ spring-petclinic ---
 [INFO] org.springframework.samples:spring-petclinic:jar:1.5.1
 [INFO] +- org.springframework.boot:spring-boot-starter-actuator:jar:1.5.4.RELEASE:compile
