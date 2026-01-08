@@ -3,7 +3,6 @@
 import json
 import logging
 import os
-import requests
 import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -12,8 +11,18 @@ from urllib.parse import urlparse
 
 from .models import Package
 from .version_parser import VersionParser
+from .ssl_config import create_session
 
 logger = logging.getLogger(__name__)
+
+# Module-level SSL-configured session
+_parser_session = None
+
+def _get_session():
+    global _parser_session
+    if _parser_session is None:
+        _parser_session = create_session()
+    return _parser_session
 
 
 def _is_url(path: str) -> bool:
@@ -41,7 +50,7 @@ def _read_content(path: str) -> str:
     """
     if _is_url(path):
         logger.info(f"Fetching content from URL: {path}")
-        response = requests.get(path, timeout=30)
+        response = _get_session().get(path, timeout=30)
         response.raise_for_status()
         return response.text
     else:
@@ -154,7 +163,7 @@ def download_pom_from_maven_central(group_id: str, artifact_id: str, version: st
         logger.info(f"Downloading parent POM from Maven Central: {group_id}:{artifact_id}:{version}")
         logger.debug(f"URL: {url}")
 
-        response = requests.get(url, timeout=30)
+        response = _get_session().get(url, timeout=30)
         if not response.ok:
             logger.warn(f"Failed to download parent POM {group_id}:{artifact_id}:{version}: HTTP {response.status_code}")
             return None

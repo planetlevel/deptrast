@@ -22,7 +22,17 @@ import posixpath
 
 from six.moves.urllib.parse import urlsplit
 from six.moves.urllib.parse import urlunsplit
-import requests
+
+from ..ssl_config import create_session
+
+# Module-level SSL-configured session
+_utils_session = None
+
+def _get_session():
+    global _utils_session
+    if _utils_session is None:
+        _utils_session = create_session()
+    return _utils_session
 
 
 def cmp(x, y):
@@ -81,7 +91,7 @@ def parse_source(source):
         return source
     source_t = urlsplit(source)
     if source_t.scheme == "http" or source_t.scheme == "https":
-        resp = requests.get(source, stream=True)
+        resp = _get_session().get(source, stream=True)
         resp.raise_for_status()
         return resp.raw
     if source_t.scheme == "file" or not source_t.scheme:

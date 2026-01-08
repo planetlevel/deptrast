@@ -4,10 +4,9 @@ import logging
 from typing import Optional, Dict, Any
 from urllib.parse import quote
 
-import requests
-
 from .models import Package
 from .version_parser import VersionParser
+from .ssl_config import create_session
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +18,7 @@ class DepsDevClient:
 
     def __init__(self):
         """Initialize the API client."""
-        self.session = requests.Session()
+        self.session = create_session()
         self.session.headers.update({
             "Accept": "application/json",
             "User-Agent": "deptrast/3.0.1"

@@ -28,6 +28,17 @@ import requests
 import six
 
 from . import utils
+from ..ssl_config import create_session
+
+# Create a module-level session for SSL-aware requests
+_session = None
+
+def _get_session():
+    """Get or create the SSL-configured session."""
+    global _session
+    if _session is None:
+        _session = create_session()
+    return _session
 from .artifact import Artifact
 from .errors import MissingArtifactError
 from .errors import MissingPathError
@@ -297,7 +308,7 @@ class HttpRepository(AbstractRepository):
         res = self._cache.get(method, uri, kwargs.get("params"))
         if not res:
             log.debug("requesting %s %s", method, url)
-            res = requests.request(method, url, **kwargs)
+            res = _get_session().request(method, url, **kwargs)
             res = self._cache.cache(res, method, uri, kwargs.get("params"))
 
         if res.status_code != requests.codes.ok:
